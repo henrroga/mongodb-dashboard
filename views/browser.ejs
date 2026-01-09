@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %> | MongoDB Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <header class="header">
+      <a href="/" class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <path
+            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
+          />
+        </svg>
+        MongoDB Dashboard
+      </a>
+      <nav class="nav">
+        <a href="/databases" class="nav-link">Databases</a>
+        <span class="nav-sep">/</span>
+        <a href="/browse/<%= dbName %>" class="nav-link"><%= dbName %></a>
+        <% if (activeCollection) { %>
+        <span class="nav-sep">/</span>
+        <span class="nav-current"><%= activeCollection %></span>
+        <% } %>
+      </nav>
+      <div class="header-actions">
+        <button
+          id="disconnectBtn"
+          class="btn btn-sm btn-ghost"
+          title="Disconnect"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
+            />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="browser-layout">
+        <aside class="sidebar">
+          <div class="sidebar-header">
+            <h2>Collections</h2>
+            <span class="collection-count"><%= collections.length %></span>
+          </div>
+          <nav class="collection-list">
+            <% collections.forEach(function(col) { %>
+            <a
+              href="/browse/<%= dbName %>/<%= col.name %>"
+              class="collection-item <%= activeCollection === col.name ? 'active' : '' %>"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"
+                />
+                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+              </svg>
+              <span class="collection-name"><%= col.name %></span>
+              <span class="collection-doc-count" data-count="<%= col.count %>"
+                ><%= col.count %></span
+              >
+            </a>
+            <% }); %>
+          </nav>
+        </aside>
+
+        <div class="content">
+          <% if (activeCollection) { %>
+          <div class="content-header">
+            <div class="content-title">
+              <h2><%= activeCollection %></h2>
+              <span id="docCount" class="doc-count"></span>
+            </div>
+            <div class="content-actions">
+              <button id="refreshBtn" class="btn btn-ghost" title="Refresh">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M23 4v6h-6M1 20v-6h6" />
+                  <path
+                    d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+                  />
+                </svg>
+              </button>
+              <button id="addDocBtn" class="btn btn-primary">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Add Document
+              </button>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table" id="dataTable">
+              <thead>
+                <tr id="tableHeader"></tr>
+              </thead>
+              <tbody id="tableBody">
+                <tr class="loading-row">
+                  <td colspan="100">
+                    <div class="loading-spinner"></div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination" id="pagination" style="display: none">
+            <button id="loadMoreBtn" class="btn btn-ghost">Load More</button>
+            <span id="paginationInfo" class="pagination-info"></span>
+          </div>
+          <% } else { %>
+          <div class="empty-state">
+            <svg
+              width="64"
+              height="64"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1"
+            >
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <path d="M14 2v6h6" />
+            </svg>
+            <h3>Select a Collection</h3>
+            <p>Choose a collection from the sidebar to browse documents</p>
+          </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Document Modal -->
+      <div id="docModal" class="modal" style="display: none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="modalTitle">Document</h3>
+            <button class="modal-close" id="modalClose">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div id="formToggle" class="form-toggle" style="display: none">
+              <button id="useFormBtn" class="btn btn-sm btn-ghost active">
+                Form
+              </button>
+              <button id="useJsonBtn" class="btn btn-sm btn-ghost">JSON</button>
+            </div>
+            <div id="docFormContainer" style="display: none"></div>
+            <textarea
+              id="docEditor"
+              class="doc-editor"
+              spellcheck="false"
+            ></textarea>
+            <p id="editorError" class="error-message" style="display: none"></p>
+          </div>
+          <div class="modal-footer">
+            <button id="modalCancel" class="btn btn-ghost">Cancel</button>
+            <button
+              id="modalDelete"
+              class="btn btn-danger"
+              style="display: none"
+            >
+              Delete
+            </button>
+            <button id="modalSave" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete Confirmation Modal -->
+      <div id="deleteModal" class="modal" style="display: none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+          <div class="modal-header">
+            <h3>Confirm Delete</h3>
+            <button class="modal-close" id="deleteModalClose">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p>
+              Are you sure you want to delete this document? This action cannot
+              be undone.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button id="deleteCancel" class="btn btn-ghost">Cancel</button>
+            <button id="deleteConfirm" class="btn btn-danger">Delete</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script src="/js/app.js"></script>
+    <script>
+      // Format collection counts
+      document.querySelectorAll(".collection-doc-count").forEach((el) => {
+        const count = parseInt(el.dataset.count);
+        if (!isNaN(count)) {
+          el.textContent = formatCount(count);
+        }
+      });
+
+      const dbName = "<%= dbName %>";
+      const activeCollection = '<%= activeCollection || "" %>';
+      if (activeCollection) {
+        initBrowser(dbName, activeCollection);
+      }
+    </script>
+  </body>
+</html>
