@@ -196,7 +196,7 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
     // Determine table fields from first document
     if (tableFields.length === 0 && documents.length > 0) {
       tableFields = extractFields(documents[0]);
-      tableHeader.innerHTML = tableFields.map(f => `<th>${f}</th>`).join('') + '<th>Actions</th>';
+      tableHeader.innerHTML = tableFields.map(f => `<th>${f}</th>`).join('') + '<th>Extra Fields</th><th>Actions</th>';
     }
 
     // Render documents
@@ -251,6 +251,21 @@ function createDocumentRow(doc, dbName, collectionName) {
     td.innerHTML = formatCellValue(doc[field], field);
     tr.appendChild(td);
   });
+
+  // Calculate extra fields count
+  const totalFields = Object.keys(doc).length;
+  const displayedFields = tableFields.length;
+  const extraFieldsCount = Math.max(0, totalFields - displayedFields);
+  
+  // Extra Fields column
+  const extraFieldsTd = document.createElement('td');
+  extraFieldsTd.className = 'cell-extra-fields';
+  if (extraFieldsCount > 0) {
+    extraFieldsTd.innerHTML = `<span class="extra-fields-badge">+${extraFieldsCount}</span>`;
+  } else {
+    extraFieldsTd.innerHTML = '<span class="cell-muted">—</span>';
+  }
+  tr.appendChild(extraFieldsTd);
 
   // Get document ID for actions
   const docId = doc._id?.$oid || doc._id;
@@ -585,7 +600,7 @@ async function initDocumentPage(dbName, collectionName, docId) {
 
     if (!res.ok) throw new Error(data.error);
 
-    treeEl.innerHTML = renderJsonTree(data.document);
+    treeEl.innerHTML = '<div class="json-viewer">' + renderJsonTree(data.document) + '</div>';
 
     // Edit button
     document.getElementById('editDocBtn')?.addEventListener('click', () => {
@@ -613,12 +628,16 @@ function renderJsonTree(obj, indent = 0) {
   if (obj.$oid) return `<span class="json-string">ObjectId("${obj.$oid}")</span>`;
   if (obj.$date) return `<span class="json-string">ISODate("${obj.$date}")</span>`;
 
-  const spaces = '  '.repeat(indent);
-  const innerSpaces = '  '.repeat(indent + 1);
+  const indentSize = 2;
+  const spaces = ' '.repeat(indent * indentSize);
+  const innerSpaces = ' '.repeat((indent + 1) * indentSize);
 
   if (Array.isArray(obj)) {
     if (obj.length === 0) return '<span class="json-bracket">[]</span>';
-    const items = obj.map(item => innerSpaces + renderJsonTree(item, indent + 1)).join(',\n');
+    const items = obj.map(item => {
+      const rendered = renderJsonTree(item, indent + 1);
+      return `${innerSpaces}${rendered}`;
+    }).join(',\n');
     return `<span class="json-bracket">[</span>\n${items}\n${spaces}<span class="json-bracket">]</span>`;
   }
 
@@ -626,7 +645,8 @@ function renderJsonTree(obj, indent = 0) {
   if (keys.length === 0) return '<span class="json-bracket">{}</span>';
 
   const entries = keys.map(key => {
-    return `${innerSpaces}<span class="json-key">"${escapeHtml(key)}"</span>: ${renderJsonTree(obj[key], indent + 1)}`;
+    const rendered = renderJsonTree(obj[key], indent + 1);
+    return `${innerSpaces}<span class="json-key">"${escapeHtml(key)}"</span>: ${rendered}`;
   }).join(',\n');
 
   return `<span class="json-bracket">{</span>\n${entries}\n${spaces}<span class="json-bracket">}</span>`;
