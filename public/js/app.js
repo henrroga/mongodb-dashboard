@@ -3,6 +3,7 @@
 // Storage keys
 const STORAGE_KEY = 'mongodb_dashboard_connections';
 const ACTIVE_CONNECTION_KEY = 'mongodb_dashboard_active_connection';
+const THEME_KEY = 'mongodb_dashboard_theme';
 
 // Utility functions
 function formatBytes(bytes) {
@@ -1113,6 +1114,117 @@ async function initGlobalConnectionCheck() {
       window.location.href = '/';
     }
   }
+}
+
+// Theme Management
+function getTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) || 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+function setTheme(theme) {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // Ignore storage errors
+  }
+  applyTheme(theme);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  updateThemeToggleUI(theme);
+  
+  // Update active option in dropdown if it exists
+  document.querySelectorAll('.theme-option').forEach(option => {
+    if (option.dataset.theme === theme) {
+      option.classList.add('active');
+    } else {
+      option.classList.remove('active');
+    }
+  });
+}
+
+function updateThemeToggleUI(theme) {
+  const btn = document.querySelector('.theme-toggle-btn');
+  if (!btn) return;
+  
+  const icon = btn.querySelector('svg');
+  const text = btn.querySelector('.theme-toggle-text');
+  
+  if (theme === 'light') {
+    if (icon) {
+      icon.innerHTML = '<path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>';
+    }
+    if (text) text.textContent = 'Light';
+  } else if (theme === 'dark') {
+    if (icon) {
+      icon.innerHTML = '<path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>';
+    }
+    if (text) text.textContent = 'Dark';
+  } else {
+    if (icon) {
+      icon.innerHTML = '<path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>';
+    }
+    if (text) text.textContent = 'System';
+  }
+}
+
+function initThemeToggle() {
+  // Apply saved theme on load
+  const savedTheme = getTheme();
+  applyTheme(savedTheme);
+  
+  // Listen for system theme changes
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+  mediaQuery.addEventListener('change', () => {
+    if (getTheme() === 'system') {
+      applyTheme('system');
+    }
+  });
+  
+  // Setup dropdown toggle
+  const toggleBtn = document.querySelector('.theme-toggle-btn');
+  const dropdown = document.querySelector('.theme-dropdown');
+  
+  if (toggleBtn && dropdown) {
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('show');
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.theme-toggle')) {
+        dropdown.classList.remove('show');
+      }
+    });
+    
+    // Handle theme option clicks
+    document.querySelectorAll('.theme-option').forEach(option => {
+      option.addEventListener('click', () => {
+        const theme = option.dataset.theme;
+        setTheme(theme);
+        dropdown.classList.remove('show');
+      });
+    });
+  }
+}
+
+// Apply theme immediately to prevent flash
+(function() {
+  const savedTheme = getTheme();
+  document.documentElement.setAttribute('data-theme', savedTheme);
+})();
+
+// Initialize theme on page load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initThemeToggle);
+} else {
+  initThemeToggle();
 }
 
 // Run global connection check when DOM is ready
