@@ -205,6 +205,23 @@
               </div>
             </div>
             <div class="content-actions">
+              <button
+                id="columnsBtn"
+                class="btn btn-ghost"
+                title="Select Columns"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M3 3h18v18H3zM3 9h18M9 3v18" />
+                </svg>
+                Columns
+              </button>
               <button id="refreshBtn" class="btn btn-ghost" title="Refresh">
                 <svg
                   width="16"
@@ -329,6 +346,34 @@
           <div class="modal-footer">
             <button id="deleteCancel" class="btn btn-ghost">Cancel</button>
             <button id="deleteConfirm" class="btn btn-danger">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column Selector Modal -->
+      <div id="columnsModal" class="modal" style="display: none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+          <div class="modal-header">
+            <h3>Select Columns</h3>
+            <button class="modal-close" id="columnsModalClose">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="columns-selector">
+              <div class="columns-actions">
+                <button id="selectAllColumns" class="btn btn-sm btn-ghost">
+                  Select All
+                </button>
+                <button id="deselectAllColumns" class="btn btn-sm btn-ghost">
+                  Deselect All
+                </button>
+              </div>
+              <div id="columnsList" class="columns-list"></div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button id="columnsCancel" class="btn btn-ghost">Cancel</button>
+            <button id="columnsApply" class="btn btn-primary">Apply</button>
           </div>
         </div>
       </div>

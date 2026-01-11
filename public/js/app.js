@@ -228,13 +228,19 @@ async function initConnectPage() {
 let currentCursor = null;
 let allDocuments = [];
 let tableFields = [];
+let allAvailableFields = [];
 let currentSearchTerm = '';
+let currentDbName = '';
+let currentCollectionName = '';
 
 function initBrowser(dbName, collectionName) {
   currentCursor = null;
   allDocuments = [];
   tableFields = [];
+  allAvailableFields = [];
   currentSearchTerm = '';
+  currentDbName = dbName;
+  currentCollectionName = collectionName;
 
   loadDocuments(dbName, collectionName);
   
@@ -301,6 +307,11 @@ function initBrowser(dbName, collectionName) {
     openDocModal(dbName, collectionName, null);
   });
 
+  // Columns button
+  document.getElementById('columnsBtn')?.addEventListener('click', () => {
+    openColumnsModal(dbName, collectionName);
+  });
+
   // Load more button
   document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
     loadDocuments(dbName, collectionName, currentCursor);
@@ -308,6 +319,7 @@ function initBrowser(dbName, collectionName) {
 
   // Modal handlers
   setupModalHandlers();
+  setupColumnsModalHandlers();
 }
 
 async function loadDocuments(dbName, collectionName, cursor = null) {
@@ -319,6 +331,7 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
   if (!cursor) {
     tableBody.innerHTML = '<tr class="loading-row"><td colspan="100"><div class="loading-spinner"></div></td></tr>';
     allDocuments = [];
+    allAvailableFields = [];
   }
 
   try {
@@ -343,10 +356,34 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
       docCount.textContent = `${formatCount(totalCount)} documents`;
     }
 
-    // Determine table fields from first document (reset if new search)
-    if (!cursor && documents.length > 0) {
-      tableFields = extractFields(documents[0]);
-      tableHeader.innerHTML = tableFields.map(f => `<th>${f}</th>`).join('') + '<th>Extra Fields</th><th>Actions</th>';
+    // Determine table fields from documents
+    if (documents.length > 0) {
+      // Extract all available fields from all loaded documents (accumulate)
+      const newFields = extractAllFields(documents);
+      allAvailableFields = Array.from(new Set([...allAvailableFields, ...newFields])).sort();
+      
+      // Only reset table fields if this is a new load (not pagination)
+      if (!cursor) {
+        // Check for saved column visibility preferences
+        const savedVisibility = getColumnVisibility(dbName, collectionName);
+        
+        if (savedVisibility && savedVisibility.length > 0) {
+          // Use saved preferences, but ensure all saved fields still exist
+          tableFields = savedVisibility.filter(field => allAvailableFields.includes(field));
+          // If no saved fields exist anymore, fall back to default
+          if (tableFields.length === 0) {
+            tableFields = extractFields(documents[0]);
+            saveColumnVisibility(dbName, collectionName, tableFields);
+          }
+        } else {
+          // No saved preferences, use default (first 5 priority fields)
+          tableFields = extractFields(documents[0]);
+          // Save default as initial preference
+          saveColumnVisibility(dbName, collectionName, tableFields);
+        }
+        
+        renderTableHeader();
+      }
     }
 
     // Render documents
@@ -358,6 +395,11 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
       const row = createDocumentRow(doc, dbName, collectionName);
       tableBody.appendChild(row);
     });
+
+    // Ensure table header is rendered
+    if (tableFields.length > 0 && tableHeader.innerHTML.trim() === '') {
+      renderTableHeader();
+    }
 
     // Pagination
     if (hasMore) {
@@ -402,6 +444,48 @@ function extractFields(doc, maxFields = 5) {
   return sorted.slice(0, maxFields);
 }
 
+function extractAllFields(docs) {
+  const fieldSet = new Set();
+  docs.forEach(doc => {
+    Object.keys(doc).forEach(key => {
+      if (key !== 'Extra Fields' && key !== 'Actions') {
+        fieldSet.add(key);
+      }
+    });
+  });
+  return Array.from(fieldSet).sort();
+}
+
+function getColumnVisibilityKey(dbName, collectionName) {
+  return `mongodb_dashboard_columns_${dbName}_${collectionName}`;
+}
+
+function getColumnVisibility(dbName, collectionName) {
+  try {
+    const key = getColumnVisibilityKey(dbName, collectionName);
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveColumnVisibility(dbName, collectionName, visibleFields) {
+  try {
+    const key = getColumnVisibilityKey(dbName, collectionName);
+    localStorage.setItem(key, JSON.stringify(visibleFields));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function renderTableHeader() {
+  const tableHeader = document.getElementById('tableHeader');
+  if (!tableHeader) return;
+  
+  tableHeader.innerHTML = tableFields.map(f => `<th>${f}</th>`).join('') + '<th>Extra Fields</th><th>Actions</th>';
+}
+
 function createDocumentRow(doc, dbName, collectionName) {
   const tr = document.createElement('tr');
   
@@ -431,39 +515,55 @@ function createDocumentRow(doc, dbName, collectionName) {
 
   // Actions column
   const actionsTd = document.createElement('td');
-  actionsTd.innerHTML = `
-    <div class="cell-actions">
-      <button class="action-btn view" title="View" onclick="window.location.href='/browse/${dbName}/${collectionName}/${docId}'">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-      </button>
-      <button class="action-btn edit" title="Edit" data-doc='${JSON.stringify(doc).replace(/'/g, "\\'")}'>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
-      </button>
-      <button class="action-btn delete" title="Delete" data-id="${docId}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-        </svg>
-      </button>
-    </div>
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'cell-actions';
+  
+  // View button
+  const viewBtn = document.createElement('button');
+  viewBtn.className = 'action-btn view';
+  viewBtn.title = 'View';
+  viewBtn.onclick = () => { window.location.href = `/browse/${dbName}/${collectionName}/${docId}`; };
+  viewBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
   `;
-
-  // Edit button handler
-  actionsTd.querySelector('.edit').addEventListener('click', (e) => {
+  actionsDiv.appendChild(viewBtn);
+  
+  // Edit button - set data attribute using JavaScript to avoid HTML escaping issues
+  const editBtn = document.createElement('button');
+  editBtn.className = 'action-btn edit';
+  editBtn.title = 'Edit';
+  editBtn.dataset.doc = JSON.stringify(doc); // Browser handles escaping automatically
+  editBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  `;
+  editBtn.addEventListener('click', (e) => {
     const doc = JSON.parse(e.currentTarget.dataset.doc);
     openDocModal(dbName, collectionName, doc);
   });
-
-  // Delete button handler
-  actionsTd.querySelector('.delete').addEventListener('click', (e) => {
+  actionsDiv.appendChild(editBtn);
+  
+  // Delete button
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'action-btn delete';
+  deleteBtn.title = 'Delete';
+  deleteBtn.dataset.id = docId;
+  deleteBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+    </svg>
+  `;
+  deleteBtn.addEventListener('click', (e) => {
     openDeleteModal(dbName, collectionName, e.currentTarget.dataset.id);
   });
-
+  actionsDiv.appendChild(deleteBtn);
+  
+  actionsTd.appendChild(actionsDiv);
   tr.appendChild(actionsTd);
   return tr;
 }
@@ -1130,6 +1230,123 @@ function setNestedValue(obj, path, value) {
   }
   
   current[keys[keys.length - 1]] = value;
+}
+
+// Column Selector Modal
+function setupColumnsModalHandlers() {
+  const modal = document.getElementById('columnsModal');
+  if (!modal) return;
+
+  const backdrop = modal.querySelector('.modal-backdrop');
+  const closeBtn = document.getElementById('columnsModalClose');
+  const cancelBtn = document.getElementById('columnsCancel');
+  const applyBtn = document.getElementById('columnsApply');
+  const selectAllBtn = document.getElementById('selectAllColumns');
+  const deselectAllBtn = document.getElementById('deselectAllColumns');
+
+  const closeModal = () => {
+    modal.style.display = 'none';
+  };
+
+  backdrop.addEventListener('click', closeModal);
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+
+  applyBtn.addEventListener('click', () => {
+    const checkboxes = modal.querySelectorAll('#columnsList input[type="checkbox"]');
+    const selectedFields = Array.from(checkboxes)
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
+    
+    if (selectedFields.length === 0) {
+      alert('Please select at least one column to display.');
+      return;
+    }
+
+    // Save preferences
+    saveColumnVisibility(currentDbName, currentCollectionName, selectedFields);
+    
+    // Update table fields
+    tableFields = selectedFields;
+    
+    // Re-render table
+    renderTableHeader();
+    const tableBody = document.getElementById('tableBody');
+    tableBody.innerHTML = '';
+    allDocuments.forEach(doc => {
+      const row = createDocumentRow(doc, currentDbName, currentCollectionName);
+      tableBody.appendChild(row);
+    });
+    
+    closeModal();
+  });
+
+  selectAllBtn.addEventListener('click', () => {
+    modal.querySelectorAll('#columnsList input[type="checkbox"]').forEach(cb => {
+      cb.checked = true;
+    });
+  });
+
+  deselectAllBtn.addEventListener('click', () => {
+    modal.querySelectorAll('#columnsList input[type="checkbox"]').forEach(cb => {
+      cb.checked = false;
+    });
+  });
+}
+
+function openColumnsModal(dbName, collectionName) {
+  const modal = document.getElementById('columnsModal');
+  const columnsList = document.getElementById('columnsList');
+  
+  if (!modal || !columnsList) return;
+
+  // Get all available fields (use allAvailableFields if populated, otherwise extract from current documents)
+  const availableFields = allAvailableFields.length > 0 
+    ? allAvailableFields 
+    : (allDocuments.length > 0 ? extractAllFields(allDocuments) : []);
+
+  if (availableFields.length === 0) {
+    columnsList.innerHTML = '<p style="color: var(--text-muted); padding: 20px; text-align: center;">No fields available. Load some documents first.</p>';
+    modal.style.display = 'flex';
+    return;
+  }
+
+  // Get current visibility preferences
+  const savedVisibility = getColumnVisibility(dbName, collectionName);
+  const visibleFields = savedVisibility || tableFields;
+
+  // Render checkboxes for each field
+  columnsList.innerHTML = availableFields.map(field => {
+    const isChecked = visibleFields.includes(field);
+    const fieldType = getFieldType(field);
+    return `
+      <div class="column-item">
+        <input type="checkbox" id="col_${field}" value="${escapeHtml(field)}" ${isChecked ? 'checked' : ''}>
+        <label for="col_${field}">${escapeHtml(field)}</label>
+        ${fieldType ? `<span class="column-type">${fieldType}</span>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  modal.style.display = 'flex';
+}
+
+function getFieldType(fieldName) {
+  // Try to infer field type from sample documents
+  if (allDocuments.length === 0) return null;
+  
+  const sampleDoc = allDocuments[0];
+  const value = sampleDoc[fieldName];
+  
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'string') return 'string';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  if (Array.isArray(value)) return 'array';
+  if (value.$oid) return 'ObjectId';
+  if (value.$date) return 'Date';
+  if (typeof value === 'object') return 'object';
+  return null;
 }
 
 // Global disconnect handler
