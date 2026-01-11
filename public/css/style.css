@@ -626,12 +626,14 @@ a:hover {
   justify-content: space-between;
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
+  gap: 16px;
 }
 
 .content-title {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .content-title h2 {
@@ -643,9 +645,75 @@ a:hover {
   color: var(--text-secondary);
 }
 
+.content-search {
+  flex: 1;
+  max-width: 400px;
+  min-width: 200px;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 36px 8px 36px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-clear {
+  position: absolute;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  transition: all var(--transition);
+}
+
+.search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.search-input:focus + .search-clear {
+  color: var(--text-secondary);
+}
+
 .content-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 /* Data Table */
@@ -1146,5 +1214,29 @@ a:hover {
   
   .database-grid {
     grid-template-columns: 1fr;
+  }
+
+  .content-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .content-search {
+    order: 3;
+    width: 100%;
+    max-width: 100%;
+    min-width: 100%;
+  }
+
+  .content-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .content-title h2 {
+    font-size: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

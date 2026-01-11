@@ -5,6 +5,143 @@ const { ObjectId } = require("mongodb");
 const { serializeDocument, parseDocument } = require("../utils/bson");
 const { inferSchema } = require("../utils/schema");
 
+/**
+ * Recursively extract all field paths from a document that can be searched
+ */
+function extractSearchableFields(obj, prefix = "", fields = new Set()) {
+  if (obj === null || obj === undefined) {
+    return fields;
+  }
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    obj.forEach((item) => {
+      if (typeof item === "string" || typeof item === "number") {
+        // For arrays, we'll search the array field itself
+        if (prefix) fields.add(prefix);
+      } else if (typeof item === "object" && item !== null) {
+        extractSearchableFields(item, prefix, fields);
+      }
+    });
+    return fields;
+  }
+
+  // Handle objects
+  if (typeof obj === "object") {
+    // Skip BSON type wrappers
+    if (
+      obj.$oid ||
+      obj.$date ||
+      obj.$binary ||
+      obj.$numberDecimal ||
+      obj.$numberLong
+    ) {
+      return fields;
+    }
+
+    for (const key in obj) {
+      const fullPath = prefix ? `${prefix}.${key}` : key;
+      const value = obj[key];
+
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        value instanceof Date
+      ) {
+        fields.add(fullPath);
+      } else if (typeof value === "object" && value !== null) {
+        extractSearchableFields(value, fullPath, fields);
+      }
+    }
+  }
+
+  return fields;
+}
+
+/**
+ * Build a MongoDB query to search across all fields in documents
+ */
+function buildSearchQuery(searchTerm, sampleDoc = null) {
+  const conditions = [];
+  const searchRegex = { $regex: searchTerm, $options: "i" }; // Case-insensitive
+  const isNumeric = !isNaN(parseFloat(searchTerm)) && isFinite(searchTerm);
+  const numValue = isNumeric ? parseFloat(searchTerm) : null;
+
+  // If we have a sample document, extract all searchable fields from it
+  if (sampleDoc) {
+    const fields = extractSearchableFields(sampleDoc);
+    fields.forEach((field) => {
+      // For string fields, use regex
+      conditions.push({ [field]: searchRegex });
+
+      // For numeric fields, also check exact match if search term is numeric
+      if (isNumeric) {
+        // We'll add numeric conditions separately
+      }
+    });
+  }
+
+  // Always search in common top-level fields
+  const commonFields = [
+    "_id",
+    "name",
+    "title",
+    "description",
+    "email",
+    "username",
+    "text",
+    "content",
+    "message",
+    "value",
+    "label",
+    "type",
+    "status",
+    "category",
+    "tags",
+    "notes",
+    "comment",
+    "address",
+    "phone",
+    "url",
+    "link",
+    "id",
+    "code",
+    "key",
+  ];
+
+  commonFields.forEach((field) => {
+    if (!conditions.some((c) => c[field])) {
+      conditions.push({ [field]: searchRegex });
+    }
+  });
+
+  // If numeric, also search in numeric fields
+  if (isNumeric) {
+    const numericFields = [
+      "id",
+      "count",
+      "quantity",
+      "price",
+      "amount",
+      "score",
+      "rating",
+      "age",
+      "year",
+      "month",
+      "day",
+      "index",
+      "order",
+    ];
+    numericFields.forEach((field) => {
+      conditions.push({ [field]: numValue });
+    });
+  }
+
+  return {
+    $or: conditions.length > 0 ? conditions : [{ _id: searchRegex }],
+  };
+}
+
 // Test connection and get databases
 router.post("/connect", async (req, res) => {
   try {
@@ -87,7 +224,7 @@ router.get("/:db/:collection", async (req, res) => {
     }
 
     const { db: dbName, collection: colName } = req.params;
-    const { cursor, limit = 50, filter } = req.query;
+    const { cursor, limit = 50, filter, search } = req.query;
     const pageLimit = Math.min(parseInt(limit) || 50, 100);
 
     const collection = client.db(dbName).collection(colName);
@@ -103,20 +240,93 @@ router.get("/:db/:collection", async (req, res) => {
       }
     }
 
+    // Add text search across all fields
+    let searchConditions = null;
+    if (search && search.trim()) {
+      const searchTerm = search.trim();
+
+      // Get a sample document to understand field structure
+      let sampleDoc = null;
+      try {
+        sampleDoc = await collection.findOne({}, { projection: { _id: 0 } });
+      } catch (e) {
+        // Ignore errors, will use default fields
+      }
+
+      searchConditions = buildSearchQuery(searchTerm, sampleDoc);
+    }
+
+    // Build sort - prioritize createdAt descending (most recent first), then _id descending
+    const sort = { createdAt: -1, _id: -1 };
+
     // Cursor-based pagination
+    // For createdAt sorting, we need to handle cursor differently
+    let cursorConditions = null;
     if (cursor) {
       try {
-        query._id = { $gt: new ObjectId(cursor) };
+        // Try to parse cursor as JSON containing createdAt and _id
+        const cursorData = JSON.parse(cursor);
+        if (
+          cursorData.createdAt !== null &&
+          cursorData.createdAt !== undefined &&
+          cursorData._id
+        ) {
+          // Parse createdAt date if it's a string
+          let createdAtValue = cursorData.createdAt;
+          if (typeof createdAtValue === "string") {
+            createdAtValue = new Date(createdAtValue);
+          }
+
+          // Use compound cursor for createdAt + _id sorting
+          // Documents with createdAt < cursor OR (createdAt == cursor AND _id < cursor._id)
+          cursorConditions = {
+            $or: [
+              { createdAt: { $lt: createdAtValue } },
+              {
+                createdAt: createdAtValue,
+                _id: { $lt: new ObjectId(cursorData._id) },
+              },
+            ],
+          };
+        } else if (cursorData._id) {
+          // Fallback to _id cursor only (for documents without createdAt)
+          cursorConditions = { _id: { $lt: new ObjectId(cursorData._id) } };
+        }
       } catch (e) {
-        // Handle non-ObjectId _id fields
-        query._id = { $gt: cursor };
+        // If cursor is not JSON, try as simple _id (backward compatibility)
+        try {
+          cursorConditions = { _id: { $lt: new ObjectId(cursor) } };
+        } catch (e2) {
+          cursorConditions = { _id: { $lt: cursor } };
+        }
       }
+    }
+
+    // Combine all query conditions
+    const conditions = [];
+    if (Object.keys(query).length > 0) {
+      conditions.push(query);
+    }
+    if (searchConditions) {
+      conditions.push(searchConditions);
+    }
+    if (cursorConditions) {
+      conditions.push(cursorConditions);
+    }
+
+    // Build final query
+    if (conditions.length === 0) {
+      query = {};
+    } else if (conditions.length === 1) {
+      query = conditions[0];
+    } else {
+      query = { $and: conditions };
     }
 
     // Fetch documents
     const docs = await collection
       .find(query)
-      .sort({ _id: 1 })
+      .sort(sort)
       .limit(pageLimit + 1) // Fetch one extra to check if there's more
       .toArray();
 
@@ -124,8 +334,21 @@ router.get("/:db/:collection", async (req, res) => {
     if (hasMore) docs.pop();
 
     const serializedDocs = docs.map(serializeDocument);
-    const nextCursor =
-      hasMore && docs.length > 0 ? docs[docs.length - 1]._id.toString() : null;
+
+    // Build cursor with createdAt and _id for proper pagination
+    let nextCursor = null;
+    if (hasMore && docs.length > 0) {
+      const lastDoc = docs[docs.length - 1];
+      const cursorData = {
+        createdAt: lastDoc.createdAt
+          ? lastDoc.createdAt instanceof Date
+            ? lastDoc.createdAt.toISOString()
+            : lastDoc.createdAt
+          : null,
+        _id: lastDoc._id.toString(),
+      };
+      nextCursor = JSON.stringify(cursorData);
+    }
 
     // Get total count (estimated for speed)
     const totalCount = await collection.estimatedDocumentCount();
@@ -279,14 +502,14 @@ router.get("/status", async (req, res) => {
   try {
     const client = mongoService.getClient();
     const isConnected = mongoService.isConnected();
-    
+
     if (isConnected && client) {
       // Test the connection
       try {
         await client.db().admin().ping();
-        res.json({ 
+        res.json({
           connected: true,
-          connectionString: mongoService.getConnectionString() 
+          connectionString: mongoService.getConnectionString(),
         });
       } catch (err) {
         // Connection exists but is invalid

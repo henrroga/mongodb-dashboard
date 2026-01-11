@@ -228,13 +228,66 @@ async function initConnectPage() {
 let currentCursor = null;
 let allDocuments = [];
 let tableFields = [];
+let currentSearchTerm = '';
 
 function initBrowser(dbName, collectionName) {
   currentCursor = null;
   allDocuments = [];
   tableFields = [];
+  currentSearchTerm = '';
 
   loadDocuments(dbName, collectionName);
+  
+  // Search input
+  const searchInput = document.getElementById('searchInput');
+  const clearSearchBtn = document.getElementById('clearSearchBtn');
+  let searchTimeout = null;
+
+  if (searchInput) {
+    // Handle search input with debounce
+    searchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.trim();
+      currentSearchTerm = searchTerm;
+      
+      // Show/hide clear button
+      clearSearchBtn.style.display = searchTerm ? 'flex' : 'none';
+      
+      // Clear existing timeout
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+      
+      // Debounce search - wait 300ms after user stops typing
+      searchTimeout = setTimeout(() => {
+        currentCursor = null;
+        allDocuments = [];
+        loadDocuments(dbName, collectionName);
+      }, 300);
+    });
+
+    // Handle Enter key for immediate search
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        if (searchTimeout) {
+          clearTimeout(searchTimeout);
+        }
+        currentCursor = null;
+        allDocuments = [];
+        loadDocuments(dbName, collectionName);
+      }
+    });
+  }
+
+  if (clearSearchBtn) {
+    clearSearchBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      currentSearchTerm = '';
+      clearSearchBtn.style.display = 'none';
+      currentCursor = null;
+      allDocuments = [];
+      loadDocuments(dbName, collectionName);
+    });
+  }
   
   // Refresh button
   document.getElementById('refreshBtn')?.addEventListener('click', () => {
@@ -270,7 +323,8 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
 
   try {
     let url = `/api/${dbName}/${collectionName}?limit=50`;
-    if (cursor) url += `&cursor=${cursor}`;
+    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+    if (currentSearchTerm) url += `&search=${encodeURIComponent(currentSearchTerm)}`;
 
     const res = await fetch(url);
     const data = await res.json();
@@ -283,10 +337,14 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
     allDocuments = allDocuments.concat(documents);
 
     // Update count
-    docCount.textContent = `${formatCount(totalCount)} documents`;
+    if (currentSearchTerm) {
+      docCount.textContent = `${formatCount(allDocuments.length)}${hasMore ? '+' : ''} of ${formatCount(totalCount)} documents`;
+    } else {
+      docCount.textContent = `${formatCount(totalCount)} documents`;
+    }
 
-    // Determine table fields from first document
-    if (tableFields.length === 0 && documents.length > 0) {
+    // Determine table fields from first document (reset if new search)
+    if (!cursor && documents.length > 0) {
       tableFields = extractFields(documents[0]);
       tableHeader.innerHTML = tableFields.map(f => `<th>${f}</th>`).join('') + '<th>Extra Fields</th><th>Actions</th>';
     }
@@ -304,11 +362,20 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
     // Pagination
     if (hasMore) {
       pagination.style.display = 'flex';
-      document.getElementById('paginationInfo').textContent = `Showing ${allDocuments.length} of ~${formatCount(totalCount)}`;
+      document.getElementById('loadMoreBtn').style.display = 'block';
+      if (currentSearchTerm) {
+        document.getElementById('paginationInfo').textContent = `Showing ${allDocuments.length} of ${formatCount(totalCount)} results`;
+      } else {
+        document.getElementById('paginationInfo').textContent = `Showing ${allDocuments.length} of ~${formatCount(totalCount)}`;
+      }
     } else {
       pagination.style.display = allDocuments.length > 0 ? 'flex' : 'none';
       document.getElementById('loadMoreBtn').style.display = 'none';
-      document.getElementById('paginationInfo').textContent = `Showing all ${allDocuments.length} documents`;
+      if (currentSearchTerm) {
+        document.getElementById('paginationInfo').textContent = `Showing all ${allDocuments.length} result${allDocuments.length !== 1 ? 's' : ''}`;
+      } else {
+        document.getElementById('paginationInfo').textContent = `Showing all ${allDocuments.length} documents`;
+      }
     }
 
     if (documents.length === 0 && !cursor) {
