@@ -3,8 +3,27 @@ const router = express.Router();
 const mongoService = require("../services/mongodb");
 
 // Home / Connect page
-router.get("/", (req, res) => {
-  res.render("connect", { title: "Connect" });
+router.get("/", async (req, res) => {
+  try {
+    // Check if already connected
+    const client = mongoService.getClient();
+    if (client) {
+      // Test the connection
+      try {
+        await client.db().admin().ping();
+        // Already connected, redirect to databases
+        return res.redirect("/databases");
+      } catch (err) {
+        // Connection exists but is invalid, disconnect it
+        await mongoService.disconnect();
+      }
+    }
+    // Not connected, show connect page
+    res.render("connect", { title: "Connect" });
+  } catch (err) {
+    // On error, show connect page
+    res.render("connect", { title: "Connect" });
+  }
 });
 
 // Database list

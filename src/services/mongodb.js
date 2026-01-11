@@ -41,6 +41,10 @@ class MongoDBService {
     return this.client !== null;
   }
 
+  getConnectionString() {
+    return this.connectionString;
+  }
+
   async disconnect() {
     if (this.client) {
       await this.client.close();

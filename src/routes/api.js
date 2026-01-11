@@ -274,6 +274,33 @@ router.delete("/:db/:collection/:id", async (req, res) => {
   }
 });
 
+// Check connection status
+router.get("/status", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    const isConnected = mongoService.isConnected();
+    
+    if (isConnected && client) {
+      // Test the connection
+      try {
+        await client.db().admin().ping();
+        res.json({ 
+          connected: true,
+          connectionString: mongoService.getConnectionString() 
+        });
+      } catch (err) {
+        // Connection exists but is invalid
+        await mongoService.disconnect();
+        res.json({ connected: false });
+      }
+    } else {
+      res.json({ connected: false });
+    }
+  } catch (err) {
+    res.json({ connected: false });
+  }
+});
+
 // Disconnect
 router.post("/disconnect", async (req, res) => {
   try {

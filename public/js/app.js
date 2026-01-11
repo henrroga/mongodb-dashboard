@@ -2,6 +2,7 @@
 
 // Storage keys
 const STORAGE_KEY = 'mongodb_dashboard_connections';
+const ACTIVE_CONNECTION_KEY = 'mongodb_dashboard_active_connection';
 
 // Utility functions
 function formatBytes(bytes) {
@@ -49,14 +50,101 @@ function removeConnection(connectionString) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
 }
 
+function getActiveConnection() {
+  try {
+    return localStorage.getItem(ACTIVE_CONNECTION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setActiveConnection(connectionString) {
+  try {
+    if (connectionString) {
+      localStorage.setItem(ACTIVE_CONNECTION_KEY, connectionString);
+    } else {
+      localStorage.removeItem(ACTIVE_CONNECTION_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+async function checkConnectionStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    return data;
+  } catch {
+    return { connected: false };
+  }
+}
+
+async function autoReconnect() {
+  const activeConnection = getActiveConnection();
+  if (!activeConnection) {
+    return false;
+  }
+
+  try {
+    const status = await checkConnectionStatus();
+    if (status.connected) {
+      // Already connected, verify it's the same connection
+      if (status.connectionString === activeConnection) {
+        return true;
+      }
+    }
+
+    // Try to reconnect
+    const res = await fetch('/api/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionString: activeConnection })
+    });
+
+    const data = await res.json();
+    return res.ok && data.success;
+  } catch {
+    return false;
+  }
+}
+
 // Connect Page
-function initConnectPage() {
+async function initConnectPage() {
   const form = document.getElementById('connectForm');
   const input = document.getElementById('connectionString');
   const errorEl = document.getElementById('connectError');
   const recentEl = document.getElementById('recentConnections');
   const recentList = document.getElementById('recentList');
   const connectBtn = document.getElementById('connectBtn');
+  const connectContent = document.getElementById('connectContent');
+  const reconnectLoading = document.getElementById('reconnectLoading');
+
+  // Hide form initially, show loading if we have a saved connection
+  const activeConnection = getActiveConnection();
+  if (activeConnection) {
+    connectContent.style.display = 'none';
+    reconnectLoading.style.display = 'flex';
+  }
+
+  // Check if we should auto-reconnect
+  const status = await checkConnectionStatus();
+  if (!status.connected && activeConnection) {
+    const reconnected = await autoReconnect();
+    if (reconnected) {
+      // Successfully reconnected, redirect to databases
+      window.location.href = '/databases';
+      return;
+    }
+  } else if (status.connected) {
+    // Already connected, redirect to databases
+    window.location.href = '/databases';
+    return;
+  }
+
+  // Reconnection failed or no saved connection - show the form
+  reconnectLoading.style.display = 'none';
+  connectContent.style.display = 'block';
 
   // Show recent connections
   const connections = getConnections();
@@ -118,6 +206,9 @@ function initConnectPage() {
 
       // Save to recent connections
       saveConnection(connectionString);
+      
+      // Save as active connection
+      setActiveConnection(connectionString);
 
       // Redirect to databases page
       window.location.href = '/databases';
@@ -977,8 +1068,10 @@ function setNestedValue(obj, path, value) {
 document.getElementById('disconnectBtn')?.addEventListener('click', async () => {
   try {
     await fetch('/api/disconnect', { method: 'POST' });
+    setActiveConnection(null); // Clear active connection
     window.location.href = '/';
   } catch (err) {
+    setActiveConnection(null); // Clear active connection
     window.location.href = '/';
   }
 });
@@ -992,3 +1085,39 @@ document.addEventListener('keydown', (e) => {
     });
   }
 });
+
+// Global initialization - check connection status on all pages except connect page
+async function initGlobalConnectionCheck() {
+  // Skip on connect page (it handles its own reconnection)
+  if (window.location.pathname === '/' || window.location.pathname === '/connect') {
+    return;
+  }
+
+  try {
+    const status = await checkConnectionStatus();
+    if (!status.connected) {
+      // Try to auto-reconnect
+      const reconnected = await autoReconnect();
+      if (reconnected) {
+        // Successfully reconnected, reload the page
+        window.location.reload();
+      } else {
+        // Failed to reconnect, redirect to connect page
+        window.location.href = '/';
+      }
+    }
+  } catch (err) {
+    // On error, try to reconnect
+    const reconnected = await autoReconnect();
+    if (!reconnected) {
+      window.location.href = '/';
+    }
+  }
+}
+
+// Run global connection check when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initGlobalConnectionCheck);
+} else {
+  initGlobalConnectionCheck();
+}
