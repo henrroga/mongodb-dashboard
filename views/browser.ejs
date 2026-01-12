@@ -377,6 +377,26 @@
           </div>
         </div>
       </div>
+
+      <!-- View Document Modal -->
+      <div id="viewModal" class="modal" style="display: none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3>View Document</h3>
+            <button class="modal-close" id="viewModalClose">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div id="viewDocumentContent" class="json-viewer">
+              <div class="loading-spinner"></div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button id="viewModalPopulateBtn" class="btn btn-primary">Populate</button>
+            <button id="viewModalCloseBtn" class="btn btn-ghost">Close</button>
+          </div>
+        </div>
+      </div>
     </main>
 
     <script src="/js/app.js"></script>

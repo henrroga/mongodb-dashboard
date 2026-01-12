@@ -320,6 +320,7 @@ function initBrowser(dbName, collectionName) {
   // Modal handlers
   setupModalHandlers();
   setupColumnsModalHandlers();
+  setupViewModalHandlers();
 }
 
 async function loadDocuments(dbName, collectionName, cursor = null) {
@@ -522,7 +523,7 @@ function createDocumentRow(doc, dbName, collectionName) {
   const viewBtn = document.createElement('button');
   viewBtn.className = 'action-btn view';
   viewBtn.title = 'View';
-  viewBtn.onclick = () => { window.location.href = `/browse/${dbName}/${collectionName}/${docId}`; };
+  viewBtn.onclick = () => { openViewModal(dbName, collectionName, docId); };
   viewBtn.innerHTML = `
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -1329,6 +1330,337 @@ function openColumnsModal(dbName, collectionName) {
   }).join('');
 
   modal.style.display = 'flex';
+}
+
+// View Document Modal
+let currentViewDoc = null;
+let currentViewDb = null;
+let currentViewCollection = null;
+
+function setupViewModalHandlers() {
+  const modal = document.getElementById('viewModal');
+  if (!modal) return;
+
+  const backdrop = modal.querySelector('.modal-backdrop');
+  const closeBtn = document.getElementById('viewModalClose');
+  const closeBtnFooter = document.getElementById('viewModalCloseBtn');
+  const populateBtn = document.getElementById('viewModalPopulateBtn');
+
+  const closeModal = () => {
+    modal.style.display = 'none';
+    currentViewDoc = null;
+    currentViewDb = null;
+    currentViewCollection = null;
+  };
+
+  backdrop.addEventListener('click', closeModal);
+  closeBtn.addEventListener('click', closeModal);
+  closeBtnFooter.addEventListener('click', closeModal);
+  
+  populateBtn.addEventListener('click', async () => {
+    if (currentViewDoc && currentViewDb) {
+      await populateReferences(currentViewDoc, currentViewDb);
+    }
+  });
+}
+
+async function openViewModal(dbName, collectionName, docId) {
+  const modal = document.getElementById('viewModal');
+  const contentEl = document.getElementById('viewDocumentContent');
+  const populateBtn = document.getElementById('viewModalPopulateBtn');
+  
+  if (!modal || !contentEl) return;
+
+  // Show loading state
+  contentEl.innerHTML = '<div class="loading-spinner"></div>';
+  modal.style.display = 'flex';
+  populateBtn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/${dbName}/${collectionName}/${docId}`);
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error);
+
+    // Store current document info
+    currentViewDoc = JSON.parse(JSON.stringify(data.document)); // Deep copy
+    currentViewDb = dbName;
+    currentViewCollection = collectionName;
+
+    // Render JSON tree
+    contentEl.innerHTML = '<div class="json-viewer">' + renderJsonTree(currentViewDoc) + '</div>';
+    populateBtn.disabled = false;
+  } catch (err) {
+    contentEl.innerHTML = `<div style="color: var(--danger);">Error: ${err.message}</div>`;
+    populateBtn.disabled = false;
+  }
+}
+
+// Extract all ObjectIds from a document recursively
+function extractObjectIds(obj, path = '', result = []) {
+  if (obj === null || obj === undefined) {
+    return result;
+  }
+
+  // Check if this is an ObjectId
+  if (obj.$oid) {
+    const fieldName = path.split(/[\.\[\]]/).filter(p => p && !/^\d+$/.test(p)).pop() || '';
+    result.push({
+      oid: obj.$oid,
+      path: path,
+      fieldName: fieldName
+    });
+    return result;
+  }
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    obj.forEach((item, index) => {
+      const newPath = path ? `${path}[${index}]` : `[${index}]`;
+      extractObjectIds(item, newPath, result);
+    });
+    return result;
+  }
+
+  // Handle objects
+  if (typeof obj === 'object') {
+    Object.keys(obj).forEach(key => {
+      const newPath = path ? `${path}.${key}` : key;
+      extractObjectIds(obj[key], newPath, result);
+    });
+    return result;
+  }
+
+  return result;
+}
+
+// Guess collection name from field name
+function guessCollectionName(fieldName) {
+  // Common patterns
+  const patterns = [
+    // Remove common suffixes
+    fieldName.replace(/Id$/, '').replace(/Ids$/, ''),
+    fieldName.replace(/Ref$/, '').replace(/Refs$/, ''),
+    fieldName.replace(/Reference$/, '').replace(/References$/, ''),
+    // Pluralize
+    fieldName + 's',
+    // Singularize
+    fieldName.replace(/s$/, ''),
+    // Direct match
+    fieldName
+  ];
+
+  return [...new Set(patterns)].filter(p => p && p.length > 0);
+}
+
+// Try to find a document by ObjectId in a collection
+async function findDocumentById(dbName, collectionName, oid) {
+  try {
+    const res = await fetch(`/api/${dbName}/${collectionName}/${oid}`);
+    const data = await res.json();
+    if (res.ok && data.document) {
+      return data.document;
+    }
+  } catch (err) {
+    // Document not found or error
+  }
+  return null;
+}
+
+// Get all collections in a database
+async function getCollections(dbName) {
+  try {
+    const res = await fetch(`/api/${dbName}/collections`);
+    const data = await res.json();
+    if (res.ok && data.collections) {
+      return data.collections.map(c => c.name);
+    }
+  } catch (err) {
+    console.error('Error fetching collections:', err);
+  }
+  return [];
+}
+
+// Populate ObjectId references in a document
+async function populateReferences(doc, dbName) {
+  const contentEl = document.getElementById('viewDocumentContent');
+  const populateBtn = document.getElementById('viewModalPopulateBtn');
+  
+  if (!contentEl || !populateBtn) return;
+
+  // Show loading state
+  populateBtn.disabled = true;
+  populateBtn.textContent = 'Populating...';
+  const originalContent = contentEl.innerHTML;
+  contentEl.innerHTML = '<div class="loading-spinner"></div>';
+
+  try {
+    // Extract all ObjectIds
+    const objectIds = extractObjectIds(doc);
+    
+    if (objectIds.length === 0) {
+      contentEl.innerHTML = '<div style="color: var(--text-muted); padding: 20px; text-align: center;">No ObjectId references found to populate.</div>';
+      populateBtn.disabled = false;
+      populateBtn.textContent = 'Populate';
+      return;
+    }
+
+    // Get all collections in the database
+    const collections = await getCollections(dbName);
+    
+    // Create a copy of the document to populate
+    const populatedDoc = JSON.parse(JSON.stringify(doc));
+    
+    // Track which ObjectIds we've populated
+    let populatedCount = 0;
+    let notFoundCount = 0;
+
+    // Try to populate each ObjectId
+    for (const { oid, path, fieldName } of objectIds) {
+      // Skip _id field (it's the document's own ID)
+      if (path === '_id' || path === '') {
+        continue;
+      }
+
+      let found = false;
+      
+      // First, try collections based on field name
+      const guessedCollections = guessCollectionName(fieldName);
+      for (const collectionName of guessedCollections) {
+        if (collections.includes(collectionName)) {
+          const refDoc = await findDocumentById(dbName, collectionName, oid);
+          if (refDoc) {
+            // Replace ObjectId with the document
+            setNestedValue(populatedDoc, path, refDoc);
+            found = true;
+            populatedCount++;
+            break;
+          }
+        }
+      }
+
+      // If not found, try all collections
+      if (!found) {
+        for (const collectionName of collections) {
+          const refDoc = await findDocumentById(dbName, collectionName, oid);
+          if (refDoc) {
+            // Replace ObjectId with the document
+            setNestedValue(populatedDoc, path, refDoc);
+            found = true;
+            populatedCount++;
+            break;
+          }
+        }
+      }
+
+      if (!found) {
+        notFoundCount++;
+      }
+    }
+
+    // Update the stored document
+    currentViewDoc = populatedDoc;
+
+    // Render the populated document
+    let statusHtml = '';
+    if (notFoundCount > 0 || populatedCount > 0) {
+      statusHtml = `<div style="padding: 12px; margin-top: 12px; background: var(--bg-tertiary); border-radius: var(--radius); color: var(--text-secondary); font-size: 12px;">
+        Populated ${populatedCount} reference(s).${notFoundCount > 0 ? ` ${notFoundCount} reference(s) not found.` : ''}
+      </div>`;
+    }
+    
+    contentEl.innerHTML = '<div class="json-viewer">' + renderJsonTree(populatedDoc) + '</div>' + statusHtml;
+
+  } catch (err) {
+    contentEl.innerHTML = `<div style="color: var(--danger);">Error populating references: ${err.message}</div>`;
+  } finally {
+    populateBtn.disabled = false;
+    populateBtn.textContent = 'Populate';
+  }
+}
+
+// Helper function to set nested value by path (handles arrays)
+function setNestedValue(obj, path, value) {
+  // Parse path like "urls[0]" or "metadata.sources[1]" or "pageId"
+  const pathParts = [];
+  let currentPart = '';
+  
+  for (let i = 0; i < path.length; i++) {
+    const char = path[i];
+    if (char === '.') {
+      if (currentPart) {
+        pathParts.push({ type: 'property', value: currentPart });
+        currentPart = '';
+      }
+    } else if (char === '[') {
+      if (currentPart) {
+        pathParts.push({ type: 'property', value: currentPart });
+        currentPart = '';
+      }
+    } else if (char === ']') {
+      if (currentPart) {
+        pathParts.push({ type: 'index', value: parseInt(currentPart) });
+        currentPart = '';
+      }
+    } else {
+      currentPart += char;
+    }
+  }
+  
+  if (currentPart) {
+    pathParts.push({ type: 'property', value: currentPart });
+  }
+  
+  // Navigate to the target location
+  let current = obj;
+  for (let i = 0; i < pathParts.length - 1; i++) {
+    const part = pathParts[i];
+    if (part.type === 'property') {
+      if (current[part.value] === undefined || current[part.value] === null) {
+        // Check if next part is an index (array)
+        if (i + 1 < pathParts.length && pathParts[i + 1].type === 'index') {
+          current[part.value] = [];
+        } else {
+          current[part.value] = {};
+        }
+      }
+      current = current[part.value];
+    } else if (part.type === 'index') {
+      if (!Array.isArray(current)) {
+        return; // Can't navigate into non-array
+      }
+      if (current[part.value] === undefined) {
+        current[part.value] = {};
+      }
+      current = current[part.value];
+    }
+  }
+  
+  // Set the final value
+  const lastPart = pathParts[pathParts.length - 1];
+  if (lastPart.type === 'property') {
+    current[lastPart.value] = value;
+  } else if (lastPart.type === 'index') {
+    if (!Array.isArray(current)) {
+      return; // Can't set index on non-array
+    }
+    current[lastPart.value] = value;
+  }
+}
+
+// Helper function to get nested value by path
+function getNestedValue(obj, path) {
+  const keys = path.split('.');
+  let current = obj;
+  
+  for (const key of keys) {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+    current = current[key];
+  }
+  
+  return current;
 }
 
 function getFieldType(fieldName) {
