@@ -224,7 +224,7 @@ router.get("/:db/:collection", async (req, res) => {
     }
 
     const { db: dbName, collection: colName } = req.params;
-    const { cursor, limit = 50, filter, search } = req.query;
+    const { cursor, limit = 50, filter, search, arrayFilters } = req.query;
     const pageLimit = Math.min(parseInt(limit) || 50, 100);
 
     const collection = client.db(dbName).collection(colName);
@@ -237,6 +237,55 @@ router.get("/:db/:collection", async (req, res) => {
       } catch (e) {
         // If not valid JSON, search in common string fields
         query = { $or: [] };
+      }
+    }
+
+    // Add array filters
+    if (arrayFilters) {
+      try {
+        const filters = JSON.parse(arrayFilters);
+        const arrayConditions = [];
+
+        Object.keys(filters).forEach((fieldName) => {
+          const filter = filters[fieldName];
+
+          if (filter.type === "empty") {
+            // Filter for empty arrays: field exists and has length 0, or field doesn't exist
+            arrayConditions.push({
+              $or: [
+                { [fieldName]: { $exists: false } },
+                { [fieldName]: { $size: 0 } },
+                { [fieldName]: null },
+              ],
+            });
+          } else if (
+            filter.type === "gte" &&
+            typeof filter.value === "number"
+          ) {
+            // Filter for arrays with length >= value
+            // Use $expr to compare array length
+            arrayConditions.push({
+              $expr: {
+                $gte: [
+                  { $size: { $ifNull: [`$${fieldName}`, []] } },
+                  filter.value,
+                ],
+              },
+            });
+          }
+        });
+
+        // Combine array conditions with existing query
+        if (arrayConditions.length > 0) {
+          if (Object.keys(query).length === 0) {
+            query = { $and: arrayConditions };
+          } else {
+            query = { $and: [query, ...arrayConditions] };
+          }
+        }
+      } catch (e) {
+        console.error("Error parsing arrayFilters:", e);
+        // Ignore invalid arrayFilters
       }
     }
 

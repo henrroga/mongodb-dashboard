@@ -133,13 +133,25 @@ async function initConnectPage() {
   if (!status.connected && activeConnection) {
     const reconnected = await autoReconnect();
     if (reconnected) {
-      // Successfully reconnected, redirect to databases
-      window.location.href = '/databases';
+      // Successfully reconnected, check for saved return URL
+      const returnUrl = sessionStorage.getItem('mongodb_dashboard_return_url');
+      if (returnUrl) {
+        sessionStorage.removeItem('mongodb_dashboard_return_url');
+        window.location.href = returnUrl;
+      } else {
+        window.location.href = '/databases';
+      }
       return;
     }
   } else if (status.connected) {
-    // Already connected, redirect to databases
-    window.location.href = '/databases';
+    // Already connected, check for saved return URL
+    const returnUrl = sessionStorage.getItem('mongodb_dashboard_return_url');
+    if (returnUrl) {
+      sessionStorage.removeItem('mongodb_dashboard_return_url');
+      window.location.href = returnUrl;
+    } else {
+      window.location.href = '/databases';
+    }
     return;
   }
 
@@ -211,8 +223,14 @@ async function initConnectPage() {
       // Save as active connection
       setActiveConnection(connectionString);
 
-      // Redirect to databases page
-      window.location.href = '/databases';
+      // Check for saved return URL, otherwise redirect to databases
+      const returnUrl = sessionStorage.getItem('mongodb_dashboard_return_url');
+      if (returnUrl) {
+        sessionStorage.removeItem('mongodb_dashboard_return_url');
+        window.location.href = returnUrl;
+      } else {
+        window.location.href = '/databases';
+      }
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.style.display = 'block';
@@ -232,6 +250,7 @@ let allAvailableFields = [];
 let currentSearchTerm = '';
 let currentDbName = '';
 let currentCollectionName = '';
+let arrayFilters = {}; // Store filters for array columns: { fieldName: { type: 'empty' | 'gte', value: number } }
 
 function initBrowser(dbName, collectionName) {
   currentCursor = null;
@@ -241,6 +260,7 @@ function initBrowser(dbName, collectionName) {
   currentSearchTerm = '';
   currentDbName = dbName;
   currentCollectionName = collectionName;
+  arrayFilters = {}; // Reset filters when switching collections
 
   loadDocuments(dbName, collectionName);
   
@@ -339,6 +359,11 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
     let url = `/api/${dbName}/${collectionName}?limit=50`;
     if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
     if (currentSearchTerm) url += `&search=${encodeURIComponent(currentSearchTerm)}`;
+    
+    // Add array filters to URL
+    if (Object.keys(arrayFilters).length > 0) {
+      url += `&arrayFilters=${encodeURIComponent(JSON.stringify(arrayFilters))}`;
+    }
 
     const res = await fetch(url);
     const data = await res.json();
@@ -484,7 +509,164 @@ function renderTableHeader() {
   const tableHeader = document.getElementById('tableHeader');
   if (!tableHeader) return;
   
-  tableHeader.innerHTML = tableFields.map(f => `<th>${f}</th>`).join('') + '<th>Extra Fields</th><th>Actions</th>';
+  const headerCells = tableFields.map(field => {
+    const isArray = isArrayField(field);
+    const hasFilter = arrayFilters[field] !== undefined;
+    const fieldId = sanitizeId(field);
+    
+    return `
+      <th>
+        <div class="column-header-content">
+          <span>${escapeHtml(field)}</span>
+          ${isArray ? `
+            <button class="filter-icon ${hasFilter ? 'active' : ''}" data-field="${escapeHtml(field)}" data-field-id="${fieldId}" title="Filter array">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>
+              </svg>
+            </button>
+            <div class="filter-dropdown" id="filter-dropdown-${fieldId}" style="display: none;">
+              <div class="filter-dropdown-content">
+                <div class="filter-option">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="filter-type-${fieldId}" value="empty" ${hasFilter && arrayFilters[field].type === 'empty' ? 'checked' : ''}>
+                    <span>Empty arrays (no elements)</span>
+                  </label>
+                </div>
+                <div class="filter-option">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px;">
+                    <input type="radio" name="filter-type-${fieldId}" value="gte" ${hasFilter && arrayFilters[field].type === 'gte' ? 'checked' : ''}>
+                    <span>Greater than or equal to:</span>
+                  </label>
+                  <input type="number" min="0" id="filter-value-${fieldId}" value="${hasFilter && arrayFilters[field].type === 'gte' ? arrayFilters[field].value : '0'}" placeholder="0" style="margin-left: 24px;" ${hasFilter && arrayFilters[field].type === 'gte' ? '' : 'disabled'}>
+                </div>
+                <div class="filter-actions">
+                  <button class="btn btn-sm btn-ghost" data-action="apply" data-field="${escapeHtml(field)}" data-field-id="${fieldId}">Apply</button>
+                  <button class="btn btn-sm btn-ghost" data-action="clear" data-field="${escapeHtml(field)}" data-field-id="${fieldId}">Clear</button>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      </th>
+    `;
+  }).join('');
+  
+  tableHeader.innerHTML = headerCells + '<th>Extra Fields</th><th>Actions</th>';
+  
+  // Attach click handlers for filter icons using event delegation
+  tableHeader.addEventListener('click', (e) => {
+    const filterIcon = e.target.closest('.filter-icon');
+    if (!filterIcon) return;
+    
+    e.stopPropagation();
+    e.preventDefault();
+    
+    const fieldId = filterIcon.dataset.fieldId;
+    const field = filterIcon.dataset.field;
+    const dropdown = document.getElementById(`filter-dropdown-${fieldId}`);
+    
+    if (!dropdown) {
+      console.error('Dropdown not found for field:', field);
+      return;
+    }
+    
+    // Close all other dropdowns
+    document.querySelectorAll('.filter-dropdown').forEach(dd => {
+      if (dd !== dropdown) {
+        dd.classList.remove('show');
+        dd.style.display = 'none';
+      }
+    });
+    
+    // Toggle current dropdown
+    const isShowing = dropdown.classList.contains('show');
+    if (isShowing) {
+      dropdown.classList.remove('show');
+      dropdown.style.display = 'none';
+    } else {
+      // Calculate position relative to the icon
+      const iconRect = filterIcon.getBoundingClientRect();
+      const headerRect = tableHeader.getBoundingClientRect();
+      
+      dropdown.style.top = `${iconRect.bottom + window.scrollY + 4}px`;
+      dropdown.style.left = `${iconRect.left + window.scrollX}px`;
+      
+      dropdown.classList.add('show');
+      dropdown.style.display = 'block';
+    }
+    
+    // Update number input disabled state based on selected radio
+    const numberInput = document.getElementById(`filter-value-${fieldId}`);
+    const radioButtons = dropdown.querySelectorAll(`input[name="filter-type-${fieldId}"]`);
+    const updateInputState = () => {
+      const selectedType = dropdown.querySelector(`input[name="filter-type-${fieldId}"]:checked`)?.value;
+      if (numberInput) {
+        numberInput.disabled = selectedType !== 'gte';
+      }
+    };
+    
+    updateInputState();
+    radioButtons.forEach(radio => {
+      radio.addEventListener('change', updateInputState);
+    });
+  });
+  
+  // Attach click handlers for Apply/Clear buttons using event delegation
+  tableHeader.addEventListener('click', (e) => {
+    const applyBtn = e.target.closest('[data-action="apply"]');
+    const clearBtn = e.target.closest('[data-action="clear"]');
+    
+    if (applyBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      const field = applyBtn.dataset.field;
+      applyArrayFilter(field);
+      return;
+    }
+    
+    if (clearBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      const field = clearBtn.dataset.field;
+      clearArrayFilter(field);
+      return;
+    }
+  });
+  
+  // Close dropdowns when clicking outside (only attach once globally)
+  if (!window.arrayFilterClickHandlerAttached) {
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.filter-icon') && !e.target.closest('.filter-dropdown') && !e.target.closest('[data-action]')) {
+        document.querySelectorAll('.filter-dropdown').forEach(dd => {
+          dd.classList.remove('show');
+          dd.style.display = 'none';
+        });
+      }
+    });
+    window.arrayFilterClickHandlerAttached = true;
+  }
+}
+
+function isArrayField(fieldName) {
+  // Check if field is an array by looking at sample documents
+  if (allDocuments.length === 0) return false;
+  
+  // Check first few documents to see if this field is consistently an array
+  let arrayCount = 0;
+  let checkedCount = 0;
+  
+  for (let i = 0; i < Math.min(10, allDocuments.length); i++) {
+    const value = allDocuments[i][fieldName];
+    if (value !== null && value !== undefined) {
+      checkedCount++;
+      if (Array.isArray(value)) {
+        arrayCount++;
+      }
+    }
+  }
+  
+  // If most non-null values are arrays, consider it an array field
+  return checkedCount > 0 && arrayCount / checkedCount >= 0.5;
 }
 
 function createDocumentRow(doc, dbName, collectionName) {
@@ -598,6 +780,11 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function sanitizeId(str) {
+  // Convert field name to a safe ID by replacing special characters
+  return str.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 // Document Modal
@@ -1345,6 +1532,7 @@ function setupViewModalHandlers() {
   const closeBtn = document.getElementById('viewModalClose');
   const closeBtnFooter = document.getElementById('viewModalCloseBtn');
   const populateBtn = document.getElementById('viewModalPopulateBtn');
+  const copyBtn = document.getElementById('viewModalCopyBtn');
 
   const closeModal = () => {
     modal.style.display = 'none';
@@ -1362,12 +1550,40 @@ function setupViewModalHandlers() {
       await populateReferences(currentViewDoc, currentViewDb);
     }
   });
+  
+  copyBtn.addEventListener('click', async () => {
+    if (!currentViewDoc) return;
+    
+    try {
+      const jsonString = JSON.stringify(currentViewDoc, null, 2);
+      await navigator.clipboard.writeText(jsonString);
+      
+      // Show feedback
+      const originalText = copyBtn.innerHTML;
+      copyBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 6L9 17l-5-5"></path>
+        </svg>
+        Copied!
+      `;
+      copyBtn.disabled = true;
+      
+      setTimeout(() => {
+        copyBtn.innerHTML = originalText;
+        copyBtn.disabled = false;
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard');
+    }
+  });
 }
 
 async function openViewModal(dbName, collectionName, docId) {
   const modal = document.getElementById('viewModal');
   const contentEl = document.getElementById('viewDocumentContent');
   const populateBtn = document.getElementById('viewModalPopulateBtn');
+  const copyBtn = document.getElementById('viewModalCopyBtn');
   
   if (!modal || !contentEl) return;
 
@@ -1375,6 +1591,7 @@ async function openViewModal(dbName, collectionName, docId) {
   contentEl.innerHTML = '<div class="loading-spinner"></div>';
   modal.style.display = 'flex';
   populateBtn.disabled = true;
+  if (copyBtn) copyBtn.disabled = true;
 
   try {
     const res = await fetch(`/api/${dbName}/${collectionName}/${docId}`);
@@ -1390,9 +1607,11 @@ async function openViewModal(dbName, collectionName, docId) {
     // Render JSON tree
     contentEl.innerHTML = '<div class="json-viewer">' + renderJsonTree(currentViewDoc) + '</div>';
     populateBtn.disabled = false;
+    if (copyBtn) copyBtn.disabled = false;
   } catch (err) {
     contentEl.innerHTML = `<div style="color: var(--danger);">Error: ${err.message}</div>`;
     populateBtn.disabled = false;
+    if (copyBtn) copyBtn.disabled = false;
   }
 }
 
@@ -1485,12 +1704,14 @@ async function getCollections(dbName) {
 async function populateReferences(doc, dbName) {
   const contentEl = document.getElementById('viewDocumentContent');
   const populateBtn = document.getElementById('viewModalPopulateBtn');
+  const copyBtn = document.getElementById('viewModalCopyBtn');
   
   if (!contentEl || !populateBtn) return;
 
   // Show loading state
   populateBtn.disabled = true;
   populateBtn.textContent = 'Populating...';
+  if (copyBtn) copyBtn.disabled = true;
   const originalContent = contentEl.innerHTML;
   contentEl.innerHTML = '<div class="loading-spinner"></div>';
 
@@ -1502,6 +1723,7 @@ async function populateReferences(doc, dbName) {
       contentEl.innerHTML = '<div style="color: var(--text-muted); padding: 20px; text-align: center;">No ObjectId references found to populate.</div>';
       populateBtn.disabled = false;
       populateBtn.textContent = 'Populate';
+      if (copyBtn) copyBtn.disabled = false;
       return;
     }
 
@@ -1570,12 +1792,14 @@ async function populateReferences(doc, dbName) {
     }
     
     contentEl.innerHTML = '<div class="json-viewer">' + renderJsonTree(populatedDoc) + '</div>' + statusHtml;
+    if (copyBtn) copyBtn.disabled = false;
 
   } catch (err) {
     contentEl.innerHTML = `<div style="color: var(--danger);">Error populating references: ${err.message}</div>`;
   } finally {
     populateBtn.disabled = false;
     populateBtn.textContent = 'Populate';
+    if (copyBtn) copyBtn.disabled = false;
   }
 }
 
@@ -1681,6 +1905,66 @@ function getFieldType(fieldName) {
   return null;
 }
 
+// Array filter functions
+function applyArrayFilter(fieldName) {
+  const fieldId = sanitizeId(fieldName);
+  const filterType = document.querySelector(`input[name="filter-type-${fieldId}"]:checked`)?.value;
+  
+  if (!filterType) {
+    alert('Please select a filter type');
+    return;
+  }
+  
+  if (filterType === 'empty') {
+    arrayFilters[fieldName] = { type: 'empty' };
+  } else if (filterType === 'gte') {
+    const valueInput = document.getElementById(`filter-value-${fieldId}`);
+    if (!valueInput) {
+      console.error('Value input not found for field:', fieldName);
+      return;
+    }
+    const value = parseInt(valueInput.value);
+    if (isNaN(value) || value < 0) {
+      alert('Please enter a valid number (>= 0)');
+      return;
+    }
+    arrayFilters[fieldName] = { type: 'gte', value: value };
+  }
+  
+  // Close dropdown
+  const dropdown = document.getElementById(`filter-dropdown-${fieldId}`);
+  if (dropdown) {
+    dropdown.classList.remove('show');
+    dropdown.style.display = 'none';
+  }
+  
+  // Reload documents with new filter
+  currentCursor = null;
+  allDocuments = [];
+  loadDocuments(currentDbName, currentCollectionName);
+}
+
+function clearArrayFilter(fieldName) {
+  delete arrayFilters[fieldName];
+  
+  // Close dropdown
+  const fieldId = sanitizeId(fieldName);
+  const dropdown = document.getElementById(`filter-dropdown-${fieldId}`);
+  if (dropdown) {
+    dropdown.classList.remove('show');
+    dropdown.style.display = 'none';
+  }
+  
+  // Reload documents without filter
+  currentCursor = null;
+  allDocuments = [];
+  loadDocuments(currentDbName, currentCollectionName);
+}
+
+// Functions are called via event listeners, but keep them globally available for debugging
+window.applyArrayFilter = applyArrayFilter;
+window.clearArrayFilter = clearArrayFilter;
+
 // Global disconnect handler
 document.getElementById('disconnectBtn')?.addEventListener('click', async () => {
   try {
@@ -1716,10 +2000,12 @@ async function initGlobalConnectionCheck() {
       // Try to auto-reconnect
       const reconnected = await autoReconnect();
       if (reconnected) {
-        // Successfully reconnected, reload the page
+        // Successfully reconnected, reload the page to stay on current page
         window.location.reload();
       } else {
-        // Failed to reconnect, redirect to connect page
+        // Failed to reconnect, save current URL and redirect to connect page
+        const currentUrl = window.location.pathname + window.location.search;
+        sessionStorage.setItem('mongodb_dashboard_return_url', currentUrl);
         window.location.href = '/';
       }
     }
@@ -1727,6 +2013,9 @@ async function initGlobalConnectionCheck() {
     // On error, try to reconnect
     const reconnected = await autoReconnect();
     if (!reconnected) {
+      // Save current URL before redirecting
+      const currentUrl = window.location.pathname + window.location.search;
+      sessionStorage.setItem('mongodb_dashboard_return_url', currentUrl);
       window.location.href = '/';
     }
   }

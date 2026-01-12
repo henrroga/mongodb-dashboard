@@ -720,12 +720,14 @@ a:hover {
 .table-container {
   flex: 1;
   overflow: auto;
+  position: relative;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  position: relative;
 }
 
 .data-table th,
@@ -735,7 +737,7 @@ a:hover {
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   max-width: 300px;
-  overflow: hidden;
+  overflow: visible;
   text-overflow: ellipsis;
 }
 
@@ -745,7 +747,8 @@ a:hover {
   color: var(--text-secondary);
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 10;
+  overflow: visible;
 }
 
 .data-table tr:hover td {
@@ -1242,6 +1245,115 @@ a:hover {
   font-size: 12px;
   color: var(--text-muted);
   font-family: 'SF Mono', Monaco, monospace;
+}
+
+/* Table Header Filter */
+.data-table th {
+  position: relative;
+}
+
+.column-header-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.filter-icon {
+  width: 16px;
+  height: 16px;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: all var(--transition);
+}
+
+.data-table th:hover .filter-icon {
+  opacity: 1;
+}
+
+.filter-icon:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+  opacity: 1;
+}
+
+.filter-icon.active {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.filter-dropdown {
+  position: fixed;
+  min-width: 220px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 10000;
+  display: none;
+  overflow: hidden;
+}
+
+.filter-dropdown.show {
+  display: block !important;
+}
+
+.filter-dropdown-content {
+  padding: 12px;
+}
+
+.filter-option {
+  margin-bottom: 12px;
+}
+
+.filter-option:last-child {
+  margin-bottom: 0;
+}
+
+.filter-option label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.filter-option input[type="number"] {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.filter-option input[type="number"]:focus {
+  border-color: var(--accent);
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.filter-actions .btn {
+  flex: 1;
+  padding: 6px 12px;
+  font-size: 12px;
 }
 
 /* Scrollbar */

@@ -384,7 +384,16 @@
         <div class="modal-content modal-lg">
           <div class="modal-header">
             <h3>View Document</h3>
-            <button class="modal-close" id="viewModalClose">&times;</button>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button id="viewModalCopyBtn" class="btn btn-sm btn-ghost" title="Copy JSON">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                </svg>
+                Copy
+              </button>
+              <button class="modal-close" id="viewModalClose">&times;</button>
+            </div>
           </div>
           <div class="modal-body">
             <div id="viewDocumentContent" class="json-viewer">
