@@ -252,22 +252,112 @@ let currentDbName = '';
 let currentCollectionName = '';
 let arrayFilters = {}; // Store filters for array columns: { fieldName: { type: 'empty' | 'gte', value: number } }
 
-function initBrowser(dbName, collectionName) {
+// Sync filter state to URL query parameters
+function updateUrlParams() {
+  const url = new URL(window.location);
+  
+  // Update search param
+  if (currentSearchTerm) {
+    url.searchParams.set('search', currentSearchTerm);
+  } else {
+    url.searchParams.delete('search');
+  }
+  
+  // Update arrayFilters param
+  if (Object.keys(arrayFilters).length > 0) {
+    url.searchParams.set('arrayFilters', JSON.stringify(arrayFilters));
+  } else {
+    url.searchParams.delete('arrayFilters');
+  }
+  
+  // Update URL without page reload
+  window.history.replaceState({}, '', url);
+}
+
+async function initBrowser(dbName, collectionName) {
   currentCursor = null;
   allDocuments = [];
   tableFields = [];
   allAvailableFields = [];
-  currentSearchTerm = '';
   currentDbName = dbName;
   currentCollectionName = collectionName;
-  arrayFilters = {}; // Reset filters when switching collections
-
-  loadDocuments(dbName, collectionName);
   
+  // Restore filter state from URL query parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  currentSearchTerm = urlParams.get('search') || '';
+  
+  try {
+    const arrayFiltersParam = urlParams.get('arrayFilters');
+    arrayFilters = arrayFiltersParam ? JSON.parse(arrayFiltersParam) : {};
+  } catch (e) {
+    arrayFilters = {};
+  }
+
   // Search input
   const searchInput = document.getElementById('searchInput');
   const clearSearchBtn = document.getElementById('clearSearchBtn');
   let searchTimeout = null;
+
+  // Restore search input value from URL
+  if (searchInput && currentSearchTerm) {
+    searchInput.value = currentSearchTerm;
+    if (clearSearchBtn) {
+      clearSearchBtn.style.display = 'flex';
+    }
+  }
+
+  // Check connection status before loading documents
+  const tableBody = document.getElementById('tableBody');
+  try {
+    const status = await checkConnectionStatus();
+    if (!status.connected) {
+      // Show reconnecting message instead of error
+      if (tableBody) {
+        tableBody.innerHTML = '<tr class="loading-row"><td colspan="100"><div style="display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px;"><div class="loading-spinner"></div><span style="color: var(--text-secondary);">Reconnecting...</span></div></td></tr>';
+      }
+      // Try to reconnect
+      const reconnected = await autoReconnect();
+      if (reconnected) {
+        // Successfully reconnected, reload to get fresh data
+        window.location.reload();
+        return;
+      } else {
+        // Failed to reconnect, show error and redirect
+        if (tableBody) {
+          tableBody.innerHTML = '<tr><td colspan="100" style="text-align: center; padding: 40px; color: var(--danger);">Connection failed. Redirecting...</td></tr>';
+        }
+        const currentUrl = window.location.pathname + window.location.search;
+        sessionStorage.setItem('mongodb_dashboard_return_url', currentUrl);
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1000);
+        return;
+      }
+    }
+  } catch (err) {
+    // On error checking status, try to reconnect anyway
+    if (tableBody) {
+      tableBody.innerHTML = '<tr class="loading-row"><td colspan="100"><div style="display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px;"><div class="loading-spinner"></div><span style="color: var(--text-secondary);">Reconnecting...</span></div></td></tr>';
+    }
+    const reconnected = await autoReconnect();
+    if (reconnected) {
+      window.location.reload();
+      return;
+    } else {
+      if (tableBody) {
+        tableBody.innerHTML = '<tr><td colspan="100" style="text-align: center; padding: 40px; color: var(--danger);">Connection failed. Redirecting...</td></tr>';
+      }
+      const currentUrl = window.location.pathname + window.location.search;
+      sessionStorage.setItem('mongodb_dashboard_return_url', currentUrl);
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
+      return;
+    }
+  }
+
+  // Connection is good, proceed with loading documents
+  loadDocuments(dbName, collectionName);
 
   if (searchInput) {
     // Handle search input with debounce
@@ -285,6 +375,7 @@ function initBrowser(dbName, collectionName) {
       
       // Debounce search - wait 300ms after user stops typing
       searchTimeout = setTimeout(() => {
+        updateUrlParams();
         currentCursor = null;
         allDocuments = [];
         loadDocuments(dbName, collectionName);
@@ -297,6 +388,7 @@ function initBrowser(dbName, collectionName) {
         if (searchTimeout) {
           clearTimeout(searchTimeout);
         }
+        updateUrlParams();
         currentCursor = null;
         allDocuments = [];
         loadDocuments(dbName, collectionName);
@@ -309,6 +401,7 @@ function initBrowser(dbName, collectionName) {
       searchInput.value = '';
       currentSearchTerm = '';
       clearSearchBtn.style.display = 'none';
+      updateUrlParams();
       currentCursor = null;
       allDocuments = [];
       loadDocuments(dbName, collectionName);
@@ -1938,6 +2031,9 @@ function applyArrayFilter(fieldName) {
     dropdown.style.display = 'none';
   }
   
+  // Update URL with new filter state
+  updateUrlParams();
+  
   // Reload documents with new filter
   currentCursor = null;
   allDocuments = [];
@@ -1954,6 +2050,9 @@ function clearArrayFilter(fieldName) {
     dropdown.classList.remove('show');
     dropdown.style.display = 'none';
   }
+  
+  // Update URL with new filter state
+  updateUrlParams();
   
   // Reload documents without filter
   currentCursor = null;
@@ -1987,10 +2086,15 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Global initialization - check connection status on all pages except connect page
+// Global initialization - check connection status on all pages except connect page and browser pages
 async function initGlobalConnectionCheck() {
   // Skip on connect page (it handles its own reconnection)
   if (window.location.pathname === '/' || window.location.pathname === '/connect') {
+    return;
+  }
+
+  // Skip on browser pages - initBrowser handles connection check now
+  if (window.location.pathname.startsWith('/browse/')) {
     return;
   }
 

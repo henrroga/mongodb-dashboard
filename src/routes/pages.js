@@ -52,11 +52,18 @@ router.get("/databases", async (req, res) => {
 router.get("/browse/:db", async (req, res) => {
   try {
     const client = mongoService.getClient();
+    const dbName = req.params.db;
+
+    // If not connected, render page with empty collections to allow client-side reconnection
     if (!client) {
-      return res.redirect("/");
+      return res.render("browser", {
+        title: dbName,
+        dbName,
+        collections: [],
+        activeCollection: null,
+      });
     }
 
-    const dbName = req.params.db;
     const db = client.db(dbName);
     const collections = await db.listCollections().toArray();
 
@@ -78,7 +85,13 @@ router.get("/browse/:db", async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.redirect("/databases");
+    // On error, still render page to allow client-side reconnection
+    res.render("browser", {
+      title: req.params.db,
+      dbName: req.params.db,
+      collections: [],
+      activeCollection: null,
+    });
   }
 });
 
@@ -86,11 +99,18 @@ router.get("/browse/:db", async (req, res) => {
 router.get("/browse/:db/:collection", async (req, res) => {
   try {
     const client = mongoService.getClient();
+    const { db: dbName, collection: colName } = req.params;
+
+    // If not connected, render page with empty collections to allow client-side reconnection
     if (!client) {
-      return res.redirect("/");
+      return res.render("browser", {
+        title: `${dbName} / ${colName}`,
+        dbName,
+        collections: [],
+        activeCollection: colName,
+      });
     }
 
-    const { db: dbName, collection: colName } = req.params;
     const db = client.db(dbName);
     const collections = await db.listCollections().toArray();
 
@@ -112,7 +132,13 @@ router.get("/browse/:db/:collection", async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.redirect(`/browse/${req.params.db}`);
+    // On error, still render page to allow client-side reconnection
+    res.render("browser", {
+      title: `${req.params.db} / ${req.params.collection}`,
+      dbName: req.params.db,
+      collections: [],
+      activeCollection: req.params.collection,
+    });
   }
 });
 
