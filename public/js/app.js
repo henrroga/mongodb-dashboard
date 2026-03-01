@@ -564,6 +564,7 @@ async function initBrowser(dbName, collectionName) {
   initCollectionTabs(dbName, collectionName);
   initIndexesPanel(dbName, collectionName);
   initSchemaPanel(dbName, collectionName);
+  initAggregationPanel(dbName, collectionName);
 }
 
 function runQuery(dbName, collectionName) {
@@ -2315,6 +2316,7 @@ function initCollectionTabs(dbName, collectionName) {
     documents: document.getElementById('panel-documents'),
     indexes: document.getElementById('panel-indexes'),
     schema: document.getElementById('panel-schema'),
+    aggregation: document.getElementById('panel-aggregation'),
   };
 
   function switchTab(tabName) {
@@ -2597,6 +2599,309 @@ window.toggleIndexHidden = async function(dbName, collectionName, indexName, hid
     alert('Error: ' + err.message);
   }
 };
+
+// ─── Aggregation Pipeline Builder ────────────────────────────────────────────
+
+const AGG_STAGE_TEMPLATES = {
+  '$match':      '{\n  "field": "value"\n}',
+  '$group':      '{\n  "_id": "$field",\n  "count": { "$sum": 1 }\n}',
+  '$project':    '{\n  "field": 1,\n  "_id": 0\n}',
+  '$sort':       '{\n  "field": -1\n}',
+  '$limit':      '20',
+  '$skip':       '0',
+  '$unwind':     '"$arrayField"',
+  '$addFields':  '{\n  "newField": "$existingField"\n}',
+  '$replaceRoot':'{\n  "newRoot": "$embeddedDoc"\n}',
+  '$count':      '"total"',
+  '$lookup': '{\n  "from": "other_collection",\n  "localField": "_id",\n  "foreignField": "ref_id",\n  "as": "joined"\n}',
+  '$facet': '{\n  "byStatus": [{ "$group": { "_id": "$status", "count": { "$sum": 1 } } }]\n}',
+  '$bucket': '{\n  "groupBy": "$field",\n  "boundaries": [0, 10, 50, 100],\n  "default": "Other",\n  "output": { "count": { "$sum": 1 } }\n}',
+  '$out':        '"output_collection"',
+  '$merge':      '{\n  "into": "output_collection",\n  "whenMatched": "replace",\n  "whenNotMatched": "insert"\n}',
+};
+
+const STAGE_TYPES = Object.keys(AGG_STAGE_TEMPLATES);
+
+let aggStages = []; // [{ id, type, body, enabled }]
+let aggIdCounter = 0;
+
+function aggStageKey(dbName, collectionName) {
+  return `mongodb_dashboard_pipelines_${dbName}_${collectionName}`;
+}
+
+function getSavedPipelines(dbName, collectionName) {
+  try { return JSON.parse(localStorage.getItem(aggStageKey(dbName, collectionName)) || '[]'); }
+  catch { return []; }
+}
+
+function initAggregationPanel(dbName, collectionName) {
+  aggStages = [];
+  aggIdCounter = 0;
+  renderAggStages(dbName, collectionName);
+
+  document.getElementById('aggAddStage')?.addEventListener('click', () => {
+    addAggStage(dbName, collectionName);
+  });
+
+  document.getElementById('aggRun')?.addEventListener('click', () => {
+    runAggregation(dbName, collectionName);
+  });
+
+  // Save pipeline
+  document.getElementById('aggSave')?.addEventListener('click', () => {
+    if (aggStages.length === 0) { alert('Add at least one stage to save.'); return; }
+    const name = prompt('Name for this pipeline:');
+    if (!name) return;
+    const pipelines = getSavedPipelines(dbName, collectionName);
+    pipelines.unshift({ name, stages: JSON.parse(JSON.stringify(aggStages)) });
+    localStorage.setItem(aggStageKey(dbName, collectionName), JSON.stringify(pipelines.slice(0, 20)));
+  });
+
+  // Saved pipelines dropdown
+  const savedBtn = document.getElementById('aggSavedBtn');
+  const savedDropdown = document.getElementById('aggSavedDropdown');
+  if (savedBtn && savedDropdown) {
+    savedBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = savedDropdown.style.display !== 'none';
+      savedDropdown.style.display = isOpen ? 'none' : 'block';
+      if (!isOpen) renderAggSavedDropdown(dbName, collectionName, savedDropdown);
+    });
+    document.addEventListener('click', () => { savedDropdown.style.display = 'none'; });
+  }
+
+  // Export dropdown
+  const exportBtn = document.getElementById('aggExportBtn');
+  const exportDropdown = document.getElementById('aggExportDropdown');
+  if (exportBtn && exportDropdown) {
+    exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportDropdown.style.display = exportDropdown.style.display === 'none' ? 'block' : 'none';
+    });
+    exportDropdown.querySelectorAll('.saved-query-item').forEach(item => {
+      item.addEventListener('click', () => {
+        exportDropdown.style.display = 'none';
+        exportPipeline(dbName, collectionName, item.dataset.lang);
+      });
+    });
+    document.addEventListener('click', () => { exportDropdown.style.display = 'none'; });
+  }
+
+  // Export modal close
+  const closeExportModal = () => { document.getElementById('aggExportModal').style.display = 'none'; };
+  document.getElementById('aggExportModalClose')?.addEventListener('click', closeExportModal);
+  document.getElementById('aggExportModalClose2')?.addEventListener('click', closeExportModal);
+  document.getElementById('aggExportModal')?.querySelector('.modal-backdrop')?.addEventListener('click', closeExportModal);
+  document.getElementById('aggExportCopy')?.addEventListener('click', () => {
+    const code = document.getElementById('aggExportCode').value;
+    navigator.clipboard.writeText(code).catch(() => {});
+  });
+}
+
+function addAggStage(dbName, collectionName, type = '$match', body = null) {
+  const id = ++aggIdCounter;
+  const stageType = type;
+  const stageBody = body ?? (AGG_STAGE_TEMPLATES[stageType] || '{}');
+  aggStages.push({ id, type: stageType, body: stageBody, enabled: true });
+  renderAggStages(dbName, collectionName);
+}
+
+function renderAggStages(dbName, collectionName) {
+  const list = document.getElementById('aggStageList');
+  if (!list) return;
+
+  if (aggStages.length === 0) {
+    list.innerHTML = '<div class="agg-empty-state"><p>No stages yet. Click <strong>Add Stage</strong> to begin.</p></div>';
+    return;
+  }
+
+  list.innerHTML = aggStages.map((stage, idx) => `
+    <div class="agg-stage-card ${stage.enabled ? '' : 'disabled'}" data-id="${stage.id}">
+      <div class="agg-stage-header">
+        <span class="agg-stage-num">#${idx + 1}</span>
+        <select class="agg-stage-type" data-id="${stage.id}">
+          ${STAGE_TYPES.map(t => `<option value="${t}" ${t === stage.type ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+        <div class="agg-stage-actions">
+          <button class="agg-stage-btn" title="Move up" data-action="up" data-id="${stage.id}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
+          </button>
+          <button class="agg-stage-btn" title="Move down" data-action="down" data-id="${stage.id}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <button class="agg-stage-btn" title="${stage.enabled ? 'Disable' : 'Enable'}" data-action="toggle" data-id="${stage.id}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              ${stage.enabled
+                ? '<path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>'
+                : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'}
+            </svg>
+          </button>
+          <button class="agg-stage-btn danger" title="Delete" data-action="delete" data-id="${stage.id}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <textarea class="agg-stage-editor" data-id="${stage.id}" spellcheck="false">${escapeHtml(stage.body)}</textarea>
+      <div class="agg-stage-error" id="stage-err-${stage.id}"></div>
+    </div>
+  `).join('');
+
+  // Wire up event handlers
+  list.querySelectorAll('.agg-stage-type').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const id = parseInt(e.target.dataset.id);
+      const stage = aggStages.find(s => s.id === id);
+      if (stage) {
+        stage.type = e.target.value;
+        stage.body = AGG_STAGE_TEMPLATES[e.target.value] || '{}';
+        renderAggStages(dbName, collectionName);
+      }
+    });
+  });
+
+  list.querySelectorAll('.agg-stage-editor').forEach(ta => {
+    ta.addEventListener('input', (e) => {
+      const id = parseInt(e.target.dataset.id);
+      const stage = aggStages.find(s => s.id === id);
+      if (stage) stage.body = e.target.value;
+    });
+  });
+
+  list.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      const id = parseInt(btn.dataset.id);
+      const idx = aggStages.findIndex(s => s.id === id);
+      if (idx === -1) return;
+
+      if (action === 'delete') {
+        aggStages.splice(idx, 1);
+      } else if (action === 'up' && idx > 0) {
+        [aggStages[idx - 1], aggStages[idx]] = [aggStages[idx], aggStages[idx - 1]];
+      } else if (action === 'down' && idx < aggStages.length - 1) {
+        [aggStages[idx], aggStages[idx + 1]] = [aggStages[idx + 1], aggStages[idx]];
+      } else if (action === 'toggle') {
+        aggStages[idx].enabled = !aggStages[idx].enabled;
+      }
+      renderAggStages(dbName, collectionName);
+    });
+  });
+}
+
+async function runAggregation(dbName, collectionName) {
+  const resultBody = document.getElementById('aggResultBody');
+  const countEl = document.getElementById('aggResultCount');
+  const limit = parseInt(document.getElementById('aggPreviewLimit')?.value) || 20;
+
+  if (!resultBody) return;
+
+  // Validate and build pipeline
+  const pipeline = [];
+  let hasError = false;
+  for (const stage of aggStages) {
+    if (!stage.enabled) continue;
+    const errEl = document.getElementById(`stage-err-${stage.id}`);
+    try {
+      const stageBody = JSON.parse(stage.body);
+      pipeline.push({ [stage.type]: stageBody });
+      if (errEl) errEl.style.display = 'none';
+    } catch (e) {
+      if (errEl) { errEl.textContent = 'Invalid JSON: ' + e.message; errEl.style.display = 'block'; }
+      hasError = true;
+    }
+  }
+  if (hasError) return;
+
+  resultBody.innerHTML = '<div style="display:flex;justify-content:center;padding:40px"><div class="loading-spinner"></div></div>';
+  if (countEl) countEl.textContent = 'Running...';
+
+  try {
+    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/aggregate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline, options: { limit } }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    if (countEl) countEl.textContent = `${data.count} document${data.count !== 1 ? 's' : ''}`;
+
+    if (data.documents.length === 0) {
+      resultBody.innerHTML = '<div class="agg-result-placeholder">No results</div>';
+      return;
+    }
+
+    resultBody.innerHTML = data.documents.map(doc =>
+      `<div class="agg-result-doc json-viewer">${renderJsonTree(doc)}</div>`
+    ).join('');
+
+  } catch (err) {
+    resultBody.innerHTML = `<div style="color:var(--danger);padding:24px">Error: ${err.message}</div>`;
+    if (countEl) countEl.textContent = 'Error';
+  }
+}
+
+function renderAggSavedDropdown(dbName, collectionName, dropdown) {
+  const pipelines = getSavedPipelines(dbName, collectionName);
+  if (pipelines.length === 0) {
+    dropdown.innerHTML = '<div class="saved-queries-empty">No saved pipelines.</div>';
+    return;
+  }
+  dropdown.innerHTML = pipelines.map((p, i) => `
+    <div class="saved-query-item" data-idx="${i}">
+      <div class="saved-query-info">
+        <div class="saved-query-name">${escapeHtml(p.name)}</div>
+        <div class="saved-query-preview">${p.stages.length} stage${p.stages.length !== 1 ? 's' : ''}</div>
+      </div>
+      <button class="saved-query-delete" data-idx="${i}" title="Delete">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  `).join('');
+
+  dropdown.querySelectorAll('.saved-query-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.saved-query-delete')) {
+        const idx = parseInt(e.target.closest('.saved-query-delete').dataset.idx);
+        pipelines.splice(idx, 1);
+        localStorage.setItem(aggStageKey(dbName, collectionName), JSON.stringify(pipelines));
+        renderAggSavedDropdown(dbName, collectionName, dropdown);
+        return;
+      }
+      const idx = parseInt(item.dataset.idx);
+      const p = pipelines[idx];
+      aggStages = p.stages.map(s => ({ ...s, id: ++aggIdCounter }));
+      renderAggStages(dbName, collectionName);
+      dropdown.style.display = 'none';
+    });
+  });
+}
+
+function exportPipeline(dbName, collectionName, lang) {
+  const pipeline = [];
+  for (const stage of aggStages) {
+    if (!stage.enabled) continue;
+    try {
+      pipeline.push({ [stage.type]: JSON.parse(stage.body) });
+    } catch (e) { /* skip invalid */ }
+  }
+
+  let code = '';
+  if (lang === 'js') {
+    code = `// MongoDB Aggregation Pipeline\n// Database: ${dbName}, Collection: ${collectionName}\n\ndb.getCollection('${collectionName}').aggregate([\n${pipeline.map(s => '  ' + JSON.stringify(s, null, 2).split('\n').join('\n  ')).join(',\n')}\n]);`;
+  } else if (lang === 'python') {
+    const pipeStr = JSON.stringify(pipeline, null, 2).split('\n').join('\n  ');
+    code = `# MongoDB Aggregation Pipeline\n# Database: ${dbName}, Collection: ${collectionName}\n\nfrom pymongo import MongoClient\n\nclient = MongoClient("mongodb://localhost:27017/")\ndb = client["${dbName}"]\ncollection = db["${collectionName}"]\n\npipeline = ${pipeStr}\n\nresults = list(collection.aggregate(pipeline))\nfor doc in results:\n    print(doc)`;
+  }
+
+  document.getElementById('aggExportTitle').textContent = lang === 'js' ? 'Export — JavaScript (mongosh)' : 'Export — Python (pymongo)';
+  document.getElementById('aggExportCode').value = code;
+  document.getElementById('aggExportModal').style.display = 'flex';
+}
 
 // ─── Import / Export ─────────────────────────────────────────────────────────
 

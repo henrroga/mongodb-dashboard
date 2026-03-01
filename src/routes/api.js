@@ -447,6 +447,31 @@ router.get("/:db/:collection", async (req, res) => {
   }
 });
 
+// Aggregation pipeline execution
+router.post("/:db/:collection/aggregate", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { pipeline = [], options = {} } = req.body;
+    if (!Array.isArray(pipeline)) return res.status(400).json({ error: "Pipeline must be an array" });
+
+    const col = client.db(req.params.db).collection(req.params.collection);
+    const limit = Math.min(parseInt(options.limit) || 20, 1000);
+
+    // If pipeline doesn't end with $limit, add one for safety
+    const safePipeline = [...pipeline];
+    const lastStage = safePipeline[safePipeline.length - 1];
+    const hasLimit = lastStage && (lastStage.$limit != null || lastStage.$out || lastStage.$merge);
+    if (!hasLimit) safePipeline.push({ $limit: limit });
+
+    const docs = await col.aggregate(safePipeline, { allowDiskUse: true }).toArray();
+    res.json({ documents: docs.map(serializeDocument), count: docs.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Indexes (must be before /:id routes) ────────────────────────────────────
 
 router.get("/:db/:collection/indexes", async (req, res) => {

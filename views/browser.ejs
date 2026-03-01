@@ -238,6 +238,7 @@
             <button class="collection-tab active" data-tab="documents">Documents</button>
             <button class="collection-tab" data-tab="indexes">Indexes</button>
             <button class="collection-tab" data-tab="schema">Schema</button>
+            <button class="collection-tab" data-tab="aggregation">Aggregation</button>
           </div>
 
           <!-- Documents panel -->
@@ -524,6 +525,76 @@
                 </svg>
                 <h3>Run schema analysis</h3>
                 <p>Click Analyze to sample documents and visualize the schema</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Aggregation Pipeline Builder panel -->
+          <div id="panel-aggregation" style="display:none;flex:1;flex-direction:row;overflow:hidden;min-height:0">
+            <!-- Left: stage list -->
+            <div class="agg-stages-col">
+              <div class="agg-toolbar">
+                <button id="aggAddStage" class="btn btn-primary btn-sm">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  Add Stage
+                </button>
+                <button id="aggRun" class="btn btn-ghost btn-sm">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  Run
+                </button>
+                <div style="position:relative">
+                  <button id="aggSavedBtn" class="btn btn-ghost btn-sm">Saved ▾</button>
+                  <div id="aggSavedDropdown" class="saved-queries-dropdown" style="display:none"></div>
+                </div>
+                <button id="aggSave" class="btn btn-ghost btn-sm" title="Save pipeline">Save</button>
+                <button id="aggExportBtn" class="btn btn-ghost btn-sm">Export ▾</button>
+                <div id="aggExportDropdown" class="saved-queries-dropdown" style="display:none;min-width:140px">
+                  <div class="saved-query-item" data-lang="js">JavaScript (mongosh)</div>
+                  <div class="saved-query-item" data-lang="python">Python (pymongo)</div>
+                </div>
+              </div>
+              <div id="aggStageList" class="agg-stage-list">
+                <div class="agg-empty-state">
+                  <p>No stages yet. Click <strong>Add Stage</strong> to begin.</p>
+                </div>
+              </div>
+            </div>
+            <!-- Right: preview -->
+            <div class="agg-preview-col">
+              <div class="agg-preview-header">
+                <span id="aggResultCount" style="font-size:12px;color:var(--text-secondary)">No results</span>
+                <label style="font-size:12px;color:var(--text-secondary)">Preview limit</label>
+                <select id="aggPreviewLimit" class="query-input" style="width:70px;padding:3px 6px;font-size:12px">
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="20" selected>20</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div id="aggResultBody" class="agg-result-body">
+                <div class="agg-result-placeholder">Run the pipeline to see results</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Export Code Modal -->
+          <div id="aggExportModal" class="modal" style="display:none">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-lg">
+              <div class="modal-header">
+                <h3 id="aggExportTitle">Export Pipeline</h3>
+                <button class="modal-close" id="aggExportModalClose">&times;</button>
+              </div>
+              <div class="modal-body">
+                <textarea id="aggExportCode" class="doc-editor" style="min-height:320px" readonly></textarea>
+              </div>
+              <div class="modal-footer">
+                <button id="aggExportCopy" class="btn btn-ghost">Copy</button>
+                <button id="aggExportModalClose2" class="btn btn-primary">Close</button>
               </div>
             </div>
           </div>
