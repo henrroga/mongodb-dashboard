@@ -110,6 +110,85 @@ async function autoReconnect() {
   }
 }
 
+// ─── Open Tabs Bar ───────────────────────────────────────────────────────────
+
+const OPEN_TABS_KEY = 'mongodb_dashboard_open_tabs';
+const MAX_OPEN_TABS = 10;
+
+function getOpenTabs() {
+  try { return JSON.parse(localStorage.getItem(OPEN_TABS_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveOpenTabs(tabs) {
+  localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(tabs));
+}
+
+function addOpenTab(db, collection) {
+  const tabs = getOpenTabs();
+  const id = `${db}/${collection}`;
+  const existing = tabs.findIndex(t => t.id === id);
+  if (existing !== -1) {
+    // move to front
+    tabs.unshift(tabs.splice(existing, 1)[0]);
+  } else {
+    tabs.unshift({ id, db, collection });
+    if (tabs.length > MAX_OPEN_TABS) tabs.pop();
+  }
+  saveOpenTabs(tabs);
+}
+
+function removeOpenTab(id) {
+  const tabs = getOpenTabs().filter(t => t.id !== id);
+  saveOpenTabs(tabs);
+}
+
+function initOpenTabsBar(currentDb, currentCollection) {
+  const bar = document.getElementById('openTabsBar');
+  if (!bar) return;
+
+  // Register current tab
+  if (currentDb && currentCollection) addOpenTab(currentDb, currentCollection);
+
+  renderOpenTabsBar(currentDb, currentCollection);
+}
+
+function renderOpenTabsBar(currentDb, currentCollection) {
+  const bar = document.getElementById('openTabsBar');
+  if (!bar) return;
+
+  const tabs = getOpenTabs();
+  if (tabs.length === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+
+  const currentId = currentDb && currentCollection ? `${currentDb}/${currentCollection}` : null;
+
+  bar.innerHTML = tabs.map(tab => `
+    <div class="open-tab ${tab.id === currentId ? 'open-tab-active' : ''}">
+      <a href="/browse/${encodeURIComponent(tab.db)}/${encodeURIComponent(tab.collection)}" class="open-tab-link">
+        <span class="open-tab-db">${escapeHtml(tab.db)}</span>
+        <span class="open-tab-sep">/</span>
+        <span class="open-tab-col">${escapeHtml(tab.collection)}</span>
+      </a>
+      <button class="open-tab-close" data-id="${escapeHtml(tab.id)}" title="Close tab">×</button>
+    </div>
+  `).join('');
+
+  bar.querySelectorAll('.open-tab-close').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = btn.dataset.id;
+      removeOpenTab(id);
+      // If closing current tab, navigate to databases
+      if (id === currentId) {
+        window.location.href = '/databases';
+      } else {
+        renderOpenTabsBar(currentDb, currentCollection);
+      }
+    });
+  });
+}
+
 // ─── Shell Panel ─────────────────────────────────────────────────────────────
 
 function initShellPanel(dbName) {
@@ -754,6 +833,7 @@ async function initBrowser(dbName, collectionName) {
   setupModalHandlers();
   setupColumnsModalHandlers();
   setupViewModalHandlers();
+  initOpenTabsBar(dbName, collectionName);
   initImportExport(dbName, collectionName);
   initExplainPlan(dbName, collectionName);
   initCollectionTabs(dbName, collectionName);
