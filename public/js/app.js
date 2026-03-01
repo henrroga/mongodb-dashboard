@@ -2303,6 +2303,207 @@ function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
   });
 }
 
+// ─── Database & Collection Management ────────────────────────────────────────
+
+function initDatabasesPage() {
+  const createDbBtn = document.getElementById('createDbBtn');
+  const createDbModal = document.getElementById('createDbModal');
+  const dropDbModal = document.getElementById('dropDbModal');
+
+  if (!createDbModal) return;
+
+  const closeCreate = () => {
+    createDbModal.style.display = 'none';
+    document.getElementById('createDbError').style.display = 'none';
+    document.getElementById('newDbName').value = '';
+    document.getElementById('newDbCollection').value = '';
+  };
+
+  createDbBtn?.addEventListener('click', () => { createDbModal.style.display = 'flex'; document.getElementById('newDbName').focus(); });
+  document.getElementById('createDbModalClose')?.addEventListener('click', closeCreate);
+  document.getElementById('createDbCancel')?.addEventListener('click', closeCreate);
+  createDbModal.querySelector('.modal-backdrop')?.addEventListener('click', closeCreate);
+
+  document.getElementById('createDbConfirm')?.addEventListener('click', async () => {
+    const name = document.getElementById('newDbName').value.trim();
+    const initialCollection = document.getElementById('newDbCollection').value.trim() || '_init';
+    const errEl = document.getElementById('createDbError');
+    if (!name) { errEl.textContent = 'Database name is required'; errEl.style.display = 'block'; return; }
+
+    const btn = document.getElementById('createDbConfirm');
+    btn.disabled = true; btn.textContent = 'Creating...';
+    try {
+      const res = await fetch('/api/databases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, initialCollection }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      window.location.href = `/browse/${name}`;
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create';
+    }
+  });
+
+  // Drop database buttons
+  let dropTarget = null;
+  document.querySelectorAll('.db-drop-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropTarget = btn.dataset.db;
+      document.getElementById('dropDbName').textContent = dropTarget;
+      document.getElementById('dropDbError').style.display = 'none';
+      dropDbModal.style.display = 'flex';
+    });
+  });
+
+  const closeDropDb = () => { dropDbModal.style.display = 'none'; dropTarget = null; };
+  document.getElementById('dropDbModalClose')?.addEventListener('click', closeDropDb);
+  document.getElementById('dropDbCancel')?.addEventListener('click', closeDropDb);
+  dropDbModal?.querySelector('.modal-backdrop')?.addEventListener('click', closeDropDb);
+
+  document.getElementById('dropDbConfirm')?.addEventListener('click', async () => {
+    if (!dropTarget) return;
+    const btn = document.getElementById('dropDbConfirm');
+    const errEl = document.getElementById('dropDbError');
+    btn.disabled = true; btn.textContent = 'Dropping...';
+    try {
+      const res = await fetch(`/api/databases/${encodeURIComponent(dropTarget)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      window.location.reload();
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Drop Database';
+    }
+  });
+}
+
+function initCollectionManagement(dbName) {
+  const createColBtn = document.getElementById('createCollectionBtn');
+  const createColModal = document.getElementById('createColModal');
+  const dropColModal = document.getElementById('dropColModal');
+  const renameColModal = document.getElementById('renameColModal');
+
+  if (!createColModal) return;
+
+  // Create collection
+  const closeCreate = () => {
+    createColModal.style.display = 'none';
+    document.getElementById('createColError').style.display = 'none';
+    document.getElementById('newColName').value = '';
+  };
+
+  createColBtn?.addEventListener('click', () => { createColModal.style.display = 'flex'; document.getElementById('newColName').focus(); });
+  document.getElementById('createColModalClose')?.addEventListener('click', closeCreate);
+  document.getElementById('createColCancel')?.addEventListener('click', closeCreate);
+  createColModal.querySelector('.modal-backdrop')?.addEventListener('click', closeCreate);
+
+  document.getElementById('createColConfirm')?.addEventListener('click', async () => {
+    const name = document.getElementById('newColName').value.trim();
+    const errEl = document.getElementById('createColError');
+    if (!name) { errEl.textContent = 'Collection name is required'; errEl.style.display = 'block'; return; }
+
+    const btn = document.getElementById('createColConfirm');
+    btn.disabled = true; btn.textContent = 'Creating...';
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/collections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      window.location.href = `/browse/${encodeURIComponent(dbName)}/${encodeURIComponent(name)}`;
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create';
+    }
+  });
+
+  // Drop collection
+  let dropColTarget = null;
+  document.querySelectorAll('.col-drop-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropColTarget = btn.dataset.col;
+      document.getElementById('dropColName').textContent = dropColTarget;
+      document.getElementById('dropColError').style.display = 'none';
+      dropColModal.style.display = 'flex';
+    });
+  });
+
+  const closeDropCol = () => { dropColModal.style.display = 'none'; dropColTarget = null; };
+  document.getElementById('dropColModalClose')?.addEventListener('click', closeDropCol);
+  document.getElementById('dropColCancel')?.addEventListener('click', closeDropCol);
+  dropColModal?.querySelector('.modal-backdrop')?.addEventListener('click', closeDropCol);
+
+  document.getElementById('dropColConfirm')?.addEventListener('click', async () => {
+    if (!dropColTarget) return;
+    const btn = document.getElementById('dropColConfirm');
+    const errEl = document.getElementById('dropColError');
+    btn.disabled = true; btn.textContent = 'Dropping...';
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/collections/${encodeURIComponent(dropColTarget)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      window.location.href = `/browse/${encodeURIComponent(dbName)}`;
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Drop';
+    }
+  });
+
+  // Rename collection
+  let renameColTarget = null;
+  document.querySelectorAll('.col-rename-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      renameColTarget = btn.dataset.col;
+      document.getElementById('renameColNewName').value = renameColTarget;
+      document.getElementById('renameColError').style.display = 'none';
+      renameColModal.style.display = 'flex';
+      document.getElementById('renameColNewName').focus();
+      document.getElementById('renameColNewName').select();
+    });
+  });
+
+  const closeRename = () => { renameColModal.style.display = 'none'; renameColTarget = null; };
+  document.getElementById('renameColModalClose')?.addEventListener('click', closeRename);
+  document.getElementById('renameColCancel')?.addEventListener('click', closeRename);
+  renameColModal?.querySelector('.modal-backdrop')?.addEventListener('click', closeRename);
+
+  document.getElementById('renameColConfirm')?.addEventListener('click', async () => {
+    if (!renameColTarget) return;
+    const newName = document.getElementById('renameColNewName').value.trim();
+    const errEl = document.getElementById('renameColError');
+    if (!newName) { errEl.textContent = 'New name is required'; errEl.style.display = 'block'; return; }
+
+    const btn = document.getElementById('renameColConfirm');
+    btn.disabled = true; btn.textContent = 'Renaming...';
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/collections/${encodeURIComponent(renameColTarget)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      window.location.href = `/browse/${encodeURIComponent(dbName)}/${encodeURIComponent(newName)}`;
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Rename';
+    }
+  });
+}
+
 // Global disconnect handler
 document.getElementById('disconnectBtn')?.addEventListener('click', async () => {
   try {

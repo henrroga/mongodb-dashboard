@@ -570,6 +570,112 @@ a:hover {
   padding: 8px;
 }
 
+/* Collection item with action buttons */
+.collection-item-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius);
+}
+
+.collection-item-wrapper:hover .collection-actions {
+  opacity: 1;
+}
+
+.collection-item-wrapper.active .collection-actions {
+  opacity: 1;
+}
+
+.collection-item-wrapper .collection-item {
+  flex: 1;
+}
+
+.collection-actions {
+  display: flex;
+  gap: 2px;
+  padding-right: 4px;
+  opacity: 0;
+  transition: opacity var(--transition);
+  flex-shrink: 0;
+}
+
+.col-action-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0;
+  transition: all var(--transition);
+}
+
+.col-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.col-drop-btn:hover {
+  color: var(--danger);
+}
+
+.sidebar-create-btn {
+  padding: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+}
+
+/* Database page layout */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+/* Database card wrapper */
+.database-card-wrapper {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.database-card-wrapper .database-card {
+  flex: 1;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.db-drop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.database-card-wrapper:hover .db-drop-btn {
+  opacity: 1;
+}
+
+.db-drop-btn:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
 .collection-item {
   display: flex;
   align-items: center;

@@ -580,6 +580,84 @@ router.delete("/:db/:collection/:id", async (req, res) => {
   }
 });
 
+// Create database (MongoDB creates a db lazily, so we create an initial collection)
+router.post("/databases", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { name, initialCollection = "_init" } = req.body;
+    if (!name) return res.status(400).json({ error: "Database name is required" });
+
+    await client.db(name).createCollection(initialCollection);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Drop database
+router.delete("/databases/:db", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    await client.db(req.params.db).dropDatabase();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create collection
+router.post("/:db/collections", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { name, options = {} } = req.body;
+    if (!name) return res.status(400).json({ error: "Collection name is required" });
+
+    await client.db(req.params.db).createCollection(name, options);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Drop collection
+router.delete("/:db/collections/:collection", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    await client.db(req.params.db).collection(req.params.collection).drop();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rename collection
+router.put("/:db/collections/:collection", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { newName } = req.body;
+    if (!newName) return res.status(400).json({ error: "New name is required" });
+
+    const adminDb = client.db().admin();
+    await adminDb.command({
+      renameCollection: `${req.params.db}.${req.params.collection}`,
+      to: `${req.params.db}.${newName}`,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Check connection status
 router.get("/status", async (req, res) => {
   try {

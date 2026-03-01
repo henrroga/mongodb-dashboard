@@ -127,34 +127,108 @@
         <aside class="sidebar">
           <div class="sidebar-header">
             <h2>Collections</h2>
-            <span class="collection-count"><%= collections.length %></span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="collection-count"><%= collections.length %></span>
+              <button id="createCollectionBtn" class="btn btn-sm btn-ghost sidebar-create-btn" title="Create Collection">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </button>
+            </div>
           </div>
-          <nav class="collection-list">
+          <nav class="collection-list" id="collectionList">
             <% collections.forEach(function(col) { %>
-            <a
-              href="/browse/<%= dbName %>/<%= col.name %>"
-              class="collection-item <%= activeCollection === col.name ? 'active' : '' %>"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
+            <div class="collection-item-wrapper <%= activeCollection === col.name ? 'active' : '' %>">
+              <a
+                href="/browse/<%= dbName %>/<%= col.name %>"
+                class="collection-item <%= activeCollection === col.name ? 'active' : '' %>"
               >
-                <path
-                  d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"
-                />
-                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
-              </svg>
-              <span class="collection-name"><%= col.name %></span>
-              <span class="collection-doc-count" data-count="<%= col.count %>"
-                ><%= col.count %></span
-              >
-            </a>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                </svg>
+                <span class="collection-name"><%= col.name %></span>
+                <span class="collection-doc-count" data-count="<%= col.count %>"><%= col.count %></span>
+              </a>
+              <div class="collection-actions">
+                <button class="col-action-btn col-rename-btn" data-col="<%= col.name %>" title="Rename">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <button class="col-action-btn col-drop-btn" data-col="<%= col.name %>" title="Drop">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
             <% }); %>
           </nav>
+
+          <!-- Create Collection Modal -->
+          <div id="createColModal" class="modal" style="display:none">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-sm">
+              <div class="modal-header">
+                <h3>Create Collection</h3>
+                <button class="modal-close" id="createColModalClose">&times;</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-field">
+                  <label>Collection Name</label>
+                  <input type="text" id="newColName" class="query-input" placeholder="my_collection" autocomplete="off"/>
+                </div>
+                <p id="createColError" class="error-message" style="display:none;margin-top:10px"></p>
+              </div>
+              <div class="modal-footer">
+                <button id="createColCancel" class="btn btn-ghost">Cancel</button>
+                <button id="createColConfirm" class="btn btn-primary">Create</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Drop Collection Modal -->
+          <div id="dropColModal" class="modal" style="display:none">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-sm">
+              <div class="modal-header">
+                <h3>Drop Collection</h3>
+                <button class="modal-close" id="dropColModalClose">&times;</button>
+              </div>
+              <div class="modal-body">
+                <p>Drop <strong id="dropColName"></strong>? All documents will be permanently deleted.</p>
+                <p id="dropColError" class="error-message" style="display:none;margin-top:10px"></p>
+              </div>
+              <div class="modal-footer">
+                <button id="dropColCancel" class="btn btn-ghost">Cancel</button>
+                <button id="dropColConfirm" class="btn btn-danger">Drop</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rename Collection Modal -->
+          <div id="renameColModal" class="modal" style="display:none">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-sm">
+              <div class="modal-header">
+                <h3>Rename Collection</h3>
+                <button class="modal-close" id="renameColModalClose">&times;</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-field">
+                  <label>New Name</label>
+                  <input type="text" id="renameColNewName" class="query-input" placeholder="new_name" autocomplete="off"/>
+                </div>
+                <p id="renameColError" class="error-message" style="display:none;margin-top:10px"></p>
+              </div>
+              <div class="modal-footer">
+                <button id="renameColCancel" class="btn btn-ghost">Cancel</button>
+                <button id="renameColConfirm" class="btn btn-primary">Rename</button>
+              </div>
+            </div>
+          </div>
         </aside>
 
         <div class="content">
@@ -504,6 +578,7 @@
       if (activeCollection) {
         initBrowser(dbName, activeCollection);
       }
+      initCollectionManagement(dbName);
     </script>
   </body>
 </html>
