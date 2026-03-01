@@ -244,6 +244,7 @@ async function initConnectPage() {
 
 // Browser Page
 let currentCursor = null;
+let currentNextSkip = null;
 let allDocuments = [];
 let tableFields = [];
 let allAvailableFields = [];
@@ -252,45 +253,162 @@ let currentDbName = '';
 let currentCollectionName = '';
 let arrayFilters = {}; // Store filters for array columns: { fieldName: { type: 'empty' | 'gte', value: number } }
 
+// MQL Query Bar state
+let currentFilter = '';
+let currentProjection = '';
+let currentSort = '';
+let currentLimit = 50;
+let currentSkip = 0;
+let queryOptionsOpen = false;
+
 // Sync filter state to URL query parameters
 function updateUrlParams() {
   const url = new URL(window.location);
   
-  // Update search param
   if (currentSearchTerm) {
     url.searchParams.set('search', currentSearchTerm);
   } else {
     url.searchParams.delete('search');
   }
   
-  // Update arrayFilters param
   if (Object.keys(arrayFilters).length > 0) {
     url.searchParams.set('arrayFilters', JSON.stringify(arrayFilters));
   } else {
     url.searchParams.delete('arrayFilters');
   }
+
+  if (currentFilter) {
+    url.searchParams.set('qFilter', currentFilter);
+  } else {
+    url.searchParams.delete('qFilter');
+  }
+
+  if (currentProjection) {
+    url.searchParams.set('qProjection', currentProjection);
+  } else {
+    url.searchParams.delete('qProjection');
+  }
+
+  if (currentSort) {
+    url.searchParams.set('qSort', currentSort);
+  } else {
+    url.searchParams.delete('qSort');
+  }
   
-  // Update URL without page reload
   window.history.replaceState({}, '', url);
 }
 
 async function initBrowser(dbName, collectionName) {
   currentCursor = null;
+  currentNextSkip = null;
   allDocuments = [];
   tableFields = [];
   allAvailableFields = [];
   currentDbName = dbName;
   currentCollectionName = collectionName;
   
-  // Restore filter state from URL query parameters
+  // Restore state from URL query parameters
   const urlParams = new URLSearchParams(window.location.search);
   currentSearchTerm = urlParams.get('search') || '';
+  currentFilter = urlParams.get('qFilter') || '';
+  currentProjection = urlParams.get('qProjection') || '';
+  currentSort = urlParams.get('qSort') || '';
   
   try {
     const arrayFiltersParam = urlParams.get('arrayFilters');
     arrayFilters = arrayFiltersParam ? JSON.parse(arrayFiltersParam) : {};
   } catch (e) {
     arrayFilters = {};
+  }
+
+  // Restore query bar inputs from URL
+  const queryFilterEl = document.getElementById('queryFilter');
+  const queryProjectionEl = document.getElementById('queryProjection');
+  const querySortEl = document.getElementById('querySort');
+  const queryLimitEl = document.getElementById('queryLimit');
+  const querySkipEl = document.getElementById('querySkip');
+
+  if (queryFilterEl && currentFilter) queryFilterEl.value = currentFilter;
+  if (queryProjectionEl && currentProjection) queryProjectionEl.value = currentProjection;
+  if (querySortEl && currentSort) querySortEl.value = currentSort;
+
+  // Wire up query bar buttons
+  const queryRunBtn = document.getElementById('queryRunBtn');
+  const queryResetBtn = document.getElementById('queryResetBtn');
+  const queryOptionsToggle = document.getElementById('queryOptionsToggle');
+  const queryBarOptions = document.getElementById('queryBarOptions');
+  const savedQueriesBtn = document.getElementById('savedQueriesBtn');
+  const savedQueriesDropdown = document.getElementById('savedQueriesDropdown');
+  const saveQueryBtn = document.getElementById('saveQueryBtn');
+
+  if (queryOptionsToggle && queryBarOptions) {
+    queryOptionsToggle.addEventListener('click', () => {
+      queryOptionsOpen = !queryOptionsOpen;
+      queryBarOptions.style.display = queryOptionsOpen ? 'flex' : 'none';
+      queryOptionsToggle.classList.toggle('open', queryOptionsOpen);
+    });
+  }
+
+  if (queryRunBtn) {
+    queryRunBtn.addEventListener('click', () => runQuery(dbName, collectionName));
+  }
+
+  // Run on Enter in any query input
+  [queryFilterEl, queryProjectionEl, querySortEl].forEach(el => {
+    el?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') runQuery(dbName, collectionName);
+    });
+  });
+
+  if (queryResetBtn) {
+    queryResetBtn.addEventListener('click', () => {
+      currentFilter = '';
+      currentProjection = '';
+      currentSort = '';
+      currentLimit = 50;
+      currentSkip = 0;
+      if (queryFilterEl) queryFilterEl.value = '';
+      if (queryProjectionEl) queryProjectionEl.value = '';
+      if (querySortEl) querySortEl.value = '';
+      if (queryLimitEl) queryLimitEl.value = '50';
+      if (querySkipEl) querySkipEl.value = '0';
+      updateUrlParams();
+      currentCursor = null;
+      currentNextSkip = null;
+      allDocuments = [];
+      loadDocuments(dbName, collectionName);
+    });
+  }
+
+  if (savedQueriesBtn && savedQueriesDropdown) {
+    savedQueriesBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = savedQueriesDropdown.style.display !== 'none';
+      savedQueriesDropdown.style.display = isOpen ? 'none' : 'block';
+      if (!isOpen) renderSavedQueriesDropdown(dbName, collectionName, savedQueriesDropdown);
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#savedQueriesBtn') && !e.target.closest('#savedQueriesDropdown')) {
+        savedQueriesDropdown.style.display = 'none';
+      }
+    });
+  }
+
+  if (saveQueryBtn) {
+    saveQueryBtn.addEventListener('click', () => {
+      const filter = queryFilterEl?.value.trim() || '';
+      const projection = queryProjectionEl?.value.trim() || '';
+      const sort = querySortEl?.value.trim() || '';
+      if (!filter && !projection && !sort) {
+        alert('Enter at least a filter, projection, or sort to save.');
+        return;
+      }
+      const name = prompt('Name for this saved query:');
+      if (!name) return;
+      saveQuery(dbName, collectionName, { name, filter, projection, sort,
+        limit: parseInt(queryLimitEl?.value) || 50,
+        skip: parseInt(querySkipEl?.value) || 0 });
+    });
   }
 
   // Search input
@@ -377,6 +495,7 @@ async function initBrowser(dbName, collectionName) {
       searchTimeout = setTimeout(() => {
         updateUrlParams();
         currentCursor = null;
+        currentNextSkip = null;
         allDocuments = [];
         loadDocuments(dbName, collectionName);
       }, 300);
@@ -390,6 +509,7 @@ async function initBrowser(dbName, collectionName) {
         }
         updateUrlParams();
         currentCursor = null;
+        currentNextSkip = null;
         allDocuments = [];
         loadDocuments(dbName, collectionName);
       }
@@ -403,6 +523,7 @@ async function initBrowser(dbName, collectionName) {
       clearSearchBtn.style.display = 'none';
       updateUrlParams();
       currentCursor = null;
+      currentNextSkip = null;
       allDocuments = [];
       loadDocuments(dbName, collectionName);
     });
@@ -411,6 +532,7 @@ async function initBrowser(dbName, collectionName) {
   // Refresh button
   document.getElementById('refreshBtn')?.addEventListener('click', () => {
     currentCursor = null;
+    currentNextSkip = null;
     allDocuments = [];
     loadDocuments(dbName, collectionName);
   });
@@ -425,9 +547,13 @@ async function initBrowser(dbName, collectionName) {
     openColumnsModal(dbName, collectionName);
   });
 
-  // Load more button
+  // Load more button — handles both cursor and offset pagination modes
   document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
-    loadDocuments(dbName, collectionName, currentCursor);
+    if (currentNextSkip !== null) {
+      loadDocuments(dbName, collectionName, null, currentNextSkip);
+    } else {
+      loadDocuments(dbName, collectionName, currentCursor);
+    }
   });
 
   // Modal handlers
@@ -436,24 +562,56 @@ async function initBrowser(dbName, collectionName) {
   setupViewModalHandlers();
 }
 
-async function loadDocuments(dbName, collectionName, cursor = null) {
+function runQuery(dbName, collectionName) {
+  const queryFilterEl = document.getElementById('queryFilter');
+  const queryProjectionEl = document.getElementById('queryProjection');
+  const querySortEl = document.getElementById('querySort');
+  const queryLimitEl = document.getElementById('queryLimit');
+  const querySkipEl = document.getElementById('querySkip');
+
+  currentFilter = queryFilterEl?.value.trim() || '';
+  currentProjection = queryProjectionEl?.value.trim() || '';
+  currentSort = querySortEl?.value.trim() || '';
+  currentLimit = Math.min(Math.max(parseInt(queryLimitEl?.value) || 50, 1), 1000);
+  currentSkip = Math.max(parseInt(querySkipEl?.value) || 0, 0);
+
+  updateUrlParams();
+  currentCursor = null;
+  currentNextSkip = null;
+  allDocuments = [];
+  loadDocuments(dbName, collectionName);
+}
+
+async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = null) {
   const tableBody = document.getElementById('tableBody');
   const tableHeader = document.getElementById('tableHeader');
   const pagination = document.getElementById('pagination');
   const docCount = document.getElementById('docCount');
 
-  if (!cursor) {
+  if (!cursor && nextSkip === null) {
     tableBody.innerHTML = '<tr class="loading-row"><td colspan="100"><div class="loading-spinner"></div></td></tr>';
     allDocuments = [];
     allAvailableFields = [];
   }
 
   try {
-    let url = `/api/${dbName}/${collectionName}?limit=50`;
-    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+    const limit = currentLimit || 50;
+    let url = `/api/${dbName}/${collectionName}?limit=${limit}`;
+
+    // Cursor-based or offset-based pagination
+    if (cursor) {
+      url += `&cursor=${encodeURIComponent(cursor)}`;
+    } else if (nextSkip !== null) {
+      url += `&skip=${nextSkip}`;
+    } else if (currentSkip > 0) {
+      url += `&skip=${currentSkip}`;
+    }
+
     if (currentSearchTerm) url += `&search=${encodeURIComponent(currentSearchTerm)}`;
+    if (currentFilter) url += `&filter=${encodeURIComponent(currentFilter)}`;
+    if (currentProjection) url += `&projection=${encodeURIComponent(currentProjection)}`;
+    if (currentSort) url += `&sort=${encodeURIComponent(currentSort)}`;
     
-    // Add array filters to URL
     if (Object.keys(arrayFilters).length > 0) {
       url += `&arrayFilters=${encodeURIComponent(JSON.stringify(arrayFilters))}`;
     }
@@ -463,13 +621,15 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
 
     if (!res.ok) throw new Error(data.error);
 
-    const { documents, nextCursor, hasMore, totalCount } = data;
+    const { documents, nextCursor, nextSkip: responseNextSkip, hasMore, totalCount } = data;
     
     currentCursor = nextCursor;
+    currentNextSkip = responseNextSkip ?? null;
     allDocuments = allDocuments.concat(documents);
 
     // Update count
-    if (currentSearchTerm) {
+    const hasActiveQuery = currentSearchTerm || currentFilter;
+    if (hasActiveQuery) {
       docCount.textContent = `${formatCount(allDocuments.length)}${hasMore ? '+' : ''} of ${formatCount(totalCount)} documents`;
     } else {
       docCount.textContent = `${formatCount(totalCount)} documents`;
@@ -482,7 +642,7 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
       allAvailableFields = Array.from(new Set([...allAvailableFields, ...newFields])).sort();
       
       // Only reset table fields if this is a new load (not pagination)
-      if (!cursor) {
+      if (!cursor && nextSkip === null) {
         // Check for saved column visibility preferences
         const savedVisibility = getColumnVisibility(dbName, collectionName);
         
@@ -506,7 +666,7 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
     }
 
     // Render documents
-    if (!cursor) {
+    if (!cursor && nextSkip === null) {
       tableBody.innerHTML = '';
     }
     
@@ -524,7 +684,8 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
     if (hasMore) {
       pagination.style.display = 'flex';
       document.getElementById('loadMoreBtn').style.display = 'block';
-      if (currentSearchTerm) {
+      const hasActiveQuery = currentSearchTerm || currentFilter;
+      if (hasActiveQuery) {
         document.getElementById('paginationInfo').textContent = `Showing ${allDocuments.length} of ${formatCount(totalCount)} results`;
       } else {
         document.getElementById('paginationInfo').textContent = `Showing ${allDocuments.length} of ~${formatCount(totalCount)}`;
@@ -532,7 +693,8 @@ async function loadDocuments(dbName, collectionName, cursor = null) {
     } else {
       pagination.style.display = allDocuments.length > 0 ? 'flex' : 'none';
       document.getElementById('loadMoreBtn').style.display = 'none';
-      if (currentSearchTerm) {
+      const hasActiveQuery = currentSearchTerm || currentFilter;
+      if (hasActiveQuery) {
         document.getElementById('paginationInfo').textContent = `Showing all ${allDocuments.length} result${allDocuments.length !== 1 ? 's' : ''}`;
       } else {
         document.getElementById('paginationInfo').textContent = `Showing all ${allDocuments.length} documents`;
@@ -2036,6 +2198,7 @@ function applyArrayFilter(fieldName) {
   
   // Reload documents with new filter
   currentCursor = null;
+  currentNextSkip = null;
   allDocuments = [];
   loadDocuments(currentDbName, currentCollectionName);
 }
@@ -2056,6 +2219,7 @@ function clearArrayFilter(fieldName) {
   
   // Reload documents without filter
   currentCursor = null;
+  currentNextSkip = null;
   allDocuments = [];
   loadDocuments(currentDbName, currentCollectionName);
 }
@@ -2063,6 +2227,81 @@ function clearArrayFilter(fieldName) {
 // Functions are called via event listeners, but keep them globally available for debugging
 window.applyArrayFilter = applyArrayFilter;
 window.clearArrayFilter = clearArrayFilter;
+
+// Saved Queries
+function savedQueriesKey(dbName, collectionName) {
+  return `mongodb_dashboard_savedqueries_${dbName}_${collectionName}`;
+}
+
+function getSavedQueries(dbName, collectionName) {
+  try {
+    return JSON.parse(localStorage.getItem(savedQueriesKey(dbName, collectionName)) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveQuery(dbName, collectionName, query) {
+  const queries = getSavedQueries(dbName, collectionName);
+  queries.unshift(query);
+  localStorage.setItem(savedQueriesKey(dbName, collectionName), JSON.stringify(queries.slice(0, 20)));
+}
+
+function deleteSavedQuery(dbName, collectionName, index) {
+  const queries = getSavedQueries(dbName, collectionName);
+  queries.splice(index, 1);
+  localStorage.setItem(savedQueriesKey(dbName, collectionName), JSON.stringify(queries));
+}
+
+function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
+  const queries = getSavedQueries(dbName, collectionName);
+
+  if (queries.length === 0) {
+    dropdown.innerHTML = '<div class="saved-queries-empty">No saved queries yet.</div>';
+    return;
+  }
+
+  dropdown.innerHTML = queries.map((q, i) => `
+    <div class="saved-query-item" data-index="${i}">
+      <div class="saved-query-info">
+        <div class="saved-query-name">${escapeHtml(q.name)}</div>
+        <div class="saved-query-preview">${escapeHtml(q.filter || '{}')}</div>
+      </div>
+      <button class="saved-query-delete" data-index="${i}" title="Delete">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  `).join('');
+
+  dropdown.querySelectorAll('.saved-query-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.saved-query-delete')) {
+        e.stopPropagation();
+        const idx = parseInt(e.target.closest('.saved-query-delete').dataset.index);
+        deleteSavedQuery(dbName, collectionName, idx);
+        renderSavedQueriesDropdown(dbName, collectionName, dropdown);
+        return;
+      }
+      const idx = parseInt(item.dataset.index);
+      const q = queries[idx];
+      // Apply the saved query
+      const queryFilterEl = document.getElementById('queryFilter');
+      const queryProjectionEl = document.getElementById('queryProjection');
+      const querySortEl = document.getElementById('querySort');
+      const queryLimitEl = document.getElementById('queryLimit');
+      const querySkipEl = document.getElementById('querySkip');
+      if (queryFilterEl) queryFilterEl.value = q.filter || '';
+      if (queryProjectionEl) queryProjectionEl.value = q.projection || '';
+      if (querySortEl) querySortEl.value = q.sort || '';
+      if (queryLimitEl) queryLimitEl.value = q.limit || 50;
+      if (querySkipEl) querySkipEl.value = q.skip || 0;
+      dropdown.style.display = 'none';
+      runQuery(dbName, collectionName);
+    });
+  });
+}
 
 // Global disconnect handler
 document.getElementById('disconnectBtn')?.addEventListener('click', async () => {

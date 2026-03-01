@@ -224,10 +224,44 @@ router.get("/:db/:collection", async (req, res) => {
     }
 
     const { db: dbName, collection: colName } = req.params;
-    const { cursor, limit = 50, filter, search, arrayFilters } = req.query;
-    const pageLimit = Math.min(parseInt(limit) || 50, 100);
+    const {
+      cursor,
+      limit = 50,
+      filter,
+      search,
+      arrayFilters,
+      sort: sortParam,
+      projection: projectionParam,
+      skip: skipParam,
+    } = req.query;
+    const pageLimit = Math.min(parseInt(limit) || 50, 1000);
 
     const collection = client.db(dbName).collection(colName);
+
+    // Parse sort — custom sort disables cursor-based pagination
+    const hasCustomSort = !!sortParam;
+    let sort = { createdAt: -1, _id: -1 };
+    if (sortParam) {
+      try {
+        sort = JSON.parse(sortParam);
+      } catch (e) {
+        // ignore invalid sort, use default
+      }
+    }
+
+    // Parse projection
+    let projection = {};
+    if (projectionParam) {
+      try {
+        projection = JSON.parse(projectionParam);
+      } catch (e) {
+        // ignore invalid projection
+      }
+    }
+
+    // Skip offset for offset-based pagination (used with custom sort)
+    const skipOffset = Math.max(0, parseInt(skipParam) || 0);
+    const useOffsetPagination = hasCustomSort || skipOffset > 0;
 
     // Build query
     let query = {};
@@ -305,29 +339,20 @@ router.get("/:db/:collection", async (req, res) => {
       searchConditions = buildSearchQuery(searchTerm, sampleDoc);
     }
 
-    // Build sort - prioritize createdAt descending (most recent first), then _id descending
-    const sort = { createdAt: -1, _id: -1 };
-
-    // Cursor-based pagination
-    // For createdAt sorting, we need to handle cursor differently
+    // Cursor-based pagination (only when using default sort)
     let cursorConditions = null;
-    if (cursor) {
+    if (!useOffsetPagination && cursor) {
       try {
-        // Try to parse cursor as JSON containing createdAt and _id
         const cursorData = JSON.parse(cursor);
         if (
           cursorData.createdAt !== null &&
           cursorData.createdAt !== undefined &&
           cursorData._id
         ) {
-          // Parse createdAt date if it's a string
           let createdAtValue = cursorData.createdAt;
           if (typeof createdAtValue === "string") {
             createdAtValue = new Date(createdAtValue);
           }
-
-          // Use compound cursor for createdAt + _id sorting
-          // Documents with createdAt < cursor OR (createdAt == cursor AND _id < cursor._id)
           cursorConditions = {
             $or: [
               { createdAt: { $lt: createdAtValue } },
@@ -338,11 +363,9 @@ router.get("/:db/:collection", async (req, res) => {
             ],
           };
         } else if (cursorData._id) {
-          // Fallback to _id cursor only (for documents without createdAt)
           cursorConditions = { _id: { $lt: new ObjectId(cursorData._id) } };
         }
       } catch (e) {
-        // If cursor is not JSON, try as simple _id (backward compatibility)
         try {
           cursorConditions = { _id: { $lt: new ObjectId(cursor) } };
         } catch (e2) {
@@ -353,17 +376,10 @@ router.get("/:db/:collection", async (req, res) => {
 
     // Combine all query conditions
     const conditions = [];
-    if (Object.keys(query).length > 0) {
-      conditions.push(query);
-    }
-    if (searchConditions) {
-      conditions.push(searchConditions);
-    }
-    if (cursorConditions) {
-      conditions.push(cursorConditions);
-    }
+    if (Object.keys(query).length > 0) conditions.push(query);
+    if (searchConditions) conditions.push(searchConditions);
+    if (cursorConditions) conditions.push(cursorConditions);
 
-    // Build final query
     if (conditions.length === 0) {
       query = {};
     } else if (conditions.length === 1) {
@@ -372,41 +388,59 @@ router.get("/:db/:collection", async (req, res) => {
       query = { $and: conditions };
     }
 
-    // Fetch documents
-    const docs = await collection
-      .find(query)
-      .sort(sort)
-      .limit(pageLimit + 1) // Fetch one extra to check if there's more
-      .toArray();
+    // Build the find cursor with optional projection
+    let findCursor = collection.find(query);
+    if (Object.keys(projection).length > 0) {
+      findCursor = findCursor.project(projection);
+    }
+    findCursor = findCursor.sort(sort);
+
+    // Fetch documents (offset or cursor pagination)
+    let docs;
+    if (useOffsetPagination) {
+      docs = await findCursor
+        .skip(skipOffset)
+        .limit(pageLimit + 1)
+        .toArray();
+    } else {
+      docs = await findCursor.limit(pageLimit + 1).toArray();
+    }
 
     const hasMore = docs.length > pageLimit;
     if (hasMore) docs.pop();
 
     const serializedDocs = docs.map(serializeDocument);
 
-    // Build cursor with createdAt and _id for proper pagination
+    // Build next cursor / next skip depending on pagination mode
     let nextCursor = null;
-    if (hasMore && docs.length > 0) {
-      const lastDoc = docs[docs.length - 1];
-      const cursorData = {
-        createdAt: lastDoc.createdAt
-          ? lastDoc.createdAt instanceof Date
-            ? lastDoc.createdAt.toISOString()
-            : lastDoc.createdAt
-          : null,
-        _id: lastDoc._id.toString(),
-      };
-      nextCursor = JSON.stringify(cursorData);
+    let nextSkip = null;
+    if (hasMore) {
+      if (useOffsetPagination) {
+        nextSkip = skipOffset + pageLimit;
+      } else if (docs.length > 0) {
+        const lastDoc = docs[docs.length - 1];
+        const cursorData = {
+          createdAt: lastDoc.createdAt
+            ? lastDoc.createdAt instanceof Date
+              ? lastDoc.createdAt.toISOString()
+              : lastDoc.createdAt
+            : null,
+          _id: lastDoc._id.toString(),
+        };
+        nextCursor = JSON.stringify(cursorData);
+      }
     }
 
-    // Get total count (estimated for speed)
+    // Get total count (estimated for speed, or exact when filters are active)
     const totalCount = await collection.estimatedDocumentCount();
 
     res.json({
       documents: serializedDocs,
       nextCursor,
+      nextSkip,
       hasMore,
       totalCount,
+      paginationMode: useOffsetPagination ? "offset" : "cursor",
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

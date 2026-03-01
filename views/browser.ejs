@@ -253,6 +253,87 @@
             </div>
           </div>
 
+          <!-- Query Bar -->
+          <div class="query-bar" id="queryBar">
+            <div class="query-bar-main">
+              <div class="query-field query-field-filter">
+                <span class="query-label">Filter</span>
+                <input
+                  type="text"
+                  id="queryFilter"
+                  class="query-input mono"
+                  placeholder='{ field: "value" }'
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="query-bar-actions">
+                <button id="queryOptionsToggle" class="btn btn-ghost btn-sm query-options-btn">
+                  Options
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+                <div style="position:relative;">
+                  <button id="savedQueriesBtn" class="btn btn-ghost btn-sm">
+                    Saved
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+                  <div id="savedQueriesDropdown" class="saved-queries-dropdown" style="display:none;"></div>
+                </div>
+                <button id="queryResetBtn" class="btn btn-ghost btn-sm">Reset</button>
+                <button id="queryRunBtn" class="btn btn-primary btn-sm">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  Find
+                </button>
+              </div>
+            </div>
+            <div class="query-bar-options" id="queryBarOptions" style="display:none;">
+              <div class="query-field">
+                <span class="query-label">Project</span>
+                <input
+                  type="text"
+                  id="queryProjection"
+                  class="query-input mono"
+                  placeholder='{ field: 1 }'
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="query-field">
+                <span class="query-label">Sort</span>
+                <input
+                  type="text"
+                  id="querySort"
+                  class="query-input mono"
+                  placeholder='{ field: -1 }'
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="query-field query-field-sm">
+                <span class="query-label">Limit</span>
+                <input type="number" id="queryLimit" class="query-input" value="50" min="1" max="1000" />
+              </div>
+              <div class="query-field query-field-sm">
+                <span class="query-label">Skip</span>
+                <input type="number" id="querySkip" class="query-input" value="0" min="0" />
+              </div>
+              <button id="saveQueryBtn" class="btn btn-ghost btn-sm" title="Save current query">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                Save
+              </button>
+            </div>
+          </div>
+
           <div class="table-container">
             <table class="data-table" id="dataTable">
               <thead>
