@@ -658,6 +658,176 @@ router.put("/:db/collections/:collection", async (req, res) => {
   }
 });
 
+// ─── Import / Export ─────────────────────────────────────────────────────────
+
+/**
+ * Simple CSV parser that handles quoted fields and commas inside quotes.
+ * Returns an array of row arrays.
+ */
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        row.push(field);
+        field = "";
+      } else if (ch === "\n" || (ch === "\r" && next === "\n")) {
+        if (ch === "\r") i++;
+        row.push(field);
+        field = "";
+        if (row.some((f) => f !== "")) rows.push(row);
+        row = [];
+      } else {
+        field += ch;
+      }
+    }
+  }
+  row.push(field);
+  if (row.some((f) => f !== "")) rows.push(row);
+  return rows;
+}
+
+/**
+ * Convert a flat object to a CSV row string (values quoted if needed).
+ */
+function toCsvRow(headers, doc) {
+  return headers
+    .map((h) => {
+      const val = doc[h];
+      if (val === null || val === undefined) return "";
+      const str =
+        typeof val === "object" ? JSON.stringify(val) : String(val);
+      return str.includes(",") || str.includes('"') || str.includes("\n")
+        ? `"${str.replace(/"/g, '""')}"`
+        : str;
+    })
+    .join(",");
+}
+
+// Import documents (JSON array, NDJSON, or CSV)
+router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, collection: colName } = req.params;
+    const { format = "json", content, stopOnError = false } = req.body;
+
+    if (!content) return res.status(400).json({ error: "No content provided" });
+
+    const collection = client.db(dbName).collection(colName);
+
+    let docs = [];
+    if (format === "csv") {
+      const rows = parseCsv(content.trim());
+      if (rows.length < 2) return res.status(400).json({ error: "CSV must have a header row and at least one data row" });
+      const headers = rows[0];
+      docs = rows.slice(1).map((row) => {
+        const doc = {};
+        headers.forEach((h, i) => {
+          let val = row[i] ?? "";
+          // Try to parse numbers and booleans
+          if (val === "true") val = true;
+          else if (val === "false") val = false;
+          else if (val !== "" && !isNaN(Number(val))) val = Number(val);
+          if (val !== "") doc[h] = val;
+        });
+        return doc;
+      });
+    } else {
+      // JSON: try array first, then NDJSON (one JSON object per line)
+      const trimmed = content.trim();
+      if (trimmed.startsWith("[")) {
+        docs = JSON.parse(trimmed);
+      } else {
+        docs = trimmed
+          .split("\n")
+          .filter((l) => l.trim())
+          .map((l) => JSON.parse(l));
+      }
+      docs = docs.map(parseDocument);
+    }
+
+    let inserted = 0;
+    let errors = [];
+    for (const doc of docs) {
+      try {
+        await collection.insertOne(doc);
+        inserted++;
+      } catch (err) {
+        if (stopOnError) throw err;
+        errors.push(err.message);
+      }
+    }
+
+    res.json({ success: true, inserted, errors: errors.slice(0, 20), total: docs.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export documents (JSON or CSV)
+router.get("/:db/:collection/export", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, collection: colName } = req.params;
+    const { format = "json", filter: filterParam, sort: sortParam, limit: limitParam } = req.query;
+
+    const collection = client.db(dbName).collection(colName);
+
+    let query = {};
+    if (filterParam) { try { query = JSON.parse(filterParam); } catch (e) {} }
+
+    let sort = {};
+    if (sortParam) { try { sort = JSON.parse(sortParam); } catch (e) {} }
+
+    const limit = limitParam ? Math.min(parseInt(limitParam) || 10000, 100000) : 10000;
+
+    const docs = await collection.find(query).sort(sort).limit(limit).toArray();
+    const serialized = docs.map(serializeDocument);
+
+    if (format === "csv") {
+      if (serialized.length === 0) {
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="${colName}.csv"`);
+        return res.send("");
+      }
+      const headers = [...new Set(serialized.flatMap((d) => Object.keys(d)))];
+      const csv = [headers.join(","), ...serialized.map((d) => toCsvRow(headers, d))].join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="${colName}.csv"`);
+      return res.send(csv);
+    }
+
+    // JSON
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename="${colName}.json"`);
+    res.send(JSON.stringify(serialized, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Check connection status
 router.get("/status", async (req, res) => {
   try {

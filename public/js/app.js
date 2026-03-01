@@ -560,6 +560,7 @@ async function initBrowser(dbName, collectionName) {
   setupModalHandlers();
   setupColumnsModalHandlers();
   setupViewModalHandlers();
+  initImportExport(dbName, collectionName);
 }
 
 function runQuery(dbName, collectionName) {
@@ -2300,6 +2301,114 @@ function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
       dropdown.style.display = 'none';
       runQuery(dbName, collectionName);
     });
+  });
+}
+
+// ─── Import / Export ─────────────────────────────────────────────────────────
+
+function initImportExport(dbName, collectionName) {
+  // ── Export ──────────────────────────────────────────────────────────────
+  const exportBtn = document.getElementById('exportBtn');
+  const exportModal = document.getElementById('exportModal');
+  if (exportBtn && exportModal) {
+    const closeExport = () => { exportModal.style.display = 'none'; };
+    exportBtn.addEventListener('click', () => { exportModal.style.display = 'flex'; });
+    document.getElementById('exportModalClose')?.addEventListener('click', closeExport);
+    document.getElementById('exportCancel')?.addEventListener('click', closeExport);
+    exportModal.querySelector('.modal-backdrop')?.addEventListener('click', closeExport);
+
+    document.getElementById('exportConfirm')?.addEventListener('click', () => {
+      const format = document.getElementById('exportFormat').value;
+      const limit = document.getElementById('exportLimit').value || 10000;
+      const params = new URLSearchParams({ format, limit });
+      if (currentFilter) params.set('filter', currentFilter);
+      if (currentSort) params.set('sort', currentSort);
+      window.location.href = `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/export?${params}`;
+      closeExport();
+    });
+  }
+
+  // ── Import ──────────────────────────────────────────────────────────────
+  const importBtn = document.getElementById('importBtn');
+  const importModal = document.getElementById('importModal');
+  if (!importBtn || !importModal) return;
+
+  let importContent = null;
+
+  const closeImport = () => {
+    importModal.style.display = 'none';
+    document.getElementById('importError').style.display = 'none';
+    document.getElementById('importResult').style.display = 'none';
+    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('importFile').value = '';
+    document.getElementById('importConfirm').disabled = true;
+    importContent = null;
+  };
+
+  importBtn.addEventListener('click', () => { importModal.style.display = 'flex'; });
+  document.getElementById('importModalClose')?.addEventListener('click', closeImport);
+  document.getElementById('importCancel')?.addEventListener('click', closeImport);
+  importModal.querySelector('.modal-backdrop')?.addEventListener('click', closeImport);
+
+  document.getElementById('importFile')?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Auto-detect format
+    if (file.name.endsWith('.csv')) {
+      document.getElementById('importFormat').value = 'csv';
+    } else {
+      document.getElementById('importFormat').value = 'json';
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      importContent = ev.target.result;
+      const preview = document.getElementById('importPreview');
+      preview.textContent = importContent.substring(0, 500) + (importContent.length > 500 ? '...' : '');
+      preview.style.display = 'block';
+      document.getElementById('importConfirm').disabled = false;
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('importConfirm')?.addEventListener('click', async () => {
+    if (!importContent) return;
+    const format = document.getElementById('importFormat').value;
+    const stopOnError = document.getElementById('importStopOnError').checked;
+    const errEl = document.getElementById('importError');
+    const resultEl = document.getElementById('importResult');
+    const btn = document.getElementById('importConfirm');
+
+    errEl.style.display = 'none';
+    resultEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format, content: importContent, stopOnError }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      resultEl.textContent = `Imported ${data.inserted} of ${data.total} documents.${data.errors.length > 0 ? ` ${data.errors.length} error(s): ${data.errors[0]}` : ''}`;
+      resultEl.style.display = 'block';
+
+      // Refresh table
+      currentCursor = null;
+      currentNextSkip = null;
+      allDocuments = [];
+      loadDocuments(dbName, collectionName);
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Import';
+    }
   });
 }
 
