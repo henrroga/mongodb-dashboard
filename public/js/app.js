@@ -110,6 +110,80 @@ async function autoReconnect() {
   }
 }
 
+// ─── Connection Builder ───────────────────────────────────────────────────────
+
+function initConnectionBuilder(uriInput) {
+  // Tab switching
+  document.querySelectorAll('.conn-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.conn-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const mode = tab.dataset.mode;
+      document.getElementById('conn-uri-mode').style.display = mode === 'uri' ? 'block' : 'none';
+      document.getElementById('conn-builder-mode').style.display = mode === 'builder' ? 'block' : 'none';
+
+      if (mode === 'builder') rebuildUri();
+    });
+  });
+
+  // Auth type toggle
+  document.getElementById('cbAuthType')?.addEventListener('change', (e) => {
+    const fields = document.getElementById('cbAuthFields');
+    if (fields) fields.style.display = e.target.value === 'password' ? 'block' : 'none';
+    rebuildUri();
+  });
+
+  // Scheme toggle (SRV hides port)
+  document.querySelectorAll('[name="cbScheme"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const isSrv = document.querySelector('[name="cbScheme"]:checked')?.value === 'mongodb+srv://';
+      const portGroup = document.getElementById('cbPortGroup');
+      if (portGroup) portGroup.style.display = isSrv ? 'none' : 'block';
+      rebuildUri();
+    });
+  });
+
+  // All builder inputs trigger URI rebuild
+  ['cbHost', 'cbPort', 'cbUsername', 'cbPassword', 'cbAuthDb', 'cbReplicaSet', 'cbTLS'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', rebuildUri);
+    if (el && el.type === 'checkbox') el.addEventListener('change', rebuildUri);
+  });
+}
+
+function rebuildUri() {
+  const scheme = document.querySelector('[name="cbScheme"]:checked')?.value || 'mongodb://';
+  const host = document.getElementById('cbHost')?.value.trim() || 'localhost';
+  const port = document.getElementById('cbPort')?.value.trim() || '27017';
+  const authType = document.getElementById('cbAuthType')?.value || 'none';
+  const username = document.getElementById('cbUsername')?.value.trim() || '';
+  const password = document.getElementById('cbPassword')?.value || '';
+  const authDb = document.getElementById('cbAuthDb')?.value.trim() || 'admin';
+  const replicaSet = document.getElementById('cbReplicaSet')?.value.trim() || '';
+  const tls = document.getElementById('cbTLS')?.checked || false;
+  const isSrv = scheme === 'mongodb+srv://';
+
+  let uri = scheme;
+
+  if (authType === 'password' && username) {
+    uri += `${encodeURIComponent(username)}:${encodeURIComponent(password)}@`;
+  }
+
+  uri += host;
+  if (!isSrv) uri += `:${port}`;
+  uri += '/';
+  if (authType === 'password' && authDb) uri += authDb;
+
+  const params = [];
+  if (replicaSet) params.push(`replicaSet=${encodeURIComponent(replicaSet)}`);
+  if (tls) params.push('tls=true');
+  if (params.length > 0) uri += '?' + params.join('&');
+
+  const genEl = document.getElementById('cbGeneratedUri');
+  if (genEl) genEl.value = uri;
+}
+
 // Connect Page
 async function initConnectPage() {
   const form = document.getElementById('connectForm');
@@ -191,9 +265,19 @@ async function initConnectPage() {
     });
   }
 
+  // ── Connection Builder ──────────────────────────────────────────────────
+  initConnectionBuilder(input);
+
   // Handle form submit
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    // If builder mode is active, use generated URI
+    const builderMode = document.getElementById('conn-builder-mode');
+    if (builderMode && builderMode.style.display !== 'none') {
+      const gen = document.getElementById('cbGeneratedUri')?.value;
+      if (gen) input.value = gen;
+    }
     
     const connectionString = input.value.trim();
     if (!connectionString) return;

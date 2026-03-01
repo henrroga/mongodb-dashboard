@@ -64,29 +64,94 @@
         <p class="connect-subtitle">Connect to your MongoDB instance</p>
       </div>
 
-      <form id="connectForm" class="connect-form">
-      <div class="form-group">
-        <label for="connectionString">Connection String</label>
-        <input 
-          type="text" 
-          id="connectionString" 
-          name="connectionString" 
-          placeholder="mongodb://localhost:27017 or mongodb+srv://..."
-          autocomplete="off"
-          spellcheck="false"
-          required
-        >
+      <!-- Connection mode tabs -->
+      <div class="conn-tabs">
+        <button class="conn-tab active" data-mode="uri">Connection String</button>
+        <button class="conn-tab" data-mode="builder">Fill in fields</button>
       </div>
-      <button type="submit" class="btn btn-primary btn-lg" id="connectBtn">
-        <span class="btn-text">Connect</span>
-        <span class="btn-loading" style="display: none;">
-          <svg class="spinner" width="20" height="20" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="32" stroke-linecap="round"/>
-          </svg>
-        </span>
-      </button>
-      <p id="connectError" class="error-message" style="display: none;"></p>
-    </form>
+
+      <form id="connectForm" class="connect-form">
+        <!-- URI Mode -->
+        <div id="conn-uri-mode">
+          <div class="form-group">
+            <label for="connectionString">Connection String</label>
+            <input 
+              type="text" 
+              id="connectionString" 
+              name="connectionString" 
+              placeholder="mongodb://localhost:27017 or mongodb+srv://..."
+              autocomplete="off"
+              spellcheck="false"
+            >
+          </div>
+        </div>
+
+        <!-- Builder Mode -->
+        <div id="conn-builder-mode" style="display:none">
+          <div class="conn-builder-grid">
+            <div class="form-group" style="grid-column:span 2">
+              <label>Scheme</label>
+              <div style="display:flex;gap:12px">
+                <label class="conn-radio"><input type="radio" name="cbScheme" value="mongodb://" checked> mongodb://</label>
+                <label class="conn-radio"><input type="radio" name="cbScheme" value="mongodb+srv://"> mongodb+srv://</label>
+              </div>
+            </div>
+            <div class="form-group" id="cbHostGroup">
+              <label>Host</label>
+              <input type="text" id="cbHost" class="conn-field" placeholder="localhost" value="localhost"/>
+            </div>
+            <div class="form-group" id="cbPortGroup">
+              <label>Port</label>
+              <input type="number" id="cbPort" class="conn-field" placeholder="27017" value="27017" min="1" max="65535"/>
+            </div>
+            <div class="form-group" style="grid-column:span 2">
+              <label>Authentication</label>
+              <select id="cbAuthType" class="conn-field">
+                <option value="none">None</option>
+                <option value="password">Username / Password</option>
+              </select>
+            </div>
+            <div id="cbAuthFields" style="display:none;grid-column:span 2;display:none">
+              <div class="conn-builder-grid">
+                <div class="form-group">
+                  <label>Username</label>
+                  <input type="text" id="cbUsername" class="conn-field" placeholder="admin" autocomplete="off"/>
+                </div>
+                <div class="form-group">
+                  <label>Password</label>
+                  <input type="password" id="cbPassword" class="conn-field" placeholder="••••••••" autocomplete="off"/>
+                </div>
+                <div class="form-group" style="grid-column:span 2">
+                  <label>Auth Database</label>
+                  <input type="text" id="cbAuthDb" class="conn-field" placeholder="admin" value="admin"/>
+                </div>
+              </div>
+            </div>
+            <div class="form-group" style="grid-column:span 2">
+              <label>Replica Set Name <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+              <input type="text" id="cbReplicaSet" class="conn-field" placeholder="rs0"/>
+            </div>
+            <div class="form-group" style="grid-column:span 2;display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="cbTLS"/>
+              <label for="cbTLS" style="margin:0">TLS / SSL</label>
+            </div>
+            <div class="form-group" style="grid-column:span 2">
+              <label>Generated URI</label>
+              <input type="text" id="cbGeneratedUri" class="conn-field mono" readonly style="background:var(--bg-tertiary)"/>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg" id="connectBtn">
+          <span class="btn-text">Connect</span>
+          <span class="btn-loading" style="display: none;">
+            <svg class="spinner" width="20" height="20" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="32" stroke-linecap="round"/>
+            </svg>
+          </span>
+        </button>
+        <p id="connectError" class="error-message" style="display: none;"></p>
+      </form>
 
       <div id="recentConnections" class="recent-connections" style="display: none;">
         <h3>Recent Connections</h3>
