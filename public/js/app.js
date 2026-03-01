@@ -110,6 +110,116 @@ async function autoReconnect() {
   }
 }
 
+// ─── Shell Panel ─────────────────────────────────────────────────────────────
+
+function initShellPanel(dbName) {
+  const panel = document.getElementById('shellPanel');
+  const openBtn = document.getElementById('shellOpenBtn');
+  const toggleBtn = document.getElementById('shellToggleBtn');
+  const clearBtn = document.getElementById('shellClearBtn');
+  const input = document.getElementById('shellInput');
+  const runBtn = document.getElementById('shellRunBtn');
+  const output = document.getElementById('shellOutput');
+  const dbLabel = document.getElementById('shellDbLabel');
+  if (!panel || !input) return;
+
+  let shellDb = dbName;
+  let history = [];
+  let historyIdx = -1;
+
+  if (dbLabel) dbLabel.textContent = `[${shellDb}]`;
+
+  const open = () => {
+    panel.classList.remove('shell-panel-closed');
+    openBtn?.classList.add('hidden');
+    input.focus();
+  };
+
+  const close = () => {
+    panel.classList.add('shell-panel-closed');
+    openBtn?.classList.remove('hidden');
+  };
+
+  openBtn?.addEventListener('click', open);
+  toggleBtn?.addEventListener('click', close);
+  clearBtn?.addEventListener('click', () => { if (output) output.innerHTML = ''; });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { runShellCommand(); return; }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (historyIdx < history.length - 1) { historyIdx++; input.value = history[historyIdx]; }
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIdx > 0) { historyIdx--; input.value = history[historyIdx]; }
+      else { historyIdx = -1; input.value = ''; }
+    }
+  });
+
+  runBtn?.addEventListener('click', runShellCommand);
+
+  function appendEntry(cmd, result, type, isError = false) {
+    const entry = document.createElement('div');
+    entry.className = 'shell-entry';
+
+    const cmdLine = document.createElement('div');
+    cmdLine.className = 'shell-cmd-line';
+    cmdLine.innerHTML = `<span class="shell-cmd-prompt">${escapeHtml(shellDb)}> </span><span>${escapeHtml(cmd)}</span>`;
+    entry.appendChild(cmdLine);
+
+    const resultEl = document.createElement('div');
+    resultEl.className = 'shell-result';
+
+    if (isError) {
+      resultEl.innerHTML = `<span class="shell-result-error">${escapeHtml(String(result))}</span>`;
+    } else if (type === 'text') {
+      resultEl.innerHTML = `<span class="shell-result-text">${escapeHtml(String(result))}</span>`;
+    } else {
+      const pre = document.createElement('pre');
+      pre.className = 'shell-result-json';
+      pre.style.cssText = 'margin:0;white-space:pre-wrap;color:#e6edf3;font-size:12px';
+      pre.textContent = JSON.stringify(result, null, 2);
+      resultEl.appendChild(pre);
+    }
+
+    entry.appendChild(resultEl);
+    output.appendChild(entry);
+    output.scrollTop = output.scrollHeight;
+  }
+
+  async function runShellCommand() {
+    const cmd = input.value.trim();
+    if (!cmd) return;
+
+    history.unshift(cmd);
+    historyIdx = -1;
+    input.value = '';
+
+    try {
+      const res = await fetch('/api/shell/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd, db: shellDb }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        appendEntry(cmd, data.error || 'Unknown error', 'error', true);
+        return;
+      }
+
+      if (data.switchDb) {
+        shellDb = data.switchDb;
+        if (dbLabel) dbLabel.textContent = `[${shellDb}]`;
+      }
+
+      appendEntry(cmd, data.result, data.type || 'json');
+    } catch (err) {
+      appendEntry(cmd, err.message, 'error', true);
+    }
+  }
+}
+
 // ─── Connection Builder ───────────────────────────────────────────────────────
 
 function initConnectionBuilder(uriInput) {
@@ -651,6 +761,7 @@ async function initBrowser(dbName, collectionName) {
   initSchemaPanel(dbName, collectionName);
   initAggregationPanel(dbName, collectionName);
   initValidationPanel(dbName, collectionName);
+  initShellPanel(dbName);
 }
 
 function runQuery(dbName, collectionName) {
