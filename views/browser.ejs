@@ -237,6 +237,7 @@
           <div class="collection-tabs">
             <button class="collection-tab active" data-tab="documents">Documents</button>
             <button class="collection-tab" data-tab="indexes">Indexes</button>
+            <button class="collection-tab" data-tab="schema">Schema</button>
           </div>
 
           <!-- Documents panel -->
@@ -490,6 +491,40 @@
                   <tr class="loading-row"><td colspan="5"><div class="loading-spinner"></div></td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Schema Analysis panel -->
+          <div id="panel-schema" style="display:none;flex:1;flex-direction:column;overflow:auto">
+            <div class="content-header">
+              <div class="content-title">
+                <h2>Schema Analysis</h2>
+                <span id="schemaSampleInfo" class="doc-count"></span>
+              </div>
+              <div class="content-actions">
+                <label style="font-size:12px;color:var(--text-secondary)">Sample size</label>
+                <select id="schemaSampleSize" class="query-input" style="width:90px">
+                  <option value="100">100</option>
+                  <option value="500" selected>500</option>
+                  <option value="1000">1,000</option>
+                  <option value="5000">5,000</option>
+                </select>
+                <button id="runSchemaAnalysis" class="btn btn-primary btn-sm">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  Analyze
+                </button>
+              </div>
+            </div>
+            <div id="schemaContent" style="padding:24px;overflow:auto">
+              <div class="empty-state" style="height:auto;padding:60px 0">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                  <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <h3>Run schema analysis</h3>
+                <p>Click Analyze to sample documents and visualize the schema</p>
+              </div>
             </div>
           </div>
 

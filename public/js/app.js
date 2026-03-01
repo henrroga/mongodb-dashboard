@@ -563,6 +563,7 @@ async function initBrowser(dbName, collectionName) {
   initImportExport(dbName, collectionName);
   initCollectionTabs(dbName, collectionName);
   initIndexesPanel(dbName, collectionName);
+  initSchemaPanel(dbName, collectionName);
 }
 
 function runQuery(dbName, collectionName) {
@@ -2313,6 +2314,7 @@ function initCollectionTabs(dbName, collectionName) {
   const panels = {
     documents: document.getElementById('panel-documents'),
     indexes: document.getElementById('panel-indexes'),
+    schema: document.getElementById('panel-schema'),
   };
 
   function switchTab(tabName) {
@@ -2322,14 +2324,125 @@ function initCollectionTabs(dbName, collectionName) {
       el.style.display = name === tabName ? 'flex' : 'none';
       el.style.flexDirection = 'column';
     });
-    if (tabName === 'indexes') {
-      loadIndexes(dbName, collectionName);
-    }
+    if (tabName === 'indexes') loadIndexes(dbName, collectionName);
   }
 
   tabs.forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
+}
+
+// ─── Schema Analysis ──────────────────────────────────────────────────────────
+
+function initSchemaPanel(dbName, collectionName) {
+  document.getElementById('runSchemaAnalysis')?.addEventListener('click', () => {
+    const sampleSize = document.getElementById('schemaSampleSize').value || 500;
+    runSchemaAnalysis(dbName, collectionName, sampleSize);
+  });
+}
+
+async function runSchemaAnalysis(dbName, collectionName, sampleSize) {
+  const contentEl = document.getElementById('schemaContent');
+  const sampleInfo = document.getElementById('schemaSampleInfo');
+  if (!contentEl) return;
+
+  contentEl.innerHTML = '<div style="display:flex;justify-content:center;padding:60px"><div class="loading-spinner"></div></div>';
+
+  try {
+    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/schema-analysis?sampleSize=${sampleSize}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    if (sampleInfo) sampleInfo.textContent = `${data.totalDocs} documents sampled`;
+
+    if (data.totalDocs === 0) {
+      contentEl.innerHTML = '<div class="empty-state" style="height:auto;padding:60px 0"><h3>No documents</h3><p>Import some documents to analyze the schema.</p></div>';
+      return;
+    }
+
+    const typeColors = {
+      string: '#58a6ff', number: '#3fb950', boolean: '#ff7b72', date: '#d29922',
+      objectId: '#bc8cff', array: '#79c0ff', object: '#8b949e', null: '#6e7681',
+      decimal: '#3fb950', undefined: '#6e7681',
+    };
+
+    const fields = Object.entries(data.fields);
+
+    contentEl.innerHTML = `
+      <div class="schema-grid">
+        ${fields.map(([fieldName, info]) => {
+          const totalTyped = Object.values(info.types).reduce((a, b) => a + b, 0);
+          const presencePct = Math.round(info.presence * 100);
+
+          const typeBar = Object.entries(info.types)
+            .sort((a, b) => b[1] - a[1])
+            .map(([type, count]) => {
+              const pct = (count / totalTyped * 100).toFixed(1);
+              const color = typeColors[type] || '#8b949e';
+              return `<div class="type-bar-segment" style="width:${pct}%;background:${color}" title="${type}: ${pct}%"></div>`;
+            }).join('');
+
+          const typeLegend = Object.entries(info.types)
+            .sort((a, b) => b[1] - a[1])
+            .map(([type, count]) => {
+              const color = typeColors[type] || '#8b949e';
+              const pct = (count / totalTyped * 100).toFixed(0);
+              return `<span class="type-legend-item"><span class="type-dot" style="background:${color}"></span>${type} ${pct}%</span>`;
+            }).join('');
+
+          let extra = '';
+
+          // Top values chart for strings
+          if (info.topValues && info.topValues.length > 0) {
+            const maxCount = info.topValues[0].count;
+            extra += `
+              <div class="schema-section">
+                <div class="schema-section-label">Top values${info.uniqueCount ? ` (${formatCount(info.uniqueCount)} unique)` : ''}</div>
+                ${info.topValues.map(tv => {
+                  const pct = (tv.count / maxCount * 100).toFixed(0);
+                  return `<div class="value-bar-row">
+                    <span class="value-bar-label" title="${escapeHtml(String(tv.value))}">${escapeHtml(String(tv.value).substring(0, 30))}</span>
+                    <div class="value-bar-track"><div class="value-bar-fill" style="width:${pct}%"></div></div>
+                    <span class="value-bar-count">${tv.count}</span>
+                  </div>`;
+                }).join('')}
+              </div>`;
+          }
+
+          // Histogram for numbers
+          if (info.histogram && info.histogram.length > 0) {
+            const maxBucketCount = Math.max(...info.histogram.map(b => b.count));
+            extra += `
+              <div class="schema-section">
+                <div class="schema-section-label">Distribution &nbsp;<small>min ${info.min} · avg ${info.mean} · max ${info.max}</small></div>
+                <div class="histogram">
+                  ${info.histogram.map(bucket => {
+                    const pct = maxBucketCount > 0 ? (bucket.count / maxBucketCount * 100).toFixed(0) : 0;
+                    return `<div class="histogram-bar" title="${bucket.min}–${bucket.max}: ${bucket.count}">
+                      <div class="histogram-fill" style="height:${pct}%"></div>
+                      <div class="histogram-label">${bucket.min}</div>
+                    </div>`;
+                  }).join('')}
+                </div>
+              </div>`;
+          }
+
+          return `
+            <div class="schema-field-card">
+              <div class="schema-field-header">
+                <span class="schema-field-name">${escapeHtml(fieldName)}</span>
+                <span class="schema-field-presence" title="Field presence">${presencePct}%</span>
+              </div>
+              <div class="type-bar">${typeBar}</div>
+              <div class="type-legend">${typeLegend}</div>
+              ${extra}
+            </div>`;
+        }).join('')}
+      </div>`;
+
+  } catch (err) {
+    contentEl.innerHTML = `<div style="color:var(--danger);padding:24px">Error: ${err.message}</div>`;
+  }
 }
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────

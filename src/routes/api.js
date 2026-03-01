@@ -550,6 +550,103 @@ router.get("/:db/:collection/schema", async (req, res) => {
   }
 });
 
+// Rich schema analysis for the Schema tab
+router.get("/:db/:collection/schema-analysis", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, collection: colName } = req.params;
+    const sampleSize = Math.min(parseInt(req.query.sampleSize) || 500, 5000);
+    const col = client.db(dbName).collection(colName);
+
+    const docs = await col.find({}).limit(sampleSize).toArray();
+    const total = docs.length;
+    if (total === 0) return res.json({ totalDocs: 0, fields: {} });
+
+    const fields = {};
+
+    const getType = (val) => {
+      if (val === null || val === undefined) return "null";
+      if (val instanceof Date) return "date";
+      if (Array.isArray(val)) return "array";
+      if (val && val._bsontype === "ObjectId") return "objectId";
+      if (val && val._bsontype === "Decimal128") return "decimal";
+      if (typeof val === "object" && val.$oid) return "objectId";
+      if (typeof val === "object" && val.$date) return "date";
+      if (typeof val === "object") return "object";
+      return typeof val;
+    };
+
+    for (const doc of docs) {
+      const serialized = serializeDocument(doc);
+      for (const [key, value] of Object.entries(serialized)) {
+        if (!fields[key]) {
+          fields[key] = { types: {}, values: [], numbers: [] };
+        }
+        const f = fields[key];
+        const type = getType(value);
+        f.types[type] = (f.types[type] || 0) + 1;
+
+        if (type === "string" && f.values.length < 2000) f.values.push(value);
+        if (type === "number" && f.numbers.length < 2000) f.numbers.push(value);
+      }
+    }
+
+    const result = {};
+    for (const [key, f] of Object.entries(fields)) {
+      const presence = Object.values(f.types).filter((_, i) => Object.keys(f.types)[i] !== "null")
+        .reduce((a, b) => a + b, 0) / total;
+
+      const entry = {
+        types: f.types,
+        presence: parseFloat((Object.values(f.types).reduce((a, b) => a + b, 0) / total).toFixed(3)),
+      };
+
+      // Top values for strings
+      if (f.values.length > 0) {
+        const counts = {};
+        f.values.forEach((v) => { counts[v] = (counts[v] || 0) + 1; });
+        entry.topValues = Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([value, count]) => ({ value, count }));
+        entry.uniqueCount = Object.keys(counts).length;
+      }
+
+      // Histogram for numbers
+      if (f.numbers.length > 0) {
+        const nums = f.numbers;
+        entry.min = Math.min(...nums);
+        entry.max = Math.max(...nums);
+        entry.mean = parseFloat((nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2));
+
+        const bucketCount = 10;
+        const range = entry.max - entry.min;
+        if (range > 0) {
+          const bucketSize = range / bucketCount;
+          const buckets = Array.from({ length: bucketCount }, (_, i) => ({
+            min: parseFloat((entry.min + i * bucketSize).toFixed(2)),
+            max: parseFloat((entry.min + (i + 1) * bucketSize).toFixed(2)),
+            count: 0,
+          }));
+          nums.forEach((n) => {
+            const idx = Math.min(Math.floor((n - entry.min) / bucketSize), bucketCount - 1);
+            buckets[idx].count++;
+          });
+          entry.histogram = buckets;
+        }
+      }
+
+      result[key] = entry;
+    }
+
+    res.json({ totalDocs: total, sampleSize, fields: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get single document
 router.get("/:db/:collection/:id", async (req, res) => {
   try {
