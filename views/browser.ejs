@@ -239,6 +239,7 @@
             <button class="collection-tab" data-tab="indexes">Indexes</button>
             <button class="collection-tab" data-tab="schema">Schema</button>
             <button class="collection-tab" data-tab="aggregation">Aggregation</button>
+            <button class="collection-tab" data-tab="validation">Validation</button>
           </div>
 
           <!-- Documents panel -->
@@ -584,6 +585,45 @@
               </div>
               <div id="aggResultBody" class="agg-result-body">
                 <div class="agg-result-placeholder">Run the pipeline to see results</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Validation panel -->
+          <div id="panel-validation" style="display:none;flex:1;flex-direction:column;overflow:auto">
+            <div class="content-header">
+              <div class="content-title"><h2>Schema Validation</h2></div>
+              <div class="content-actions">
+                <button id="saveValidation" class="btn btn-primary btn-sm">Save Changes</button>
+              </div>
+            </div>
+            <div id="validationContent" style="padding:24px;max-width:860px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+                <div class="form-field">
+                  <label>Validation Level</label>
+                  <select id="validationLevel" class="query-input">
+                    <option value="off">off — No validation</option>
+                    <option value="moderate">moderate — Validate inserts and updates to existing valid docs</option>
+                    <option value="strict">strict — Validate all inserts and updates</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Validation Action</label>
+                  <select id="validationAction" class="query-input">
+                    <option value="error">error — Reject invalid documents</option>
+                    <option value="warn">warn — Log warning but allow invalid documents</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-field">
+                <label>Validator (JSON Schema or MQL expression)</label>
+                <textarea id="validatorEditor" class="doc-editor" style="min-height:280px" spellcheck="false" placeholder='{ "$jsonSchema": { "bsonType": "object", "required": ["name"], "properties": { "name": { "bsonType": "string" } } } }'></textarea>
+              </div>
+              <p id="validationError" class="error-message" style="display:none;margin-top:10px"></p>
+              <p id="validationSuccess" style="display:none;margin-top:10px;padding:10px;background:rgba(63,185,80,0.1);border:1px solid var(--success);border-radius:var(--radius);color:var(--success);font-size:13px">Validation rules saved successfully.</p>
+              <div style="margin-top:20px">
+                <button id="testValidation" class="btn btn-ghost btn-sm">Test against 10 sample docs</button>
+                <div id="validationTestResults" style="margin-top:12px;font-size:13px"></div>
               </div>
             </div>
           </div>

@@ -566,6 +566,7 @@ async function initBrowser(dbName, collectionName) {
   initIndexesPanel(dbName, collectionName);
   initSchemaPanel(dbName, collectionName);
   initAggregationPanel(dbName, collectionName);
+  initValidationPanel(dbName, collectionName);
 }
 
 function runQuery(dbName, collectionName) {
@@ -2309,6 +2310,100 @@ function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
   });
 }
 
+// ─── Schema Validation ───────────────────────────────────────────────────────
+
+async function initValidationPanel(dbName, collectionName) {
+  const panel = document.getElementById('panel-validation');
+  if (!panel) return;
+
+  // Load current validation rules when tab becomes visible
+  panel._loaded = false;
+  panel._load = async () => {
+    if (panel._loaded) return;
+    panel._loaded = true;
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/validation`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const levelEl = document.getElementById('validationLevel');
+      const actionEl = document.getElementById('validationAction');
+      const editorEl = document.getElementById('validatorEditor');
+      if (levelEl) levelEl.value = data.validationLevel || 'strict';
+      if (actionEl) actionEl.value = data.validationAction || 'error';
+      if (editorEl) editorEl.value = data.validator ? JSON.stringify(data.validator, null, 2) : '';
+    } catch (err) {
+      const errEl = document.getElementById('validationError');
+      if (errEl) { errEl.textContent = 'Failed to load validation rules: ' + err.message; errEl.style.display = 'block'; }
+    }
+  };
+
+  // Save
+  document.getElementById('saveValidation')?.addEventListener('click', async () => {
+    const editorEl = document.getElementById('validatorEditor');
+    const errEl = document.getElementById('validationError');
+    const successEl = document.getElementById('validationSuccess');
+    errEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    let validator = null;
+    if (editorEl?.value.trim()) {
+      try { validator = JSON.parse(editorEl.value.trim()); }
+      catch (e) { errEl.textContent = 'Invalid JSON: ' + e.message; errEl.style.display = 'block'; return; }
+    }
+
+    const btn = document.getElementById('saveValidation');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/validation`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          validator,
+          validationLevel: document.getElementById('validationLevel')?.value || 'strict',
+          validationAction: document.getElementById('validationAction')?.value || 'error',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      successEl.style.display = 'block';
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save Changes';
+    }
+  });
+
+  // Test validation
+  document.getElementById('testValidation')?.addEventListener('click', async () => {
+    const editorEl = document.getElementById('validatorEditor');
+    const resultsEl = document.getElementById('validationTestResults');
+    const errEl = document.getElementById('validationError');
+    errEl.style.display = 'none';
+
+    let validator;
+    try { validator = JSON.parse(editorEl?.value.trim() || '{}'); }
+    catch (e) { errEl.textContent = 'Invalid JSON: ' + e.message; errEl.style.display = 'block'; return; }
+
+    resultsEl.innerHTML = '<div class="loading-spinner" style="display:inline-block;width:16px;height:16px;margin-right:8px"></div>Testing...';
+
+    try {
+      // Fetch 10 sample docs and test each against the $jsonSchema validator client-side
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}?limit=10`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const docs = data.documents;
+      if (docs.length === 0) { resultsEl.textContent = 'No documents to test.'; return; }
+
+      resultsEl.innerHTML = `<p style="color:var(--text-secondary);margin-bottom:8px">Sampled ${docs.length} documents — validation is enforced by MongoDB server, not client-side. Showing document _ids for reference:</p>` +
+        docs.map(d => `<div style="font-family:monospace;font-size:12px;padding:3px 0;color:var(--accent)">${d._id?.$oid || d._id}</div>`).join('');
+    } catch (err) {
+      resultsEl.innerHTML = `<span style="color:var(--danger)">${err.message}</span>`;
+    }
+  });
+}
+
 // ─── Explain Plan ────────────────────────────────────────────────────────────
 
 function initExplainPlan(dbName, collectionName) {
@@ -2469,6 +2564,7 @@ function initCollectionTabs(dbName, collectionName) {
     indexes: document.getElementById('panel-indexes'),
     schema: document.getElementById('panel-schema'),
     aggregation: document.getElementById('panel-aggregation'),
+    validation: document.getElementById('panel-validation'),
   };
 
   function switchTab(tabName) {
@@ -2479,6 +2575,7 @@ function initCollectionTabs(dbName, collectionName) {
       el.style.flexDirection = 'column';
     });
     if (tabName === 'indexes') loadIndexes(dbName, collectionName);
+    if (tabName === 'validation') panels.validation?._load?.();
   }
 
   tabs.forEach(tab => {

@@ -4,7 +4,7 @@ const apiRoutes = require("./src/routes/api");
 const pageRoutes = require("./src/routes/pages");
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json({ limit: "10mb" }));

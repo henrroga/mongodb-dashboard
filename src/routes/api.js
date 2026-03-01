@@ -447,6 +447,48 @@ router.get("/:db/:collection", async (req, res) => {
   }
 });
 
+// Get collection validation rules
+router.get("/:db/:collection/validation", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const db = client.db(req.params.db);
+    const cols = await db.listCollections({ name: req.params.collection }).toArray();
+    const info = cols[0] || {};
+    const options = info.options || {};
+
+    res.json({
+      validator: options.validator || null,
+      validationLevel: options.validationLevel || "strict",
+      validationAction: options.validationAction || "error",
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update collection validation rules
+router.put("/:db/:collection/validation", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { validator, validationLevel, validationAction } = req.body;
+    const db = client.db(req.params.db);
+
+    const cmd = { collMod: req.params.collection };
+    if (validator !== undefined) cmd.validator = validator;
+    if (validationLevel) cmd.validationLevel = validationLevel;
+    if (validationAction) cmd.validationAction = validationAction;
+
+    await db.command(cmd);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Explain plan for find queries
 router.post("/:db/:collection/explain", async (req, res) => {
   try {
