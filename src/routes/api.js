@@ -1097,6 +1097,69 @@ router.get("/:db/:collection/export", async (req, res) => {
   }
 });
 
+// Server stats for performance page
+router.get("/server/stats", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const admin = client.db().admin();
+    const ss = await admin.command({ serverStatus: 1 });
+
+    res.json({
+      version: ss.version,
+      uptime: ss.uptimeMillis,
+      connections: ss.connections,
+      opcounters: ss.opcounters,
+      opcountersRepl: ss.opcountersRepl,
+      mem: ss.mem,
+      network: ss.network,
+      globalLock: ss.globalLock,
+      wiredTiger: ss.wiredTiger
+        ? {
+            cache: {
+              bytesCurrentlyInCache: ss.wiredTiger.cache["bytes currently in the cache"],
+              maximumBytesConfigured: ss.wiredTiger.cache["maximum bytes configured"],
+            },
+          }
+        : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Current operations
+router.get("/server/currentop", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const admin = client.db().admin();
+    const result = await admin.command({ currentOp: 1, active: true });
+    const ops = (result.inprog || []).filter(
+      (op) => !op.ns?.startsWith("admin") && op.secs_running != null
+    );
+    res.json({ ops });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Kill an operation
+router.delete("/server/currentop/:opid", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const admin = client.db().admin();
+    await admin.command({ killOp: 1, op: parseInt(req.params.opid) });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Check connection status
 router.get("/status", async (req, res) => {
   try {

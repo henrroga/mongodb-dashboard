@@ -822,6 +822,129 @@ a:hover {
   flex-shrink: 0;
 }
 
+/* Performance Page */
+.perf-page {
+  padding: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.perf-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.perf-header h1 {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.perf-live {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--success);
+  letter-spacing: 0.1em;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.perf-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.perf-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.perf-card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.perf-card-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--text-primary);
+}
+
+.perf-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.perf-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.perf-ops-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.perf-op-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.perf-op-label {
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--text-secondary);
+  min-width: 60px;
+}
+
+.perf-op-track {
+  flex: 1;
+  height: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.perf-op-bar {
+  height: 100%;
+  border-radius: 6px;
+  width: 0%;
+  transition: width 0.5s ease;
+  min-width: 2px;
+}
+
+.perf-op-val {
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: right;
+}
+
 /* Explain Plan */
 .explain-summary {
   margin-bottom: 16px;

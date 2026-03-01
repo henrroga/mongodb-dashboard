@@ -2310,6 +2310,134 @@ function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
   });
 }
 
+// ─── Performance Page ─────────────────────────────────────────────────────────
+
+function initPerformancePage() {
+  let prevOpcounters = null;
+  let prevTimestamp = null;
+  let intervalId = null;
+  let maxDelta = 1;
+
+  const OPS = ['insert', 'query', 'update', 'delete', 'getmore', 'command'];
+
+  async function fetchStats() {
+    try {
+      const res = await fetch('/api/server/stats');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      const now = Date.now();
+      const ss = data;
+
+      // Server info
+      document.getElementById('perfServerInfo').textContent =
+        `MongoDB ${ss.version || ''}  ·  Uptime: ${Math.floor((ss.uptime || 0) / 1000 / 60)} min`;
+
+      // Stat cards
+      document.getElementById('stat-conn-current').textContent = ss.connections?.current ?? '—';
+      document.getElementById('stat-conn-available').textContent = ss.connections?.available ?? '—';
+      document.getElementById('stat-mem-resident').textContent = ss.mem?.resident ? ss.mem.resident + ' MB' : '—';
+      document.getElementById('stat-mem-virtual').textContent = ss.mem?.virtual ? ss.mem.virtual + ' MB' : '—';
+      document.getElementById('stat-net-in').textContent = ss.network?.bytesIn ? formatBytes(ss.network.bytesIn) : '—';
+      document.getElementById('stat-net-out').textContent = ss.network?.bytesOut ? formatBytes(ss.network.bytesOut) : '—';
+
+      // Ops delta
+      if (prevOpcounters && prevTimestamp) {
+        const elapsedSec = (now - prevTimestamp) / 1000;
+        const deltas = {};
+        OPS.forEach(op => {
+          const cur = ss.opcounters?.[op] || 0;
+          const prev = prevOpcounters[op] || 0;
+          deltas[op] = Math.max(0, Math.round((cur - prev) / elapsedSec));
+        });
+
+        maxDelta = Math.max(maxDelta, ...Object.values(deltas), 1);
+
+        OPS.forEach(op => {
+          const val = deltas[op];
+          const pct = (val / maxDelta * 100).toFixed(1);
+          const barEl = document.getElementById(`bar-${op}`);
+          const valEl = document.getElementById(`val-${op}`);
+          if (barEl) barEl.style.width = pct + '%';
+          if (valEl) valEl.textContent = val + '/s';
+        });
+      }
+
+      prevOpcounters = { ...ss.opcounters };
+      prevTimestamp = now;
+    } catch (err) {
+      console.error('Performance stats error:', err);
+    }
+  }
+
+  async function fetchCurrentOps() {
+    const tbody = document.getElementById('currentOpsBody');
+    if (!tbody) return;
+    try {
+      const res = await fetch('/api/server/currentop');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      if (data.ops.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">No active operations</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.ops.map(op => `
+        <tr>
+          <td><span class="cell-value mono">${op.opid ?? '—'}</span></td>
+          <td><span class="cell-value">${escapeHtml(op.op || '—')}</span></td>
+          <td><span class="cell-value mono">${escapeHtml(op.ns || '—')}</span></td>
+          <td><span class="cell-value">${op.secs_running ?? '—'}s</span></td>
+          <td><span class="cell-value">${escapeHtml(op.client || '—')}</span></td>
+          <td>
+            <button class="action-btn delete" onclick="killOp(${op.opid})" title="Kill operation">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </td>
+        </tr>`).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:var(--danger);padding:24px;text-align:center">Error: ${err.message}</td></tr>`;
+    }
+  }
+
+  function startPolling(ms) {
+    if (intervalId) clearInterval(intervalId);
+    if (ms === 0) {
+      document.getElementById('perfLiveIndicator').textContent = '⏸ PAUSED';
+      document.getElementById('perfLiveIndicator').style.color = 'var(--text-muted)';
+      return;
+    }
+    document.getElementById('perfLiveIndicator').textContent = '● LIVE';
+    document.getElementById('perfLiveIndicator').style.color = 'var(--success)';
+    fetchStats();
+    intervalId = setInterval(fetchStats, ms);
+  }
+
+  document.getElementById('perfInterval')?.addEventListener('change', (e) => {
+    startPolling(parseInt(e.target.value));
+  });
+
+  document.getElementById('refreshOps')?.addEventListener('click', fetchCurrentOps);
+
+  startPolling(2000);
+  fetchCurrentOps();
+}
+
+window.killOp = async function(opid) {
+  if (!confirm(`Kill operation ${opid}?`)) return;
+  try {
+    const res = await fetch(`/api/server/currentop/${opid}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    document.getElementById('refreshOps')?.click();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+};
+
 // ─── Schema Validation ───────────────────────────────────────────────────────
 
 async function initValidationPanel(dbName, collectionName) {

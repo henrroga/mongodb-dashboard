@@ -142,6 +142,17 @@ router.get("/browse/:db/:collection", async (req, res) => {
   }
 });
 
+// Performance page
+router.get("/performance", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.redirect("/");
+    res.render("performance", { title: "Performance" });
+  } catch (err) {
+    res.redirect("/");
+  }
+});
+
 // Document detail page
 router.get("/browse/:db/:collection/:id", async (req, res) => {
   try {
