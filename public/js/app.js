@@ -561,6 +561,7 @@ async function initBrowser(dbName, collectionName) {
   setupColumnsModalHandlers();
   setupViewModalHandlers();
   initImportExport(dbName, collectionName);
+  initExplainPlan(dbName, collectionName);
   initCollectionTabs(dbName, collectionName);
   initIndexesPanel(dbName, collectionName);
   initSchemaPanel(dbName, collectionName);
@@ -2306,6 +2307,157 @@ function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
       runQuery(dbName, collectionName);
     });
   });
+}
+
+// ─── Explain Plan ────────────────────────────────────────────────────────────
+
+function initExplainPlan(dbName, collectionName) {
+  const explainBtn = document.getElementById('queryExplainBtn');
+  const modal = document.getElementById('explainModal');
+  if (!explainBtn || !modal) return;
+
+  const close = () => { modal.style.display = 'none'; };
+  document.getElementById('explainModalClose')?.addEventListener('click', close);
+  modal.querySelector('.modal-backdrop')?.addEventListener('click', close);
+
+  let showingRaw = false;
+  document.getElementById('explainRawToggle')?.addEventListener('click', () => {
+    showingRaw = !showingRaw;
+    document.getElementById('explainTree').style.display = showingRaw ? 'none' : 'block';
+    document.getElementById('explainSummary').style.display = showingRaw ? 'none' : 'block';
+    document.getElementById('explainRaw').style.display = showingRaw ? 'block' : 'none';
+    document.getElementById('explainRawToggle').textContent = showingRaw ? 'Visual' : 'Raw JSON';
+  });
+
+  explainBtn.addEventListener('click', async () => {
+    const queryFilterEl = document.getElementById('queryFilter');
+    const queryProjectionEl = document.getElementById('queryProjection');
+    const querySortEl = document.getElementById('querySort');
+
+    let filter = {}, sort = {}, projection = {};
+    try { if (queryFilterEl?.value.trim()) filter = JSON.parse(queryFilterEl.value.trim()); } catch (e) {}
+    try { if (querySortEl?.value.trim()) sort = JSON.parse(querySortEl.value.trim()); } catch (e) {}
+    try { if (queryProjectionEl?.value.trim()) projection = JSON.parse(queryProjectionEl.value.trim()); } catch (e) {}
+
+    document.getElementById('explainLoading').style.display = 'flex';
+    document.getElementById('explainSummary').style.display = 'none';
+    document.getElementById('explainTree').style.display = 'none';
+    document.getElementById('explainRaw').style.display = 'none';
+    showingRaw = false;
+    document.getElementById('explainRawToggle').textContent = 'Raw JSON';
+    modal.style.display = 'flex';
+
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/explain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filter, sort, projection }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      document.getElementById('explainLoading').style.display = 'none';
+      renderExplainPlan(data.plan);
+    } catch (err) {
+      document.getElementById('explainLoading').style.display = 'none';
+      document.getElementById('explainSummary').innerHTML = `<div style="color:var(--danger)">Error: ${err.message}</div>`;
+      document.getElementById('explainSummary').style.display = 'block';
+    }
+  });
+}
+
+function renderExplainPlan(plan) {
+  const execStats = plan.executionStats;
+  const queryPlanner = plan.queryPlanner;
+  const winningPlan = queryPlanner?.winningPlan;
+
+  // Summary bar
+  const summaryEl = document.getElementById('explainSummary');
+  if (execStats) {
+    const indexUsed = getIndexUsed(winningPlan) || 'COLLSCAN (no index)';
+    const isCollscan = indexUsed.includes('COLLSCAN');
+    summaryEl.innerHTML = `
+      <div class="explain-stats">
+        <div class="explain-stat">
+          <div class="explain-stat-value">${execStats.executionTimeMillis ?? '—'}ms</div>
+          <div class="explain-stat-label">Execution time</div>
+        </div>
+        <div class="explain-stat">
+          <div class="explain-stat-value">${execStats.nReturned ?? '—'}</div>
+          <div class="explain-stat-label">Docs returned</div>
+        </div>
+        <div class="explain-stat">
+          <div class="explain-stat-value">${execStats.totalDocsExamined ?? '—'}</div>
+          <div class="explain-stat-label">Docs examined</div>
+        </div>
+        <div class="explain-stat">
+          <div class="explain-stat-value">${execStats.totalKeysExamined ?? '—'}</div>
+          <div class="explain-stat-label">Keys examined</div>
+        </div>
+        <div class="explain-stat ${isCollscan ? 'explain-stat-warn' : 'explain-stat-ok'}">
+          <div class="explain-stat-value" style="font-size:12px;word-break:break-all">${escapeHtml(indexUsed)}</div>
+          <div class="explain-stat-label">Index used</div>
+        </div>
+      </div>`;
+  } else {
+    summaryEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Execution stats not available (run with executionStats verbosity).</p>';
+  }
+  summaryEl.style.display = 'block';
+
+  // Visual plan tree
+  const treeEl = document.getElementById('explainTree');
+  if (winningPlan) {
+    treeEl.innerHTML = '<div style="padding:16px 0;font-family:monospace">' + renderPlanStage(winningPlan, 0) + '</div>';
+    treeEl.style.display = 'block';
+  }
+
+  // Raw JSON
+  document.getElementById('explainRaw').innerHTML = renderJsonTree(plan);
+}
+
+function getIndexUsed(plan) {
+  if (!plan) return null;
+  if (plan.stage === 'IXSCAN') return plan.indexName || 'index';
+  if (plan.stage === 'COLLSCAN') return 'COLLSCAN (no index)';
+  if (plan.inputStage) return getIndexUsed(plan.inputStage);
+  if (plan.inputStages) {
+    for (const s of plan.inputStages) {
+      const r = getIndexUsed(s);
+      if (r) return r;
+    }
+  }
+  return plan.stage || null;
+}
+
+const STAGE_COLORS = {
+  COLLSCAN: '#f85149', IXSCAN: '#3fb950', FETCH: '#58a6ff',
+  SORT: '#d29922', PROJECTION_SIMPLE: '#bc8cff', PROJECTION_DEFAULT: '#bc8cff',
+  LIMIT: '#79c0ff', SKIP: '#79c0ff', OR: '#ff7b72', AND_HASH: '#ff7b72',
+};
+
+function renderPlanStage(stage, depth) {
+  if (!stage) return '';
+  const color = STAGE_COLORS[stage.stage] || '#8b949e';
+  const indent = depth * 24;
+  const details = [];
+  if (stage.indexName) details.push(`index: ${stage.indexName}`);
+  if (stage.filter) details.push(`filter: ${JSON.stringify(stage.filter).substring(0, 60)}`);
+  if (stage.sortPattern) details.push(`sort: ${JSON.stringify(stage.sortPattern)}`);
+  if (stage.limitAmount != null) details.push(`limit: ${stage.limitAmount}`);
+
+  let children = '';
+  if (stage.inputStage) children = renderPlanStage(stage.inputStage, depth + 1);
+  if (stage.inputStages) children = stage.inputStages.map(s => renderPlanStage(s, depth + 1)).join('');
+
+  return `
+    <div style="margin-left:${indent}px;margin-bottom:6px">
+      ${depth > 0 ? `<div style="margin-left:0;margin-bottom:4px;color:var(--text-muted);font-size:11px;padding-left:8px">↑</div>` : ''}
+      <div class="explain-stage-node" style="border-color:${color}">
+        <span class="explain-stage-name" style="color:${color}">${escapeHtml(stage.stage || 'UNKNOWN')}</span>
+        ${details.length > 0 ? `<span class="explain-stage-detail">${details.map(escapeHtml).join(' · ')}</span>` : ''}
+      </div>
+    </div>
+    ${children}`;
 }
 
 // ─── Collection Tabs ─────────────────────────────────────────────────────────

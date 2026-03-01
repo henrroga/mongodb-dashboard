@@ -384,6 +384,13 @@
                   <div id="savedQueriesDropdown" class="saved-queries-dropdown" style="display:none;"></div>
                 </div>
                 <button id="queryResetBtn" class="btn btn-ghost btn-sm">Reset</button>
+                <button id="queryExplainBtn" class="btn btn-ghost btn-sm" title="Explain query plan">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4M12 8h.01"/>
+                  </svg>
+                  Explain
+                </button>
                 <button id="queryRunBtn" class="btn btn-primary btn-sm">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 3 19 12 5 21 5 3"/>
@@ -794,6 +801,28 @@
         </div>
       </div>
     </main>
+
+      <!-- Explain Plan Modal -->
+      <div id="explainModal" class="modal" style="display:none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg" style="max-height:85vh">
+          <div class="modal-header">
+            <h3>Explain Plan</h3>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="explainRawToggle" class="btn btn-sm btn-ghost">Raw JSON</button>
+              <button class="modal-close" id="explainModalClose">&times;</button>
+            </div>
+          </div>
+          <div class="modal-body" style="overflow:auto">
+            <div id="explainSummary" class="explain-summary" style="display:none"></div>
+            <div id="explainTree" style="display:none"></div>
+            <div id="explainRaw" class="json-viewer" style="display:none"></div>
+            <div id="explainLoading" style="display:flex;justify-content:center;padding:40px">
+              <div class="loading-spinner"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Import Modal -->
       <div id="importModal" class="modal" style="display:none">

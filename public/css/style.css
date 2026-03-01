@@ -822,6 +822,74 @@ a:hover {
   flex-shrink: 0;
 }
 
+/* Explain Plan */
+.explain-summary {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.explain-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.explain-stat {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  min-width: 100px;
+  flex: 1;
+}
+
+.explain-stat-ok {
+  border-color: var(--success);
+}
+
+.explain-stat-warn {
+  border-color: var(--danger);
+}
+
+.explain-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.explain-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.explain-stage-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.explain-stage-name {
+  font-weight: 700;
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.explain-stage-detail {
+  color: var(--text-muted);
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+}
+
 /* Aggregation Pipeline Builder */
 .agg-stages-col {
   width: 420px;
