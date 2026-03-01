@@ -233,6 +233,14 @@
 
         <div class="content">
           <% if (activeCollection) { %>
+          <!-- Tab bar -->
+          <div class="collection-tabs">
+            <button class="collection-tab active" data-tab="documents">Documents</button>
+            <button class="collection-tab" data-tab="indexes">Indexes</button>
+          </div>
+
+          <!-- Documents panel -->
+          <div id="panel-documents">
           <div class="content-header">
             <div class="content-title">
               <h2><%= activeCollection %></h2>
@@ -443,6 +451,108 @@
             <button id="loadMoreBtn" class="btn btn-ghost">Load More</button>
             <span id="paginationInfo" class="pagination-info"></span>
           </div>
+          </div><!-- end #panel-documents -->
+
+          <!-- Indexes panel -->
+          <div id="panel-indexes" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+            <div class="content-header">
+              <div class="content-title">
+                <h2>Indexes</h2>
+                <span id="indexCount" class="doc-count"></span>
+              </div>
+              <div class="content-actions">
+                <button id="refreshIndexesBtn" class="btn btn-ghost">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                  </svg>
+                </button>
+                <button id="createIndexBtn" class="btn btn-primary">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  Create Index
+                </button>
+              </div>
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Keys</th>
+                    <th>Properties</th>
+                    <th>Size</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="indexTableBody">
+                  <tr class="loading-row"><td colspan="5"><div class="loading-spinner"></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Create Index Modal -->
+          <div id="createIndexModal" class="modal" style="display:none">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+              <div class="modal-header">
+                <h3>Create Index</h3>
+                <button class="modal-close" id="createIndexModalClose">&times;</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-field">
+                  <label>Fields (JSON key spec)</label>
+                  <input type="text" id="indexKey" class="query-input mono" placeholder='{ field: 1 }' autocomplete="off"/>
+                  <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">Use 1 for ascending, -1 for descending, "text", "2dsphere", "hashed"</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                  <div class="form-field" style="display:flex;align-items:center;gap:8px">
+                    <input type="checkbox" id="indexUnique"/>
+                    <label for="indexUnique" style="margin:0">Unique</label>
+                  </div>
+                  <div class="form-field" style="display:flex;align-items:center;gap:8px">
+                    <input type="checkbox" id="indexSparse"/>
+                    <label for="indexSparse" style="margin:0">Sparse</label>
+                  </div>
+                </div>
+                <div class="form-field" style="margin-top:12px">
+                  <label>TTL — expireAfterSeconds (optional)</label>
+                  <input type="number" id="indexTTL" class="query-input" placeholder="e.g. 3600" min="0"/>
+                </div>
+                <div class="form-field" style="margin-top:12px">
+                  <label>Custom name (optional)</label>
+                  <input type="text" id="indexName" class="query-input" placeholder="Auto-generated if blank" autocomplete="off"/>
+                </div>
+                <p id="createIndexError" class="error-message" style="display:none;margin-top:10px"></p>
+              </div>
+              <div class="modal-footer">
+                <button id="createIndexCancel" class="btn btn-ghost">Cancel</button>
+                <button id="createIndexConfirm" class="btn btn-primary">Create Index</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Drop Index Modal -->
+          <div id="dropIndexModal" class="modal" style="display:none">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-sm">
+              <div class="modal-header">
+                <h3>Drop Index</h3>
+                <button class="modal-close" id="dropIndexModalClose">&times;</button>
+              </div>
+              <div class="modal-body">
+                <p>Drop index <strong id="dropIndexName"></strong>?</p>
+                <p id="dropIndexError" class="error-message" style="display:none;margin-top:10px"></p>
+              </div>
+              <div class="modal-footer">
+                <button id="dropIndexCancel" class="btn btn-ghost">Cancel</button>
+                <button id="dropIndexConfirm" class="btn btn-danger">Drop</button>
+              </div>
+            </div>
+          </div>
+
           <% } else { %>
           <div class="empty-state">
             <svg

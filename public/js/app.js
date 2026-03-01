@@ -561,6 +561,8 @@ async function initBrowser(dbName, collectionName) {
   setupColumnsModalHandlers();
   setupViewModalHandlers();
   initImportExport(dbName, collectionName);
+  initCollectionTabs(dbName, collectionName);
+  initIndexesPanel(dbName, collectionName);
 }
 
 function runQuery(dbName, collectionName) {
@@ -2303,6 +2305,185 @@ function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
     });
   });
 }
+
+// ─── Collection Tabs ─────────────────────────────────────────────────────────
+
+function initCollectionTabs(dbName, collectionName) {
+  const tabs = document.querySelectorAll('.collection-tab');
+  const panels = {
+    documents: document.getElementById('panel-documents'),
+    indexes: document.getElementById('panel-indexes'),
+  };
+
+  function switchTab(tabName) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+    Object.entries(panels).forEach(([name, el]) => {
+      if (!el) return;
+      el.style.display = name === tabName ? 'flex' : 'none';
+      el.style.flexDirection = 'column';
+    });
+    if (tabName === 'indexes') {
+      loadIndexes(dbName, collectionName);
+    }
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+}
+
+// ─── Indexes ─────────────────────────────────────────────────────────────────
+
+async function loadIndexes(dbName, collectionName) {
+  const tbody = document.getElementById('indexTableBody');
+  const countEl = document.getElementById('indexCount');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="5"><div class="loading-spinner"></div></td></tr>';
+
+  try {
+    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    const indexes = data.indexes;
+    if (countEl) countEl.textContent = `${indexes.length} index${indexes.length !== 1 ? 'es' : ''}`;
+
+    tbody.innerHTML = indexes.map(idx => {
+      const keyStr = Object.entries(idx.key).map(([k, v]) => `${k}: ${v}`).join(', ');
+      const props = [
+        idx.unique ? '<span class="index-badge">unique</span>' : '',
+        idx.sparse ? '<span class="index-badge">sparse</span>' : '',
+        idx.hidden ? '<span class="index-badge index-badge-warn">hidden</span>' : '',
+        idx.expireAfterSeconds != null ? `<span class="index-badge">TTL ${idx.expireAfterSeconds}s</span>` : '',
+      ].filter(Boolean).join(' ');
+      const size = idx.sizeBytes != null ? formatBytes(idx.sizeBytes) : '—';
+      const canDrop = idx.name !== '_id_';
+      return `
+        <tr>
+          <td><span class="cell-value">${escapeHtml(idx.name)}</span></td>
+          <td><span class="cell-value mono">${escapeHtml(keyStr)}</span></td>
+          <td>${props || '<span class="cell-muted">—</span>'}</td>
+          <td><span class="cell-value">${size}</span></td>
+          <td>
+            <div class="cell-actions">
+              ${canDrop ? `
+              <button class="action-btn" title="${idx.hidden ? 'Unhide' : 'Hide'}" onclick="toggleIndexHidden('${encodeURIComponent(dbName)}','${encodeURIComponent(collectionName)}','${encodeURIComponent(idx.name)}',${!idx.hidden})">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  ${idx.hidden
+                    ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+                    : '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/>'}
+                </svg>
+              </button>
+              <button class="action-btn delete" title="Drop" onclick="openDropIndexModal('${encodeURIComponent(dbName)}','${encodeURIComponent(collectionName)}','${encodeURIComponent(idx.name)}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+              </button>` : '<span class="cell-muted">system</span>'}
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--danger)">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function initIndexesPanel(dbName, collectionName) {
+  document.getElementById('refreshIndexesBtn')?.addEventListener('click', () => loadIndexes(dbName, collectionName));
+
+  // Create index modal
+  const createModal = document.getElementById('createIndexModal');
+  const closeCreate = () => {
+    createModal.style.display = 'none';
+    document.getElementById('createIndexError').style.display = 'none';
+  };
+  document.getElementById('createIndexBtn')?.addEventListener('click', () => { createModal.style.display = 'flex'; document.getElementById('indexKey').focus(); });
+  document.getElementById('createIndexModalClose')?.addEventListener('click', closeCreate);
+  document.getElementById('createIndexCancel')?.addEventListener('click', closeCreate);
+  createModal?.querySelector('.modal-backdrop')?.addEventListener('click', closeCreate);
+
+  document.getElementById('createIndexConfirm')?.addEventListener('click', async () => {
+    const keyStr = document.getElementById('indexKey').value.trim();
+    const errEl = document.getElementById('createIndexError');
+    if (!keyStr) { errEl.textContent = 'Index key is required'; errEl.style.display = 'block'; return; }
+
+    let key;
+    try { key = JSON.parse(keyStr); } catch (e) { errEl.textContent = 'Invalid JSON: ' + e.message; errEl.style.display = 'block'; return; }
+
+    const options = {};
+    if (document.getElementById('indexUnique').checked) options.unique = true;
+    if (document.getElementById('indexSparse').checked) options.sparse = true;
+    const ttl = parseInt(document.getElementById('indexTTL').value);
+    if (!isNaN(ttl) && ttl >= 0) options.expireAfterSeconds = ttl;
+    const name = document.getElementById('indexName').value.trim();
+    if (name) options.name = name;
+
+    const btn = document.getElementById('createIndexConfirm');
+    btn.disabled = true; btn.textContent = 'Creating...';
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, options }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      closeCreate();
+      loadIndexes(dbName, collectionName);
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create Index';
+    }
+  });
+
+  // Drop index modal
+  const dropModal = document.getElementById('dropIndexModal');
+  const closeDropIdx = () => { dropModal.style.display = 'none'; };
+  document.getElementById('dropIndexModalClose')?.addEventListener('click', closeDropIdx);
+  document.getElementById('dropIndexCancel')?.addEventListener('click', closeDropIdx);
+  dropModal?.querySelector('.modal-backdrop')?.addEventListener('click', closeDropIdx);
+}
+
+window.openDropIndexModal = function(dbName, collectionName, indexName) {
+  document.getElementById('dropIndexName').textContent = decodeURIComponent(indexName);
+  document.getElementById('dropIndexError').style.display = 'none';
+  document.getElementById('dropIndexModal').style.display = 'flex';
+
+  document.getElementById('dropIndexConfirm').onclick = async () => {
+    const btn = document.getElementById('dropIndexConfirm');
+    const errEl = document.getElementById('dropIndexError');
+    btn.disabled = true; btn.textContent = 'Dropping...';
+    try {
+      const res = await fetch(`/api/${decodeURIComponent(dbName)}/${decodeURIComponent(collectionName)}/indexes/${decodeURIComponent(indexName)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      document.getElementById('dropIndexModal').style.display = 'none';
+      loadIndexes(decodeURIComponent(dbName), decodeURIComponent(collectionName));
+    } catch (err) {
+      errEl.textContent = err.message; errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Drop';
+    }
+  };
+};
+
+window.toggleIndexHidden = async function(dbName, collectionName, indexName, hidden) {
+  try {
+    const res = await fetch(`/api/${decodeURIComponent(dbName)}/${decodeURIComponent(collectionName)}/indexes/${decodeURIComponent(indexName)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hidden }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    loadIndexes(decodeURIComponent(dbName), decodeURIComponent(collectionName));
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+};
 
 // ─── Import / Export ─────────────────────────────────────────────────────────
 
