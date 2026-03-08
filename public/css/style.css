@@ -1980,6 +1980,10 @@ a:hover {
   color: var(--danger);
 }
 
+.data-table .action-btn.duplicate:hover {
+  color: var(--accent);
+}
+
 .loading-row td {
   text-align: center;
   padding: 40px;

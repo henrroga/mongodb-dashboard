@@ -1535,7 +1535,22 @@ function createDocumentRow(doc, dbName, collectionName) {
     openDocModal(dbName, collectionName, doc);
   });
   actionsDiv.appendChild(editBtn);
-  
+
+  // Duplicate button
+  const dupBtn = document.createElement('button');
+  dupBtn.className = 'action-btn duplicate';
+  dupBtn.title = 'Duplicate';
+  dupBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+    </svg>
+  `;
+  dupBtn.addEventListener('click', async () => {
+    await duplicateDocument(doc, dbName, collectionName);
+  });
+  actionsDiv.appendChild(dupBtn);
+
   // Delete button
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'action-btn delete';
@@ -1554,6 +1569,35 @@ function createDocumentRow(doc, dbName, collectionName) {
   actionsTd.appendChild(actionsDiv);
   tr.appendChild(actionsTd);
   return tr;
+}
+
+// ─── Duplicate Document ──────────────────────────────────────────────────────
+
+async function duplicateDocument(doc, dbName, collectionName) {
+  try {
+    // Clone document and remove _id so MongoDB generates a new one
+    const clone = JSON.parse(JSON.stringify(doc));
+    delete clone._id;
+
+    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clone),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    showToast('Document duplicated successfully', 'success', 2500);
+
+    // Reload documents to show the new one
+    currentCursor = null;
+    currentNextSkip = null;
+    allDocuments = [];
+    loadDocuments(dbName, collectionName);
+  } catch (err) {
+    showToast('Duplicate failed: ' + err.message, 'error');
+  }
 }
 
 // ─── View Mode Switching ─────────────────────────────────────────────────────
@@ -2603,7 +2647,17 @@ function setupViewModalHandlers() {
       await populateReferences(currentViewDoc, currentViewDb);
     }
   });
-  
+
+  const duplicateBtn = document.getElementById('viewModalDuplicateBtn');
+  if (duplicateBtn) {
+    duplicateBtn.addEventListener('click', async () => {
+      if (currentViewDoc && currentViewDb && currentViewCollection) {
+        await duplicateDocument(currentViewDoc, currentViewDb, currentViewCollection);
+        closeModal();
+      }
+    });
+  }
+
   copyBtn.addEventListener('click', async () => {
     if (!currentViewDoc) return;
     
