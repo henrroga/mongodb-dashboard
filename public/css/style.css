@@ -440,9 +440,49 @@ a:hover {
 }
 
 .recent-host {
-  flex: 1;
   font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conn-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.conn-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conn-name {
   font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.conn-label-btn {
+  padding: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.recent-connections li:hover .conn-label-btn {
+  opacity: 1;
+}
+
+.conn-label-btn:hover {
+  color: var(--accent);
 }
 
 .recent-remove {

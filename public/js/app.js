@@ -149,22 +149,36 @@ function maskConnectionString(str) {
   }
 }
 
+const CONNECTION_COLORS = ['#388bfd', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#ff7b72', '#79c0ff', '#8b949e'];
+
 function getConnections() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    // Migrate plain strings to objects
+    return raw.map(c => typeof c === 'string' ? { uri: c, name: '', color: '' } : c);
   } catch {
     return [];
   }
 }
 
-function saveConnection(connectionString) {
-  const connections = getConnections().filter(c => c !== connectionString);
-  connections.unshift(connectionString);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(connections.slice(0, 5)));
+function saveConnection(connectionString, name, color) {
+  const connections = getConnections().filter(c => c.uri !== connectionString);
+  connections.unshift({ uri: connectionString, name: name || '', color: color || '' });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(connections.slice(0, 10)));
+}
+
+function updateConnectionMeta(connectionString, name, color) {
+  const connections = getConnections();
+  const conn = connections.find(c => c.uri === connectionString);
+  if (conn) {
+    if (name !== undefined) conn.name = name;
+    if (color !== undefined) conn.color = color;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
+  }
 }
 
 function removeConnection(connectionString) {
-  const connections = getConnections().filter(c => c !== connectionString);
+  const connections = getConnections().filter(c => c.uri !== connectionString);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
 }
 
@@ -679,37 +693,63 @@ async function initConnectPage() {
   reconnectLoading.style.display = 'none';
   connectContent.style.display = 'block';
 
-  // Show recent connections
-  const connections = getConnections();
-  if (connections.length > 0) {
+  // Show recent connections (bookmarks)
+  function renderBookmarks() {
+    const connections = getConnections();
+    if (connections.length === 0) { recentEl.style.display = 'none'; return; }
     recentEl.style.display = 'block';
     recentList.innerHTML = connections.map(conn => `
-      <li data-conn="${encodeURIComponent(conn)}">
-        <span class="recent-host">${maskConnectionString(conn)}</span>
-        <span class="recent-remove" data-remove="${encodeURIComponent(conn)}">×</span>
+      <li data-conn="${encodeURIComponent(conn.uri)}">
+        ${conn.color ? `<span class="conn-color-dot" style="background:${conn.color}"></span>` : ''}
+        <div class="conn-info">
+          ${conn.name ? `<span class="conn-name">${escapeHtml(conn.name)}</span>` : ''}
+          <span class="recent-host">${maskConnectionString(conn.uri)}</span>
+        </div>
+        <span class="conn-label-btn" data-label="${encodeURIComponent(conn.uri)}" title="Edit label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </span>
+        <span class="recent-remove" data-remove="${encodeURIComponent(conn.uri)}">×</span>
       </li>
     `).join('');
-
-    recentList.addEventListener('click', (e) => {
-      const removeBtn = e.target.closest('.recent-remove');
-      if (removeBtn) {
-        e.stopPropagation();
-        const conn = decodeURIComponent(removeBtn.dataset.remove);
-        removeConnection(conn);
-        removeBtn.closest('li').remove();
-        if (getConnections().length === 0) {
-          recentEl.style.display = 'none';
-        }
-        return;
-      }
-
-      const li = e.target.closest('li');
-      if (li) {
-        input.value = decodeURIComponent(li.dataset.conn);
-        form.dispatchEvent(new Event('submit'));
-      }
-    });
   }
+  renderBookmarks();
+
+  recentList.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('.recent-remove');
+    if (removeBtn) {
+      e.stopPropagation();
+      const conn = decodeURIComponent(removeBtn.dataset.remove);
+      removeConnection(conn);
+      renderBookmarks();
+      return;
+    }
+
+    const labelBtn = e.target.closest('.conn-label-btn');
+    if (labelBtn) {
+      e.stopPropagation();
+      const uri = decodeURIComponent(labelBtn.dataset.label);
+      const conns = getConnections();
+      const existing = conns.find(c => c.uri === uri);
+      const name = prompt('Connection name:', existing?.name || '');
+      if (name === null) return;
+      // Show color picker
+      const color = prompt('Color (hex or pick from: blue, green, yellow, red, purple):', existing?.color || '');
+      const colorMap = { blue: '#388bfd', green: '#3fb950', yellow: '#d29922', red: '#f85149', purple: '#bc8cff' };
+      const resolvedColor = colorMap[color?.toLowerCase()] || color || '';
+      updateConnectionMeta(uri, name, resolvedColor);
+      renderBookmarks();
+      return;
+    }
+
+    const li = e.target.closest('li');
+    if (li) {
+      input.value = decodeURIComponent(li.dataset.conn);
+      form.dispatchEvent(new Event('submit'));
+    }
+  });
 
   // ── Connection Builder ──────────────────────────────────────────────────
   initConnectionBuilder(input);
