@@ -2804,6 +2804,49 @@ a:hover {
   text-align: right;
 }
 
+/* Read-Only Mode */
+.readonly-badge {
+  background: #d29922;
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: auto;
+  margin-right: 8px;
+  animation: toast-in 0.2s ease;
+}
+
+.readonly-badge:hover {
+  background: #e3b341;
+}
+
+.readonly-mode #addDocBtn,
+.readonly-mode #importBtn,
+.readonly-mode .action-btn.edit,
+.readonly-mode .action-btn.delete,
+.readonly-mode .action-btn.duplicate,
+.readonly-mode #bulkDeleteBtn,
+.readonly-mode #modalSave,
+.readonly-mode #modalDelete,
+.readonly-mode #editSave,
+.readonly-mode #deleteConfirm,
+.readonly-mode #saveValidation,
+.readonly-mode .cell-editable::after,
+.readonly-mode #createIndexBtn,
+.readonly-mode #dropDbBtn,
+.readonly-mode #createCollectionConfirm,
+.readonly-mode #dropColConfirm,
+.readonly-mode #renameColConfirm {
+  display: none !important;
+}
+
+.readonly-mode .cell-editable {
+  cursor: default;
+}
+
 /* Command Palette */
 .command-palette {
   position: fixed;

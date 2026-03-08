@@ -121,6 +121,44 @@ function showToast(message, type = 'info', duration = 4000) {
 const STORAGE_KEY = 'mongodb_dashboard_connections';
 const ACTIVE_CONNECTION_KEY = 'mongodb_dashboard_active_connection';
 const THEME_KEY = 'mongodb_dashboard_theme';
+const READONLY_KEY = 'mongodb_dashboard_readonly';
+
+function isReadOnly() {
+  return localStorage.getItem(READONLY_KEY) === 'true';
+}
+
+function setReadOnly(val) {
+  localStorage.setItem(READONLY_KEY, val ? 'true' : 'false');
+  document.body.classList.toggle('readonly-mode', val);
+  updateReadOnlyBadge();
+}
+
+function updateReadOnlyBadge() {
+  let badge = document.getElementById('readonlyBadge');
+  if (isReadOnly()) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.id = 'readonlyBadge';
+      badge.className = 'readonly-badge';
+      badge.textContent = 'READ-ONLY';
+      badge.title = 'Click to disable read-only mode';
+      badge.addEventListener('click', () => setReadOnly(false));
+      const header = document.querySelector('.header');
+      if (header) header.appendChild(badge);
+    }
+    badge.style.display = '';
+  } else if (badge) {
+    badge.style.display = 'none';
+  }
+}
+
+// Apply read-only on page load
+document.addEventListener('DOMContentLoaded', () => {
+  if (isReadOnly()) {
+    document.body.classList.add('readonly-mode');
+    updateReadOnlyBadge();
+  }
+});
 
 // Utility functions
 function formatBytes(bytes) {
@@ -446,6 +484,7 @@ function getCommandActions() {
     { label: 'Focus Search', category: 'Actions', action: () => { const s = document.getElementById('searchInput'); if (s) { s.focus(); s.select(); } }},
     { label: 'Focus Filter', category: 'Actions', action: () => document.getElementById('queryFilter')?.focus() },
     { label: 'Select Columns', category: 'Actions', action: () => document.getElementById('columnsBtn')?.click() },
+    { label: isReadOnly() ? 'Disable Read-Only Mode' : 'Enable Read-Only Mode', category: 'Settings', action: () => setReadOnly(!isReadOnly()) },
   ];
 
   // Add open tabs as navigation options
@@ -2038,6 +2077,7 @@ function renderJsonView() {
 // ─── Inline Field Editing ────────────────────────────────────────────────────
 
 function startInlineEdit(td, doc, field, dbName, collectionName, docId) {
+  if (isReadOnly()) return;
   if (td.querySelector('.inline-edit-input')) return; // Already editing
 
   const currentValue = doc[field];
