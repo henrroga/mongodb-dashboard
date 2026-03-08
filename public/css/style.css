@@ -2050,6 +2050,15 @@ a:hover {
   color: var(--accent);
 }
 
+.cell-id-copy {
+  cursor: pointer;
+}
+
+.cell-id-copy:hover {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
 .data-table .cell-value {
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 12px;

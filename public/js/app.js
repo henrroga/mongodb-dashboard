@@ -1437,8 +1437,18 @@ async function initBrowser(dbName, collectionName) {
   initViewModeToggle(dbName, collectionName);
   initShellPanel(dbName);
 
-  // Delegated click handler for expandable cells
+  // Delegated click handler for expandable cells and copyable IDs
   document.addEventListener('click', (e) => {
+    // Copy ID on click
+    const copyEl = e.target.closest('.cell-id-copy');
+    if (copyEl) {
+      const text = copyEl.dataset.copy || copyEl.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied ID to clipboard', 'success', 1500);
+      }).catch(() => {});
+      return;
+    }
+
     const expandable = e.target.closest('.cell-expandable');
     if (!expandable) return;
     const pre = expandable.querySelector('.cell-expanded-json');
@@ -2328,7 +2338,7 @@ function formatCellValue(value, field) {
   }
 
   if (field === '_id' && value.$oid) {
-    return `<span class="cell-id">${value.$oid}</span>`;
+    return `<span class="cell-id cell-id-copy" title="Click to copy" data-copy="${value.$oid}">${value.$oid}</span>`;
   }
 
   if (typeof value === 'object') {
