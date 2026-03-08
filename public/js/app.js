@@ -1088,6 +1088,21 @@ function updateUrlParams() {
   window.history.replaceState({}, '', url);
 }
 
+function initCollectionSearch() {
+  const searchInput = document.getElementById('collectionSearch');
+  if (!searchInput) return;
+
+  searchInput.addEventListener('input', () => {
+    const term = searchInput.value.toLowerCase();
+    document.querySelectorAll('#collectionList .collection-item-wrapper').forEach(item => {
+      const name = item.querySelector('.collection-name')?.textContent.toLowerCase() || '';
+      item.style.display = name.includes(term) ? '' : 'none';
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initCollectionSearch);
+
 async function initBrowser(dbName, collectionName) {
   currentCursor = null;
   currentNextSkip = null;

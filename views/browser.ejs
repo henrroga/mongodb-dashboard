@@ -152,6 +152,9 @@
               </button>
             </div>
           </div>
+          <div class="sidebar-search">
+            <input type="text" id="collectionSearch" placeholder="Filter collections..." autocomplete="off" spellcheck="false"/>
+          </div>
           <nav class="collection-list" id="collectionList">
             <% collections.forEach(function(col) { %>
             <div class="collection-item-wrapper <%= activeCollection === col.name ? 'active' : '' %>">
