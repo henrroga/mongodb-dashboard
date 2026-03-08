@@ -3878,6 +3878,33 @@ textarea.inline-edit-input {
   }
 }
 
+/* ─── Pagination Jump ────────────────────────────────────────────────── */
+
+.pagination-jump {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pagination-skip-input {
+  width: 80px;
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.pagination-skip-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* ─── Sidebar Resize Handle ──────────────────────────────────────────── */
 
 .sidebar-resize-handle {

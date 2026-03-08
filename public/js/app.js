@@ -1406,6 +1406,19 @@ async function initBrowser(dbName, collectionName) {
     }
   });
 
+  // Go to skip offset
+  document.getElementById('paginationGoBtn')?.addEventListener('click', () => {
+    const skipInput = document.getElementById('paginationSkipInput');
+    const skip = parseInt(skipInput?.value) || 0;
+    allDocuments = [];
+    tableFields = [];
+    const tableBody = document.getElementById('tableBody');
+    const tableHeader = document.getElementById('tableHeader');
+    if (tableBody) tableBody.innerHTML = '';
+    if (tableHeader) tableHeader.innerHTML = '';
+    loadDocuments(dbName, collectionName, null, skip);
+  });
+
   // Modal handlers
   setupModalHandlers();
   setupColumnsModalHandlers();
@@ -1572,6 +1585,7 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
     }
 
     // Pagination
+    const jumpEl = document.getElementById('paginationJump');
     if (hasMore) {
       pagination.style.display = 'flex';
       document.getElementById('loadMoreBtn').style.display = 'block';
@@ -1581,6 +1595,7 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
       } else {
         document.getElementById('paginationInfo').textContent = `Showing ${allDocuments.length} of ~${formatCount(totalCount)}`;
       }
+      if (jumpEl) jumpEl.style.display = 'flex';
     } else {
       pagination.style.display = allDocuments.length > 0 ? 'flex' : 'none';
       document.getElementById('loadMoreBtn').style.display = 'none';
@@ -1590,6 +1605,7 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
       } else {
         document.getElementById('paginationInfo').textContent = `Showing all ${allDocuments.length} documents`;
       }
+      if (jumpEl) jumpEl.style.display = 'none';
     }
 
     if (documents.length === 0 && !cursor) {
