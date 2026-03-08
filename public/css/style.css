@@ -2572,6 +2572,71 @@ a:hover {
   }
 }
 
+/* Inline Editing */
+.cell-editable {
+  cursor: default;
+  position: relative;
+}
+
+.cell-editable:hover {
+  background: rgba(56, 139, 253, 0.05);
+}
+
+.cell-editable:hover::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'/%3E%3Cpath d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'/%3E%3C/svg%3E");
+  background-size: contain;
+  opacity: 0.4;
+}
+
+.inline-edit-input {
+  width: 100%;
+  min-width: 80px;
+  padding: 4px 6px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 2px solid var(--accent);
+  border-radius: 3px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+textarea.inline-edit-input {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.inline-edit-saving {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.inline-edit-success {
+  animation: inline-success 0.8s ease;
+}
+
+.inline-edit-error {
+  animation: inline-error 0.8s ease;
+}
+
+@keyframes inline-success {
+  0% { background: rgba(63, 185, 80, 0.2); }
+  100% { background: transparent; }
+}
+
+@keyframes inline-error {
+  0% { background: rgba(248, 81, 73, 0.2); }
+  100% { background: transparent; }
+}
+
 /* View Mode Toggle */
 .view-mode-toggle {
   display: flex;

@@ -1292,10 +1292,19 @@ function isArrayField(fieldName) {
 
 function createDocumentRow(doc, dbName, collectionName) {
   const tr = document.createElement('tr');
-  
+  const docId = doc._id?.$oid || doc._id;
+
   tableFields.forEach(field => {
     const td = document.createElement('td');
     td.innerHTML = formatCellValue(doc[field], field);
+
+    // Enable inline editing for non-_id simple fields
+    if (field !== '_id' && docId) {
+      td.classList.add('cell-editable');
+      td.addEventListener('dblclick', () => {
+        startInlineEdit(td, doc, field, dbName, collectionName, docId);
+      });
+    }
     tr.appendChild(td);
   });
 
@@ -1313,9 +1322,6 @@ function createDocumentRow(doc, dbName, collectionName) {
     extraFieldsTd.innerHTML = '<span class="cell-muted">—</span>';
   }
   tr.appendChild(extraFieldsTd);
-
-  // Get document ID for actions
-  const docId = doc._id?.$oid || doc._id;
 
   // Actions column
   const actionsTd = document.createElement('td');
@@ -1487,6 +1493,134 @@ function renderJsonView() {
 
   // Use renderJsonTree for syntax-colored JSON
   body.innerHTML = renderJsonTree(allDocuments, 0);
+}
+
+// ─── Inline Field Editing ────────────────────────────────────────────────────
+
+function startInlineEdit(td, doc, field, dbName, collectionName, docId) {
+  if (td.querySelector('.inline-edit-input')) return; // Already editing
+
+  const currentValue = doc[field];
+  const originalHtml = td.innerHTML;
+  const isComplex = currentValue !== null && typeof currentValue === 'object';
+
+  // Create edit input
+  const input = document.createElement(isComplex ? 'textarea' : 'input');
+  input.className = 'inline-edit-input';
+
+  if (isComplex) {
+    input.value = JSON.stringify(currentValue, null, 2);
+    input.rows = 4;
+  } else if (typeof currentValue === 'boolean') {
+    // Boolean toggle
+    const select = document.createElement('select');
+    select.className = 'inline-edit-input';
+    select.innerHTML = `<option value="true" ${currentValue ? 'selected' : ''}>true</option><option value="false" ${!currentValue ? 'selected' : ''}>false</option>`;
+    td.innerHTML = '';
+    td.appendChild(select);
+    select.focus();
+
+    const save = async () => {
+      const newVal = select.value === 'true';
+      if (newVal !== currentValue) {
+        await saveInlineEdit(td, doc, field, newVal, dbName, collectionName, docId, originalHtml);
+      } else {
+        td.innerHTML = originalHtml;
+      }
+    };
+    select.addEventListener('change', save);
+    select.addEventListener('blur', save);
+    select.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { td.innerHTML = originalHtml; }
+    });
+    return;
+  } else if (currentValue === null || currentValue === undefined) {
+    input.value = '';
+    input.placeholder = 'null';
+  } else {
+    input.value = String(currentValue);
+  }
+
+  if (input.tagName === 'INPUT') {
+    input.type = typeof currentValue === 'number' ? 'number' : 'text';
+    if (typeof currentValue === 'number') input.step = 'any';
+  }
+
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+
+  const save = async () => {
+    const rawValue = input.value;
+    let newValue;
+
+    if (isComplex) {
+      try {
+        newValue = JSON.parse(rawValue);
+      } catch {
+        td.innerHTML = originalHtml;
+        return;
+      }
+    } else if (rawValue === '' && (currentValue === null || currentValue === undefined)) {
+      td.innerHTML = originalHtml;
+      return;
+    } else if (typeof currentValue === 'number') {
+      newValue = Number(rawValue);
+      if (isNaN(newValue)) { td.innerHTML = originalHtml; return; }
+    } else if (rawValue === 'null') {
+      newValue = null;
+    } else {
+      newValue = rawValue;
+    }
+
+    // No change
+    if (JSON.stringify(newValue) === JSON.stringify(currentValue)) {
+      td.innerHTML = originalHtml;
+      return;
+    }
+
+    await saveInlineEdit(td, doc, field, newValue, dbName, collectionName, docId, originalHtml);
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !isComplex) save();
+    if (e.key === 'Enter' && isComplex && (e.ctrlKey || e.metaKey)) save();
+    if (e.key === 'Escape') { td.innerHTML = originalHtml; }
+  });
+}
+
+async function saveInlineEdit(td, doc, field, newValue, dbName, collectionName, docId, originalHtml) {
+  td.innerHTML = '<span class="inline-edit-saving">Saving...</span>';
+
+  try {
+    // Build updated document (clone and modify field)
+    const updatedDoc = JSON.parse(JSON.stringify(doc));
+    delete updatedDoc._id;
+    updatedDoc[field] = newValue;
+
+    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedDoc),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    // Update local document reference
+    doc[field] = newValue;
+    td.innerHTML = formatCellValue(newValue, field);
+
+    // Flash success
+    td.classList.add('inline-edit-success');
+    setTimeout(() => td.classList.remove('inline-edit-success'), 800);
+  } catch (err) {
+    td.innerHTML = originalHtml;
+    td.classList.add('inline-edit-error');
+    setTimeout(() => td.classList.remove('inline-edit-error'), 800);
+  }
 }
 
 function formatCellValue(value, field) {
