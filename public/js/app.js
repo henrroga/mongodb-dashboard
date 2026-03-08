@@ -1521,6 +1521,21 @@ async function initBrowser(dbName, collectionName) {
     openColumnsModal(dbName, collectionName);
   });
 
+  // Text wrap toggle
+  const wrapToggle = document.getElementById('wrapToggle');
+  if (wrapToggle) {
+    const isWrapped = localStorage.getItem('mongodb_wrap_cells') === 'true';
+    if (isWrapped) document.body.classList.add('cells-wrapped');
+    wrapToggle.classList.toggle('active', isWrapped);
+
+    wrapToggle.addEventListener('click', () => {
+      const wrap = !document.body.classList.contains('cells-wrapped');
+      document.body.classList.toggle('cells-wrapped', wrap);
+      wrapToggle.classList.toggle('active', wrap);
+      localStorage.setItem('mongodb_wrap_cells', wrap);
+    });
+  }
+
   // Auto-refresh toggle
   initAutoRefresh(dbName, collectionName);
 

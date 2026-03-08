@@ -3887,6 +3887,24 @@ textarea.inline-edit-input {
   }
 }
 
+/* ─── Text Wrap Toggle ───────────────────────────────────────────────── */
+
+.cells-wrapped .data-table td {
+  white-space: normal;
+  word-break: break-word;
+  max-width: none;
+}
+
+.cells-wrapped .data-table .cell-value,
+.cells-wrapped .data-table .cell-string {
+  overflow: visible;
+  text-overflow: unset;
+}
+
+#wrapToggle.active {
+  color: var(--accent);
+}
+
 /* ─── Server Version Badge ───────────────────────────────────────────── */
 
 .server-version-badge {
