@@ -1,5 +1,84 @@
 // MongoDB Dashboard - Client-side JavaScript
 
+// ─── CodeMirror Editor Manager ──────────────────────────────────────────────
+
+const cmEditors = {};
+
+function createJsonEditor(elementId, options = {}) {
+  const el = typeof elementId === 'string' ? document.getElementById(elementId) : elementId;
+  if (!el || !window.CodeMirror) return null;
+
+  // Destroy existing instance if any
+  const existingKey = typeof elementId === 'string' ? elementId : el.id;
+  if (existingKey && cmEditors[existingKey]) {
+    cmEditors[existingKey].toTextArea();
+    delete cmEditors[existingKey];
+  }
+
+  const cm = CodeMirror.fromTextArea(el, {
+    mode: { name: 'javascript', json: true },
+    lineNumbers: true,
+    matchBrackets: true,
+    autoCloseBrackets: true,
+    foldGutter: true,
+    gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+    tabSize: 2,
+    indentWithTabs: false,
+    lineWrapping: true,
+    styleActiveLine: true,
+    readOnly: options.readOnly || false,
+    placeholder: options.placeholder || '',
+    viewportMargin: Infinity,
+    extraKeys: {
+      'Tab': (cm) => cm.execCommand('indentMore'),
+      'Shift-Tab': (cm) => cm.execCommand('indentLess'),
+    },
+    ...options,
+  });
+
+  if (existingKey) {
+    cmEditors[existingKey] = cm;
+  }
+
+  return cm;
+}
+
+function getEditor(id) {
+  return cmEditors[id] || null;
+}
+
+function setEditorValue(id, value) {
+  const cm = cmEditors[id];
+  if (cm) {
+    cm.setValue(value || '');
+    setTimeout(() => cm.refresh(), 1);
+  } else {
+    const el = document.getElementById(id);
+    if (el) el.value = value || '';
+  }
+}
+
+function getEditorValue(id) {
+  const cm = cmEditors[id];
+  if (cm) return cm.getValue();
+  const el = document.getElementById(id);
+  return el ? el.value : '';
+}
+
+function focusEditor(id) {
+  const cm = cmEditors[id];
+  if (cm) {
+    setTimeout(() => { cm.refresh(); cm.focus(); }, 10);
+  } else {
+    document.getElementById(id)?.focus();
+  }
+}
+
+function refreshEditor(id) {
+  const cm = cmEditors[id];
+  if (cm) setTimeout(() => cm.refresh(), 10);
+}
+
 // Storage keys
 const STORAGE_KEY = 'mongodb_dashboard_connections';
 const ACTIVE_CONNECTION_KEY = 'mongodb_dashboard_active_connection';
@@ -1362,7 +1441,8 @@ function setupModalHandlers() {
   // Form/JSON toggle
   document.getElementById('useFormBtn')?.addEventListener('click', () => {
     useFormMode = true;
-    document.getElementById('docEditor').style.display = 'none';
+    const cmWrap = cmEditors['docEditor']?.getWrapperElement();
+    if (cmWrap) cmWrap.style.display = 'none';
     document.getElementById('docFormContainer').style.display = 'block';
     document.getElementById('useFormBtn').classList.add('active');
     document.getElementById('useJsonBtn').classList.remove('active');
@@ -1371,19 +1451,19 @@ function setupModalHandlers() {
   document.getElementById('useJsonBtn')?.addEventListener('click', () => {
     useFormMode = false;
     const formContainer = document.getElementById('docFormContainer');
-    const editor = document.getElementById('docEditor');
-    
+    const cmWrap = cmEditors['docEditor']?.getWrapperElement();
+
     // Convert form data to JSON
     if (currentSchema) {
       const formData = getFormData(formContainer);
-      editor.value = JSON.stringify(formData, null, 2);
+      setEditorValue('docEditor', JSON.stringify(formData, null, 2));
     }
-    
-    editor.style.display = 'block';
+
+    if (cmWrap) cmWrap.style.display = '';
     formContainer.style.display = 'none';
     document.getElementById('useFormBtn').classList.remove('active');
     document.getElementById('useJsonBtn').classList.add('active');
-    editor.focus();
+    focusEditor('docEditor');
   });
 
   // Delete modal handlers
@@ -1398,7 +1478,7 @@ function setupModalHandlers() {
 async function openDocModal(dbName, collectionName, doc) {
   const modal = document.getElementById('docModal');
   const title = document.getElementById('modalTitle');
-  const editor = document.getElementById('docEditor');
+  const editorEl = document.getElementById('docEditor');
   const formContainer = document.getElementById('docFormContainer');
   const formToggle = document.getElementById('formToggle');
   const deleteBtn = document.getElementById('modalDelete');
@@ -1408,68 +1488,66 @@ async function openDocModal(dbName, collectionName, doc) {
   currentModalDb = dbName;
   currentModalCol = collectionName;
 
+  // Initialize CodeMirror if not yet created
+  if (!cmEditors['docEditor'] && editorEl) {
+    createJsonEditor('docEditor');
+  }
+
+  const cmWrap = cmEditors['docEditor']?.getWrapperElement();
+
   if (doc) {
     title.textContent = 'Edit Document';
     deleteBtn.style.display = 'block';
-    editor.value = JSON.stringify(doc, null, 2);
-    // For editing, always use JSON mode
+    setEditorValue('docEditor', JSON.stringify(doc, null, 2));
     useFormMode = false;
     formToggle.style.display = 'none';
     formContainer.style.display = 'none';
-    editor.style.display = 'block';
+    if (cmWrap) cmWrap.style.display = '';
   } else {
     title.textContent = 'New Document';
     deleteBtn.style.display = 'none';
-    
-    // Try to fetch schema for new documents
+
     try {
       const res = await fetch(`/api/${dbName}/${collectionName}/schema`);
       const data = await res.json();
-      
-      console.log('Schema response:', data);
-      
+
       if (res.ok && data.schema && !data.schema.isEmpty && Object.keys(data.schema.fields || {}).length > 0) {
         currentSchema = data.schema;
         useFormMode = true;
         formToggle.style.display = 'flex';
-        console.log('Rendering form with schema fields:', data.schema.fields);
         renderFormFromSchema(formContainer, currentSchema.fields);
         formContainer.style.display = 'block';
-        editor.style.display = 'none';
+        if (cmWrap) cmWrap.style.display = 'none';
       } else {
-        console.log('No schema available or empty collection, using JSON editor');
-        // No schema available, use JSON
         currentSchema = null;
         useFormMode = false;
         formToggle.style.display = 'none';
         formContainer.style.display = 'none';
-        editor.style.display = 'block';
-        editor.value = '{\n  \n}';
+        if (cmWrap) cmWrap.style.display = '';
+        setEditorValue('docEditor', '{\n  \n}');
       }
     } catch (err) {
-      // Fallback to JSON on error
       currentSchema = null;
       useFormMode = false;
       formToggle.style.display = 'none';
       formContainer.style.display = 'none';
-      editor.style.display = 'block';
-      editor.value = '{\n  \n}';
+      if (cmWrap) cmWrap.style.display = '';
+      setEditorValue('docEditor', '{\n  \n}');
     }
   }
 
   errorEl.style.display = 'none';
   modal.style.display = 'flex';
-  
+
   if (useFormMode && formContainer.style.display !== 'none') {
     const firstInput = formContainer.querySelector('input, select, textarea');
     if (firstInput) firstInput.focus();
   } else {
-    editor.focus();
+    focusEditor('docEditor');
   }
 }
 
 async function saveDocument() {
-  const editor = document.getElementById('docEditor');
   const formContainer = document.getElementById('docFormContainer');
   const errorEl = document.getElementById('editorError');
   const saveBtn = document.getElementById('modalSave');
@@ -1479,7 +1557,7 @@ async function saveDocument() {
     if (useFormMode && formContainer.style.display !== 'none' && currentSchema) {
       doc = getFormData(formContainer);
     } else {
-      doc = JSON.parse(editor.value);
+      doc = JSON.parse(getEditorValue('docEditor'));
     }
   } catch (e) {
     errorEl.textContent = 'Invalid JSON: ' + e.message;
@@ -1638,12 +1716,17 @@ function renderJsonTree(obj, indent = 0) {
 
 function openEditModal(doc) {
   const modal = document.getElementById('editModal');
-  const editor = document.getElementById('editDocEditor');
-  
-  editor.value = JSON.stringify(doc, null, 2);
+  const editorEl = document.getElementById('editDocEditor');
+
+  // Initialize CodeMirror if not yet created
+  if (!cmEditors['editDocEditor'] && editorEl) {
+    createJsonEditor('editDocEditor');
+  }
+
+  setEditorValue('editDocEditor', JSON.stringify(doc, null, 2));
   document.getElementById('editError').style.display = 'none';
   modal.style.display = 'flex';
-  editor.focus();
+  focusEditor('editDocEditor');
 }
 
 function setupEditModalHandlers(dbName, collectionName, docId) {
@@ -1662,12 +1745,11 @@ function setupEditModalHandlers(dbName, collectionName, docId) {
   cancelBtn.addEventListener('click', closeModal);
 
   saveBtn.addEventListener('click', async () => {
-    const editor = document.getElementById('editDocEditor');
     const errorEl = document.getElementById('editError');
 
     let doc;
     try {
-      doc = JSON.parse(editor.value);
+      doc = JSON.parse(getEditorValue('editDocEditor'));
     } catch (e) {
       errorEl.textContent = 'Invalid JSON: ' + e.message;
       errorEl.style.display = 'block';
@@ -2724,6 +2806,13 @@ async function initValidationPanel(dbName, collectionName) {
   panel._load = async () => {
     if (panel._loaded) return;
     panel._loaded = true;
+
+    // Initialize CodeMirror for validation editor
+    const validatorEl = document.getElementById('validatorEditor');
+    if (validatorEl && !cmEditors['validatorEditor']) {
+      createJsonEditor('validatorEditor');
+    }
+
     try {
       const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/validation`);
       const data = await res.json();
@@ -2731,10 +2820,10 @@ async function initValidationPanel(dbName, collectionName) {
 
       const levelEl = document.getElementById('validationLevel');
       const actionEl = document.getElementById('validationAction');
-      const editorEl = document.getElementById('validatorEditor');
       if (levelEl) levelEl.value = data.validationLevel || 'strict';
       if (actionEl) actionEl.value = data.validationAction || 'error';
-      if (editorEl) editorEl.value = data.validator ? JSON.stringify(data.validator, null, 2) : '';
+      setEditorValue('validatorEditor', data.validator ? JSON.stringify(data.validator, null, 2) : '');
+      refreshEditor('validatorEditor');
     } catch (err) {
       const errEl = document.getElementById('validationError');
       if (errEl) { errEl.textContent = 'Failed to load validation rules: ' + err.message; errEl.style.display = 'block'; }
@@ -2743,15 +2832,15 @@ async function initValidationPanel(dbName, collectionName) {
 
   // Save
   document.getElementById('saveValidation')?.addEventListener('click', async () => {
-    const editorEl = document.getElementById('validatorEditor');
     const errEl = document.getElementById('validationError');
     const successEl = document.getElementById('validationSuccess');
     errEl.style.display = 'none';
     successEl.style.display = 'none';
 
     let validator = null;
-    if (editorEl?.value.trim()) {
-      try { validator = JSON.parse(editorEl.value.trim()); }
+    const validatorStr = getEditorValue('validatorEditor').trim();
+    if (validatorStr) {
+      try { validator = JSON.parse(validatorStr); }
       catch (e) { errEl.textContent = 'Invalid JSON: ' + e.message; errEl.style.display = 'block'; return; }
     }
 
@@ -2779,13 +2868,12 @@ async function initValidationPanel(dbName, collectionName) {
 
   // Test validation
   document.getElementById('testValidation')?.addEventListener('click', async () => {
-    const editorEl = document.getElementById('validatorEditor');
     const resultsEl = document.getElementById('validationTestResults');
     const errEl = document.getElementById('validationError');
     errEl.style.display = 'none';
 
     let validator;
-    try { validator = JSON.parse(editorEl?.value.trim() || '{}'); }
+    try { validator = JSON.parse(getEditorValue('validatorEditor').trim() || '{}'); }
     catch (e) { errEl.textContent = 'Invalid JSON: ' + e.message; errEl.style.display = 'block'; return; }
 
     resultsEl.innerHTML = '<div class="loading-spinner" style="display:inline-block;width:16px;height:16px;margin-right:8px"></div>Testing...';
@@ -2978,7 +3066,16 @@ function initCollectionTabs(dbName, collectionName) {
       el.style.flexDirection = 'column';
     });
     if (tabName === 'indexes') loadIndexes(dbName, collectionName);
-    if (tabName === 'validation') panels.validation?._load?.();
+    if (tabName === 'validation') {
+      panels.validation?._load?.();
+      refreshEditor('validatorEditor');
+    }
+    if (tabName === 'aggregation') {
+      // Refresh all agg stage CodeMirror instances
+      Object.keys(cmEditors).forEach(key => {
+        if (key.startsWith('agg-stage-')) cmEditors[key].refresh();
+      });
+    }
   }
 
   tabs.forEach(tab => {
@@ -3345,7 +3442,7 @@ function initAggregationPanel(dbName, collectionName) {
   document.getElementById('aggExportModalClose2')?.addEventListener('click', closeExportModal);
   document.getElementById('aggExportModal')?.querySelector('.modal-backdrop')?.addEventListener('click', closeExportModal);
   document.getElementById('aggExportCopy')?.addEventListener('click', () => {
-    const code = document.getElementById('aggExportCode').value;
+    const code = getEditorValue('aggExportCode');
     navigator.clipboard.writeText(code).catch(() => {});
   });
 }
@@ -3361,6 +3458,14 @@ function addAggStage(dbName, collectionName, type = '$match', body = null) {
 function renderAggStages(dbName, collectionName) {
   const list = document.getElementById('aggStageList');
   if (!list) return;
+
+  // Clean up old CodeMirror instances for agg stages
+  Object.keys(cmEditors).forEach(key => {
+    if (key.startsWith('agg-stage-')) {
+      cmEditors[key].toTextArea();
+      delete cmEditors[key];
+    }
+  });
 
   if (aggStages.length === 0) {
     list.innerHTML = '<div class="agg-empty-state"><p>No stages yet. Click <strong>Add Stage</strong> to begin.</p></div>';
@@ -3395,7 +3500,9 @@ function renderAggStages(dbName, collectionName) {
           </button>
         </div>
       </div>
-      <textarea class="agg-stage-editor" data-id="${stage.id}" spellcheck="false">${escapeHtml(stage.body)}</textarea>
+      <div class="agg-stage-editor-wrap">
+        <textarea class="agg-stage-editor" data-id="${stage.id}" spellcheck="false">${escapeHtml(stage.body)}</textarea>
+      </div>
       <div class="agg-stage-error" id="stage-err-${stage.id}"></div>
     </div>
   `).join('');
@@ -3413,12 +3520,41 @@ function renderAggStages(dbName, collectionName) {
     });
   });
 
+  // Initialize CodeMirror for each aggregation stage editor
   list.querySelectorAll('.agg-stage-editor').forEach(ta => {
-    ta.addEventListener('input', (e) => {
-      const id = parseInt(e.target.dataset.id);
-      const stage = aggStages.find(s => s.id === id);
-      if (stage) stage.body = e.target.value;
-    });
+    const stageId = ta.dataset.id;
+    if (window.CodeMirror) {
+      const cm = CodeMirror.fromTextArea(ta, {
+        mode: { name: 'javascript', json: true },
+        lineNumbers: true,
+        matchBrackets: true,
+        autoCloseBrackets: true,
+        foldGutter: true,
+        gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+        tabSize: 2,
+        indentWithTabs: false,
+        lineWrapping: true,
+        viewportMargin: Infinity,
+        extraKeys: {
+          'Tab': (cm) => cm.execCommand('indentMore'),
+          'Shift-Tab': (cm) => cm.execCommand('indentLess'),
+        },
+      });
+      cm.on('change', () => {
+        const id = parseInt(stageId);
+        const stage = aggStages.find(s => s.id === id);
+        if (stage) stage.body = cm.getValue();
+      });
+      // Store reference for cleanup
+      const editorKey = `agg-stage-${stageId}`;
+      cmEditors[editorKey] = cm;
+    } else {
+      ta.addEventListener('input', (e) => {
+        const id = parseInt(e.target.dataset.id);
+        const stage = aggStages.find(s => s.id === id);
+        if (stage) stage.body = e.target.value;
+      });
+    }
   });
 
   list.querySelectorAll('[data-action]').forEach(btn => {
@@ -3551,8 +3687,15 @@ function exportPipeline(dbName, collectionName, lang) {
   }
 
   document.getElementById('aggExportTitle').textContent = lang === 'js' ? 'Export — JavaScript (mongosh)' : 'Export — Python (pymongo)';
-  document.getElementById('aggExportCode').value = code;
+
+  // Initialize CodeMirror for export code if not yet created
+  const exportEl = document.getElementById('aggExportCode');
+  if (exportEl && !cmEditors['aggExportCode']) {
+    createJsonEditor('aggExportCode', { readOnly: true, mode: 'javascript' });
+  }
+  setEditorValue('aggExportCode', code);
   document.getElementById('aggExportModal').style.display = 'flex';
+  refreshEditor('aggExportCode');
 }
 
 // ─── Import / Export ─────────────────────────────────────────────────────────

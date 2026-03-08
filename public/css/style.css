@@ -2571,3 +2571,159 @@ a:hover {
     text-overflow: ellipsis;
   }
 }
+
+/* CodeMirror Custom Theme */
+.CodeMirror {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  height: auto;
+  min-height: 120px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.CodeMirror-focused {
+  border-color: var(--accent);
+}
+
+.CodeMirror-gutters {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding-right: 2px;
+}
+
+.CodeMirror-linenumber {
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 0 6px 0 4px;
+}
+
+.CodeMirror-foldgutter {
+  width: 14px;
+}
+
+.CodeMirror-foldgutter-open,
+.CodeMirror-foldgutter-folded {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.CodeMirror-foldgutter-open:after {
+  content: "\25BE";
+}
+
+.CodeMirror-foldgutter-folded:after {
+  content: "\25B8";
+}
+
+.CodeMirror-cursor {
+  border-left: 2px solid var(--accent);
+}
+
+.CodeMirror-selected,
+.CodeMirror-focused .CodeMirror-selected {
+  background: rgba(56, 139, 253, 0.15);
+}
+
+.CodeMirror-matchingbracket {
+  color: var(--accent) !important;
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.CodeMirror-nonmatchingbracket {
+  color: var(--danger) !important;
+}
+
+/* Syntax colors */
+.cm-s-default .cm-keyword { color: #ff7b72; }
+.cm-s-default .cm-atom { color: #79c0ff; }
+.cm-s-default .cm-number { color: #79c0ff; }
+.cm-s-default .cm-def { color: #d2a8ff; }
+.cm-s-default .cm-variable { color: var(--text-primary); }
+.cm-s-default .cm-property { color: #7ee787; }
+.cm-s-default .cm-operator { color: #ff7b72; }
+.cm-s-default .cm-string { color: #a5d6ff; }
+.cm-s-default .cm-string-2 { color: #a5d6ff; }
+.cm-s-default .cm-comment { color: var(--text-muted); }
+.cm-s-default .cm-bracket { color: var(--text-secondary); }
+
+[data-theme="light"] .cm-s-default .cm-keyword { color: #cf222e; }
+[data-theme="light"] .cm-s-default .cm-atom { color: #0550ae; }
+[data-theme="light"] .cm-s-default .cm-number { color: #0550ae; }
+[data-theme="light"] .cm-s-default .cm-def { color: #8250df; }
+[data-theme="light"] .cm-s-default .cm-property { color: #116329; }
+[data-theme="light"] .cm-s-default .cm-operator { color: #cf222e; }
+[data-theme="light"] .cm-s-default .cm-string { color: #0a3069; }
+[data-theme="light"] .cm-s-default .cm-string-2 { color: #0a3069; }
+
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] .cm-s-default .cm-keyword { color: #cf222e; }
+  [data-theme="system"] .cm-s-default .cm-atom { color: #0550ae; }
+  [data-theme="system"] .cm-s-default .cm-number { color: #0550ae; }
+  [data-theme="system"] .cm-s-default .cm-def { color: #8250df; }
+  [data-theme="system"] .cm-s-default .cm-property { color: #116329; }
+  [data-theme="system"] .cm-s-default .cm-operator { color: #cf222e; }
+  [data-theme="system"] .cm-s-default .cm-string { color: #0a3069; }
+  [data-theme="system"] .cm-s-default .cm-string-2 { color: #0a3069; }
+}
+
+.CodeMirror-activeline-background {
+  background: rgba(56, 139, 253, 0.05);
+}
+
+.CodeMirror-scrollbar-filler {
+  background: transparent;
+}
+
+/* CodeMirror in modals */
+.modal-body .CodeMirror {
+  min-height: 300px;
+  max-height: 60vh;
+}
+
+/* Aggregation stage editors */
+.agg-stage-editor-wrap .CodeMirror {
+  min-height: 80px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  border-top: none;
+}
+
+/* Validation editor */
+#validationContent .CodeMirror {
+  min-height: 280px;
+}
+
+/* Export code modal */
+#aggExportModal .CodeMirror {
+  min-height: 320px;
+}
+
+/* CodeMirror hints */
+.CodeMirror-hints {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  z-index: 10100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.CodeMirror-hint {
+  color: var(--text-primary);
+  padding: 4px 8px;
+}
+
+.CodeMirror-hint-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Hide original textarea when CodeMirror is active */
+.cm-editor-hidden {
+  display: none !important;
+}
