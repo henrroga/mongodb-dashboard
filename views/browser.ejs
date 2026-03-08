@@ -258,6 +258,7 @@
             <button class="collection-tab" data-tab="validation">Validation</button>
             <button class="collection-tab" data-tab="stats">Stats</button>
             <button class="collection-tab" data-tab="changes">Changes</button>
+            <button class="collection-tab" data-tab="sql">SQL &rarr; MQL</button>
           </div>
 
           <!-- Documents panel -->
@@ -712,6 +713,34 @@
                 </svg>
                 <p>Click <strong>Start Watching</strong> to listen for real-time changes on this collection.</p>
                 <p class="cs-hint">Requires a replica set or MongoDB Atlas. Changes from inserts, updates, and deletes will appear here live.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- SQL to MQL panel -->
+          <div id="panel-sql" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+            <div class="content-header">
+              <div class="content-title"><h2>SQL &rarr; MongoDB Query</h2></div>
+              <div class="content-actions" style="gap:8px">
+                <button id="sqlConvertBtn" class="btn btn-primary btn-sm">Convert</button>
+                <button id="sqlRunBtn" class="btn btn-ghost btn-sm" style="display:none">Run Query</button>
+              </div>
+            </div>
+            <div class="sql-converter">
+              <div class="sql-input-section">
+                <label class="sql-label">SQL Query</label>
+                <textarea id="sqlInput" class="doc-editor" placeholder="SELECT name, age FROM collection WHERE age > 25 ORDER BY name LIMIT 10" spellcheck="false"></textarea>
+                <div class="sql-examples">
+                  <span class="sql-examples-label">Examples:</span>
+                  <button class="btn btn-ghost btn-xs sql-example-btn" data-sql="SELECT * FROM collection WHERE status = 'active' LIMIT 20">SELECT</button>
+                  <button class="btn btn-ghost btn-xs sql-example-btn" data-sql="SELECT name, COUNT(*) as total FROM collection GROUP BY name">GROUP BY</button>
+                  <button class="btn btn-ghost btn-xs sql-example-btn" data-sql="UPDATE collection SET status = 'archived' WHERE age > 30">UPDATE</button>
+                  <button class="btn btn-ghost btn-xs sql-example-btn" data-sql="DELETE FROM collection WHERE status = 'inactive'">DELETE</button>
+                </div>
+              </div>
+              <div class="sql-output-section">
+                <label class="sql-label">MongoDB Query</label>
+                <textarea id="sqlOutput" class="doc-editor" readonly></textarea>
               </div>
             </div>
           </div>

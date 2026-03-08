@@ -509,6 +509,7 @@ function getCommandActions() {
     { label: 'Tab: Validation', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="validation"]')?.click() },
     { label: 'Tab: Stats', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="stats"]')?.click() },
     { label: 'Tab: Changes', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="changes"]')?.click() },
+    { label: 'Tab: SQL to MQL', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="sql"]')?.click() },
     { label: 'Focus Search', category: 'Actions', action: () => { const s = document.getElementById('searchInput'); if (s) { s.focus(); s.select(); } }},
     { label: 'Focus Filter', category: 'Actions', action: () => document.getElementById('queryFilter')?.focus() },
     { label: 'Select Columns', category: 'Actions', action: () => document.getElementById('columnsBtn')?.click() },
@@ -1359,6 +1360,7 @@ async function initBrowser(dbName, collectionName) {
   initValidationPanel(dbName, collectionName);
   initStatsPanel(dbName, collectionName);
   initChangeStreamPanel(dbName, collectionName);
+  initSqlPanel(dbName, collectionName);
   initViewModeToggle(dbName, collectionName);
   initShellPanel(dbName);
 }
@@ -3971,6 +3973,332 @@ function appendChangeEvent(container, data) {
   }
 }
 
+// ─── SQL to MQL Translator ────────────────────────────────────────────────────
+
+function initSqlPanel(dbName, collectionName) {
+  const convertBtn = document.getElementById('sqlConvertBtn');
+  const runBtn = document.getElementById('sqlRunBtn');
+  const sqlInput = document.getElementById('sqlInput');
+  const sqlOutput = document.getElementById('sqlOutput');
+  if (!convertBtn || !sqlInput) return;
+
+  // Replace "collection" in example buttons with actual collection name
+  document.querySelectorAll('.sql-example-btn').forEach(btn => {
+    const sql = btn.dataset.sql.replace(/collection/g, collectionName);
+    btn.dataset.sql = sql;
+    btn.addEventListener('click', () => {
+      sqlInput.value = sql;
+      convertBtn.click();
+    });
+  });
+
+  convertBtn.addEventListener('click', () => {
+    try {
+      const result = sqlToMql(sqlInput.value.trim(), collectionName);
+      sqlOutput.value = result.code;
+      runBtn.style.display = result.canRun ? '' : 'none';
+      runBtn._mqlQuery = result.canRun ? result : null;
+    } catch (err) {
+      sqlOutput.value = `// Error: ${err.message}`;
+      runBtn.style.display = 'none';
+    }
+  });
+
+  runBtn.addEventListener('click', async () => {
+    const mql = runBtn._mqlQuery;
+    if (!mql) return;
+
+    if (mql.type === 'find') {
+      const queryInput = document.getElementById('queryInput') || document.querySelector('[name="query"]');
+      if (queryInput) {
+        const tabBtn = document.querySelector('.collection-tab[data-tab="documents"]');
+        tabBtn?.click();
+        queryInput.value = JSON.stringify(mql.filter || {});
+        document.getElementById('runQuery')?.click();
+      }
+    } else if (mql.type === 'aggregate') {
+      const tabBtn = document.querySelector('.collection-tab[data-tab="aggregation"]');
+      tabBtn?.click();
+    }
+  });
+
+  // Convert on Ctrl/Cmd + Enter
+  sqlInput.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      convertBtn.click();
+    }
+  });
+}
+
+function sqlToMql(sql, collectionName) {
+  if (!sql) throw new Error('Please enter a SQL query');
+
+  const normalized = sql.replace(/\s+/g, ' ').trim();
+  const upper = normalized.toUpperCase();
+
+  if (upper.startsWith('SELECT')) return parseSqlSelect(normalized, collectionName);
+  if (upper.startsWith('INSERT')) return parseSqlInsert(normalized, collectionName);
+  if (upper.startsWith('UPDATE')) return parseSqlUpdate(normalized, collectionName);
+  if (upper.startsWith('DELETE')) return parseSqlDelete(normalized, collectionName);
+
+  throw new Error('Unsupported SQL statement. Supported: SELECT, INSERT, UPDATE, DELETE');
+}
+
+function parseSqlSelect(sql, collName) {
+  const upper = sql.toUpperCase();
+
+  // Extract parts using regex
+  const selectMatch = sql.match(/SELECT\s+(.*?)\s+FROM\s+/i);
+  const fromMatch = sql.match(/FROM\s+(\w+)/i);
+  const whereMatch = sql.match(/WHERE\s+(.*?)(?:\s+GROUP\s+BY|\s+ORDER\s+BY|\s+LIMIT|\s+HAVING|\s*$)/i);
+  const groupMatch = sql.match(/GROUP\s+BY\s+(.*?)(?:\s+HAVING|\s+ORDER\s+BY|\s+LIMIT|\s*$)/i);
+  const havingMatch = sql.match(/HAVING\s+(.*?)(?:\s+ORDER\s+BY|\s+LIMIT|\s*$)/i);
+  const orderMatch = sql.match(/ORDER\s+BY\s+(.*?)(?:\s+LIMIT|\s*$)/i);
+  const limitMatch = sql.match(/LIMIT\s+(\d+)/i);
+  const offsetMatch = sql.match(/OFFSET\s+(\d+)/i);
+
+  const fields = selectMatch ? selectMatch[1].trim() : '*';
+  const collection = fromMatch ? fromMatch[1] : collName;
+
+  // Check if this is an aggregation (GROUP BY or aggregate functions)
+  const hasAggFuncs = /\b(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(fields);
+  const hasGroupBy = !!groupMatch;
+
+  if (hasAggFuncs || hasGroupBy) {
+    return buildAggregation(fields, collection, whereMatch, groupMatch, havingMatch, orderMatch, limitMatch);
+  }
+
+  // Simple find query
+  const projection = {};
+  if (fields !== '*') {
+    fields.split(',').map(f => f.trim()).forEach(f => {
+      const alias = f.match(/\s+AS\s+(\w+)/i);
+      const name = f.replace(/\s+AS\s+\w+/i, '').trim();
+      projection[name] = 1;
+    });
+  }
+
+  const filter = whereMatch ? parseWhereClause(whereMatch[1].trim()) : {};
+
+  const sort = {};
+  if (orderMatch) {
+    orderMatch[1].split(',').forEach(part => {
+      const p = part.trim();
+      const desc = /\s+DESC$/i.test(p);
+      const field = p.replace(/\s+(ASC|DESC)$/i, '').trim();
+      sort[field] = desc ? -1 : 1;
+    });
+  }
+
+  const limit = limitMatch ? parseInt(limitMatch[1]) : null;
+  const skip = offsetMatch ? parseInt(offsetMatch[1]) : null;
+
+  let code = `db.${collection}.find(\n  ${JSON.stringify(filter, null, 2)}`;
+  if (Object.keys(projection).length > 0) {
+    code += `,\n  ${JSON.stringify(projection, null, 2)}`;
+  }
+  code += '\n)';
+  if (Object.keys(sort).length > 0) code += `.sort(${JSON.stringify(sort)})`;
+  if (skip) code += `.skip(${skip})`;
+  if (limit) code += `.limit(${limit})`;
+
+  return { type: 'find', code, filter, projection, sort, limit, skip, canRun: true };
+}
+
+function buildAggregation(fields, collection, whereMatch, groupMatch, havingMatch, orderMatch, limitMatch) {
+  const pipeline = [];
+
+  // $match stage from WHERE
+  if (whereMatch) {
+    pipeline.push({ $match: parseWhereClause(whereMatch[1].trim()) });
+  }
+
+  // Parse GROUP BY and aggregate fields
+  const groupFields = groupMatch ? groupMatch[1].split(',').map(f => f.trim()) : [];
+  const groupId = {};
+  groupFields.forEach(f => { groupId[f] = `$${f}`; });
+
+  const accumulator = {};
+  fields.split(',').map(f => f.trim()).forEach(f => {
+    const aggMatch = f.match(/(\w+)\s*\(\s*(\*|\w+)\s*\)\s*(?:AS\s+(\w+))?/i);
+    if (aggMatch) {
+      const func = aggMatch[1].toUpperCase();
+      const arg = aggMatch[2];
+      const alias = aggMatch[3] || `${func.toLowerCase()}_${arg}`;
+      if (func === 'COUNT') accumulator[alias] = arg === '*' ? { $sum: 1 } : { $sum: { $cond: [{ $ne: [`$${arg}`, null] }, 1, 0] } };
+      else if (func === 'SUM') accumulator[alias] = { $sum: `$${arg}` };
+      else if (func === 'AVG') accumulator[alias] = { $avg: `$${arg}` };
+      else if (func === 'MIN') accumulator[alias] = { $min: `$${arg}` };
+      else if (func === 'MAX') accumulator[alias] = { $max: `$${arg}` };
+    }
+  });
+
+  pipeline.push({
+    $group: {
+      _id: Object.keys(groupId).length === 1 ? Object.values(groupId)[0] : (Object.keys(groupId).length > 0 ? groupId : null),
+      ...accumulator
+    }
+  });
+
+  // $match from HAVING
+  if (havingMatch) {
+    pipeline.push({ $match: parseWhereClause(havingMatch[1].trim()) });
+  }
+
+  // $sort from ORDER BY
+  if (orderMatch) {
+    const sort = {};
+    orderMatch[1].split(',').forEach(part => {
+      const p = part.trim();
+      const desc = /\s+DESC$/i.test(p);
+      const field = p.replace(/\s+(ASC|DESC)$/i, '').trim();
+      sort[field] = desc ? -1 : 1;
+    });
+    pipeline.push({ $sort: sort });
+  }
+
+  // $limit
+  if (limitMatch) {
+    pipeline.push({ $limit: parseInt(limitMatch[1]) });
+  }
+
+  const code = `db.${collection}.aggregate(${JSON.stringify(pipeline, null, 2)})`;
+  return { type: 'aggregate', code, pipeline, canRun: false };
+}
+
+function parseWhereClause(where) {
+  // Handle AND/OR
+  const orParts = splitOnKeyword(where, ' OR ');
+  if (orParts.length > 1) {
+    return { $or: orParts.map(p => parseWhereClause(p.trim())) };
+  }
+
+  const andParts = splitOnKeyword(where, ' AND ');
+  if (andParts.length > 1) {
+    const conditions = andParts.map(p => parseWhereClause(p.trim()));
+    const merged = {};
+    conditions.forEach(c => Object.assign(merged, c));
+    return merged;
+  }
+
+  // Parse single condition
+  return parseSingleCondition(where.trim());
+}
+
+function splitOnKeyword(str, keyword) {
+  const upper = str.toUpperCase();
+  const parts = [];
+  let start = 0;
+  let depth = 0;
+
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '(') depth++;
+    else if (str[i] === ')') depth--;
+    else if (depth === 0 && upper.substring(i, i + keyword.length) === keyword.toUpperCase()) {
+      parts.push(str.substring(start, i));
+      start = i + keyword.length;
+      i += keyword.length - 1;
+    }
+  }
+  parts.push(str.substring(start));
+  return parts;
+}
+
+function parseSingleCondition(cond) {
+  // IN
+  let m = cond.match(/^(\w+)\s+IN\s*\((.*)\)$/i);
+  if (m) return { [m[1]]: { $in: m[2].split(',').map(v => parseValue(v.trim())) } };
+
+  // NOT IN
+  m = cond.match(/^(\w+)\s+NOT\s+IN\s*\((.*)\)$/i);
+  if (m) return { [m[1]]: { $nin: m[2].split(',').map(v => parseValue(v.trim())) } };
+
+  // BETWEEN
+  m = cond.match(/^(\w+)\s+BETWEEN\s+(.*?)\s+AND\s+(.*?)$/i);
+  if (m) return { [m[1]]: { $gte: parseValue(m[2].trim()), $lte: parseValue(m[3].trim()) } };
+
+  // LIKE
+  m = cond.match(/^(\w+)\s+LIKE\s+'(.*)'$/i);
+  if (m) {
+    let pattern = m[2].replace(/%/g, '.*').replace(/_/g, '.');
+    return { [m[1]]: { $regex: `^${pattern}$`, $options: 'i' } };
+  }
+
+  // IS NULL / IS NOT NULL
+  m = cond.match(/^(\w+)\s+IS\s+NOT\s+NULL$/i);
+  if (m) return { [m[1]]: { $ne: null } };
+  m = cond.match(/^(\w+)\s+IS\s+NULL$/i);
+  if (m) return { [m[1]]: null };
+
+  // Comparison operators
+  m = cond.match(/^(\w+)\s*(!=|<>|>=|<=|>|<|=)\s*(.+)$/);
+  if (m) {
+    const field = m[1];
+    const op = m[2];
+    const val = parseValue(m[3].trim());
+    const opMap = { '=': '$eq', '!=': '$ne', '<>': '$ne', '>': '$gt', '<': '$lt', '>=': '$gte', '<=': '$lte' };
+    if (op === '=') return { [field]: val };
+    return { [field]: { [opMap[op]]: val } };
+  }
+
+  return {};
+}
+
+function parseValue(val) {
+  if ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith('"') && val.endsWith('"'))) {
+    return val.slice(1, -1);
+  }
+  if (val.toUpperCase() === 'TRUE') return true;
+  if (val.toUpperCase() === 'FALSE') return false;
+  if (val.toUpperCase() === 'NULL') return null;
+  const num = Number(val);
+  if (!isNaN(num)) return num;
+  return val;
+}
+
+function parseSqlInsert(sql, collName) {
+  const m = sql.match(/INSERT\s+INTO\s+(\w+)\s*\((.*?)\)\s*VALUES\s*\((.*?)\)/i);
+  if (!m) throw new Error('Invalid INSERT syntax. Use: INSERT INTO table (col1, col2) VALUES (val1, val2)');
+
+  const collection = m[1];
+  const cols = m[2].split(',').map(c => c.trim());
+  const vals = m[3].split(',').map(v => parseValue(v.trim()));
+
+  const doc = {};
+  cols.forEach((c, i) => { doc[c] = vals[i] !== undefined ? vals[i] : null; });
+
+  const code = `db.${collection}.insertOne(${JSON.stringify(doc, null, 2)})`;
+  return { type: 'insertOne', code, canRun: false };
+}
+
+function parseSqlUpdate(sql, collName) {
+  const m = sql.match(/UPDATE\s+(\w+)\s+SET\s+(.*?)(?:\s+WHERE\s+(.*))?$/i);
+  if (!m) throw new Error('Invalid UPDATE syntax. Use: UPDATE table SET col = val WHERE condition');
+
+  const collection = m[1];
+  const setParts = m[2].split(',');
+  const updateFields = {};
+  setParts.forEach(p => {
+    const [key, ...rest] = p.split('=');
+    updateFields[key.trim()] = parseValue(rest.join('=').trim());
+  });
+
+  const filter = m[3] ? parseWhereClause(m[3].trim()) : {};
+  const code = `db.${collection}.updateMany(\n  ${JSON.stringify(filter, null, 2)},\n  { $set: ${JSON.stringify(updateFields, null, 2)} }\n)`;
+  return { type: 'updateMany', code, canRun: false };
+}
+
+function parseSqlDelete(sql, collName) {
+  const m = sql.match(/DELETE\s+FROM\s+(\w+)(?:\s+WHERE\s+(.*))?$/i);
+  if (!m) throw new Error('Invalid DELETE syntax. Use: DELETE FROM table WHERE condition');
+
+  const collection = m[1];
+  const filter = m[2] ? parseWhereClause(m[2].trim()) : {};
+  const code = `db.${collection}.deleteMany(${JSON.stringify(filter, null, 2)})`;
+  return { type: 'deleteMany', code, canRun: false };
+}
+
 // ─── Performance Page ─────────────────────────────────────────────────────────
 
 function initPerformancePage() {
@@ -4362,6 +4690,7 @@ function initCollectionTabs(dbName, collectionName) {
     validation: document.getElementById('panel-validation'),
     stats: document.getElementById('panel-stats'),
     changes: document.getElementById('panel-changes'),
+    sql: document.getElementById('panel-sql'),
   };
 
   function switchTab(tabName) {
