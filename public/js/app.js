@@ -4100,6 +4100,14 @@ function renderAggStages(dbName, collectionName) {
         <textarea class="agg-stage-editor" data-id="${stage.id}" spellcheck="false">${escapeHtml(stage.body)}</textarea>
       </div>
       <div class="agg-stage-error" id="stage-err-${stage.id}"></div>
+      <div class="agg-stage-preview-bar">
+        <button class="btn btn-sm btn-ghost agg-preview-btn" data-action="preview" data-id="${stage.id}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Preview output
+        </button>
+        <span class="agg-preview-count" id="stage-count-${stage.id}"></span>
+      </div>
+      <div class="agg-stage-preview" id="stage-preview-${stage.id}" style="display:none"></div>
     </div>
   `).join('');
 
@@ -4157,6 +4165,12 @@ function renderAggStages(dbName, collectionName) {
     btn.addEventListener('click', () => {
       const action = btn.dataset.action;
       const id = parseInt(btn.dataset.id);
+
+      if (action === 'preview') {
+        previewStage(id, dbName, collectionName);
+        return;
+      }
+
       const idx = aggStages.findIndex(s => s.id === id);
       if (idx === -1) return;
 
@@ -4224,6 +4238,61 @@ async function runAggregation(dbName, collectionName) {
   } catch (err) {
     resultBody.innerHTML = `<div style="color:var(--danger);padding:24px">Error: ${err.message}</div>`;
     if (countEl) countEl.textContent = 'Error';
+  }
+}
+
+async function previewStage(stageId, dbName, collectionName) {
+  const previewEl = document.getElementById(`stage-preview-${stageId}`);
+  const countEl = document.getElementById(`stage-count-${stageId}`);
+  if (!previewEl) return;
+
+  // Toggle: if already visible, hide it
+  if (previewEl.style.display !== 'none') {
+    previewEl.style.display = 'none';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  // Build pipeline up to and including this stage
+  const pipeline = [];
+  for (const stage of aggStages) {
+    if (!stage.enabled) continue;
+    try {
+      pipeline.push({ [stage.type]: JSON.parse(stage.body) });
+    } catch (e) {
+      if (stage.id === stageId) {
+        previewEl.innerHTML = `<div style="color:var(--danger);padding:8px">Invalid JSON in this stage</div>`;
+        previewEl.style.display = 'block';
+        return;
+      }
+    }
+    if (stage.id === stageId) break;
+  }
+
+  previewEl.innerHTML = '<div style="display:flex;justify-content:center;padding:16px"><div class="loading-spinner"></div></div>';
+  previewEl.style.display = 'block';
+
+  try {
+    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/aggregate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline, options: { limit: 5 } }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    if (countEl) countEl.textContent = `${data.count} doc${data.count !== 1 ? 's' : ''}`;
+
+    if (data.documents.length === 0) {
+      previewEl.innerHTML = '<div class="agg-preview-empty">No output</div>';
+    } else {
+      previewEl.innerHTML = data.documents.map(doc =>
+        `<div class="agg-preview-doc json-viewer">${renderJsonTree(doc)}</div>`
+      ).join('');
+    }
+  } catch (err) {
+    previewEl.innerHTML = `<div style="color:var(--danger);padding:8px;font-size:12px">${escapeHtml(err.message)}</div>`;
+    if (countEl) countEl.textContent = '';
   }
 }
 

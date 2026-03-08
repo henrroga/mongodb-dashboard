@@ -1441,6 +1441,47 @@ a:hover {
   display: none;
 }
 
+.agg-stage-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.agg-preview-btn svg {
+  margin-right: 2px;
+}
+
+.agg-preview-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.agg-stage-preview {
+  border-top: 1px solid var(--border);
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--bg-primary);
+}
+
+.agg-preview-doc {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.agg-preview-doc:last-child {
+  border-bottom: none;
+}
+
+.agg-preview-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .agg-preview-col {
   flex: 1;
   display: flex;
