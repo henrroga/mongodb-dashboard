@@ -1116,6 +1116,17 @@ function runQuery(dbName, collectionName) {
   currentLimit = Math.min(Math.max(parseInt(queryLimitEl?.value) || 50, 1), 1000);
   currentSkip = Math.max(parseInt(querySkipEl?.value) || 0, 0);
 
+  // Auto-record in query history if there's a meaningful query
+  if (currentFilter || currentSort || currentProjection) {
+    addToQueryHistory(dbName, collectionName, {
+      filter: currentFilter,
+      projection: currentProjection,
+      sort: currentSort,
+      limit: currentLimit,
+      skip: currentSkip,
+    });
+  }
+
   updateUrlParams();
   currentCursor = null;
   currentNextSkip = null;
@@ -3080,14 +3091,27 @@ function clearArrayFilter(fieldName) {
 window.applyArrayFilter = applyArrayFilter;
 window.clearArrayFilter = clearArrayFilter;
 
-// Saved Queries
+// ─── Saved Queries & Query History ───────────────────────────────────────────
+
 function savedQueriesKey(dbName, collectionName) {
   return `mongodb_dashboard_savedqueries_${dbName}_${collectionName}`;
+}
+
+function queryHistoryKey(dbName, collectionName) {
+  return `mongodb_dashboard_queryhistory_${dbName}_${collectionName}`;
 }
 
 function getSavedQueries(dbName, collectionName) {
   try {
     return JSON.parse(localStorage.getItem(savedQueriesKey(dbName, collectionName)) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function getQueryHistory(dbName, collectionName) {
+  try {
+    return JSON.parse(localStorage.getItem(queryHistoryKey(dbName, collectionName)) || '[]');
   } catch {
     return [];
   }
@@ -3099,60 +3123,142 @@ function saveQuery(dbName, collectionName, query) {
   localStorage.setItem(savedQueriesKey(dbName, collectionName), JSON.stringify(queries.slice(0, 20)));
 }
 
+function addToQueryHistory(dbName, collectionName, query) {
+  const history = getQueryHistory(dbName, collectionName);
+  // Avoid duplicates of exact same filter/sort/projection
+  const sig = JSON.stringify({ f: query.filter, s: query.sort, p: query.projection });
+  const existing = history.findIndex(h => JSON.stringify({ f: h.filter, s: h.sort, p: h.projection }) === sig);
+  if (existing !== -1) history.splice(existing, 1);
+  query.timestamp = Date.now();
+  history.unshift(query);
+  localStorage.setItem(queryHistoryKey(dbName, collectionName), JSON.stringify(history.slice(0, 50)));
+}
+
+function clearQueryHistory(dbName, collectionName) {
+  localStorage.removeItem(queryHistoryKey(dbName, collectionName));
+}
+
 function deleteSavedQuery(dbName, collectionName, index) {
   const queries = getSavedQueries(dbName, collectionName);
   queries.splice(index, 1);
   localStorage.setItem(savedQueriesKey(dbName, collectionName), JSON.stringify(queries));
 }
 
+let queriesDropdownTab = 'saved';
+
 function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
-  const queries = getSavedQueries(dbName, collectionName);
+  const saved = getSavedQueries(dbName, collectionName);
+  const history = getQueryHistory(dbName, collectionName);
 
-  if (queries.length === 0) {
-    dropdown.innerHTML = '<div class="saved-queries-empty">No saved queries yet.</div>';
-    return;
-  }
+  dropdown.innerHTML = `
+    <div class="queries-dropdown-tabs">
+      <button class="queries-tab ${queriesDropdownTab === 'saved' ? 'active' : ''}" data-tab="saved">Saved (${saved.length})</button>
+      <button class="queries-tab ${queriesDropdownTab === 'history' ? 'active' : ''}" data-tab="history">History (${history.length})</button>
+    </div>
+    <div class="queries-dropdown-body">
+      ${queriesDropdownTab === 'saved' ? renderSavedList(saved) : renderHistoryList(history)}
+    </div>
+  `;
 
-  dropdown.innerHTML = queries.map((q, i) => `
+  // Tab switching
+  dropdown.querySelectorAll('.queries-tab').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      queriesDropdownTab = tab.dataset.tab;
+      renderSavedQueriesDropdown(dbName, collectionName, dropdown);
+    });
+  });
+
+  // Clear history button
+  dropdown.querySelector('.query-history-clear')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    clearQueryHistory(dbName, collectionName);
+    renderSavedQueriesDropdown(dbName, collectionName, dropdown);
+  });
+
+  // Item click handlers
+  dropdown.querySelectorAll('.saved-query-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.saved-query-delete')) {
+        e.stopPropagation();
+        const idx = parseInt(e.target.closest('.saved-query-delete').dataset.index);
+        if (queriesDropdownTab === 'saved') {
+          deleteSavedQuery(dbName, collectionName, idx);
+        } else {
+          const hist = getQueryHistory(dbName, collectionName);
+          hist.splice(idx, 1);
+          localStorage.setItem(queryHistoryKey(dbName, collectionName), JSON.stringify(hist));
+        }
+        renderSavedQueriesDropdown(dbName, collectionName, dropdown);
+        return;
+      }
+      const idx = parseInt(item.dataset.index);
+      const q = queriesDropdownTab === 'saved' ? saved[idx] : history[idx];
+      if (!q) return;
+      applyQueryToBar(q);
+      dropdown.style.display = 'none';
+      runQuery(dbName, collectionName);
+    });
+  });
+}
+
+function renderSavedList(queries) {
+  if (queries.length === 0) return '<div class="saved-queries-empty">No saved queries yet.</div>';
+  return queries.map((q, i) => `
     <div class="saved-query-item" data-index="${i}">
       <div class="saved-query-info">
         <div class="saved-query-name">${escapeHtml(q.name)}</div>
         <div class="saved-query-preview">${escapeHtml(q.filter || '{}')}</div>
       </div>
       <button class="saved-query-delete" data-index="${i}" title="Delete">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6L6 18M6 6l12 12"/>
-        </svg>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
   `).join('');
+}
 
-  dropdown.querySelectorAll('.saved-query-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      if (e.target.closest('.saved-query-delete')) {
-        e.stopPropagation();
-        const idx = parseInt(e.target.closest('.saved-query-delete').dataset.index);
-        deleteSavedQuery(dbName, collectionName, idx);
-        renderSavedQueriesDropdown(dbName, collectionName, dropdown);
-        return;
-      }
-      const idx = parseInt(item.dataset.index);
-      const q = queries[idx];
-      // Apply the saved query
-      const queryFilterEl = document.getElementById('queryFilter');
-      const queryProjectionEl = document.getElementById('queryProjection');
-      const querySortEl = document.getElementById('querySort');
-      const queryLimitEl = document.getElementById('queryLimit');
-      const querySkipEl = document.getElementById('querySkip');
-      if (queryFilterEl) queryFilterEl.value = q.filter || '';
-      if (queryProjectionEl) queryProjectionEl.value = q.projection || '';
-      if (querySortEl) querySortEl.value = q.sort || '';
-      if (queryLimitEl) queryLimitEl.value = q.limit || 50;
-      if (querySkipEl) querySkipEl.value = q.skip || 0;
-      dropdown.style.display = 'none';
-      runQuery(dbName, collectionName);
-    });
-  });
+function renderHistoryList(history) {
+  if (history.length === 0) return '<div class="saved-queries-empty">No query history yet.</div>';
+  let html = history.map((q, i) => {
+    const timeAgo = formatTimeAgo(q.timestamp);
+    return `
+      <div class="saved-query-item" data-index="${i}">
+        <div class="saved-query-info">
+          <div class="saved-query-preview">${escapeHtml(q.filter || '{}')}</div>
+          <div class="saved-query-time">${timeAgo}</div>
+        </div>
+        <button class="saved-query-delete" data-index="${i}" title="Remove">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>`;
+  }).join('');
+  html += '<div class="query-history-clear-row"><button class="btn btn-sm btn-ghost query-history-clear">Clear History</button></div>';
+  return html;
+}
+
+function formatTimeAgo(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function applyQueryToBar(q) {
+  const queryFilterEl = document.getElementById('queryFilter');
+  const queryProjectionEl = document.getElementById('queryProjection');
+  const querySortEl = document.getElementById('querySort');
+  const queryLimitEl = document.getElementById('queryLimit');
+  const querySkipEl = document.getElementById('querySkip');
+  if (queryFilterEl) queryFilterEl.value = q.filter || '';
+  if (queryProjectionEl) queryProjectionEl.value = q.projection || '';
+  if (querySortEl) querySortEl.value = q.sort || '';
+  if (queryLimitEl) queryLimitEl.value = q.limit || 50;
+  if (querySkipEl) querySkipEl.value = q.skip || 0;
 }
 
 // ─── Performance Page ─────────────────────────────────────────────────────────

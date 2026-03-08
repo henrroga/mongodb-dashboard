@@ -1878,6 +1878,49 @@ a:hover {
   font-size: 13px;
 }
 
+.queries-dropdown-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.queries-tab {
+  flex: 1;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.queries-tab:hover {
+  color: var(--text-primary);
+}
+
+.queries-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.queries-dropdown-body {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.saved-query-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.query-history-clear-row {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
 /* Data Table */
 .table-container {
   flex: 1;
