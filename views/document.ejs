@@ -122,10 +122,12 @@
         </div>
         <div class="modal-body">
           <textarea id="editDocEditor" class="doc-editor" spellcheck="false"></textarea>
+          <div id="diffView" class="diff-view" style="display:none"></div>
           <p id="editError" class="error-message" style="display: none;"></p>
         </div>
         <div class="modal-footer">
           <button id="editCancel" class="btn btn-ghost">Cancel</button>
+          <button id="editDiffToggle" class="btn btn-ghost">Preview Changes</button>
           <button id="editSave" class="btn btn-primary">Save Changes</button>
         </div>
       </div>

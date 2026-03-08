@@ -2581,6 +2581,8 @@ function renderJsonTree(obj, indent = 0) {
   return `<span class="json-bracket">{</span>\n${entries}\n${spaces}<span class="json-bracket">}</span>`;
 }
 
+let editOriginalDoc = null;
+
 function openEditModal(doc) {
   const modal = document.getElementById('editModal');
   const editorEl = document.getElementById('editDocEditor');
@@ -2590,8 +2592,13 @@ function openEditModal(doc) {
     createJsonEditor('editDocEditor');
   }
 
+  editOriginalDoc = JSON.parse(JSON.stringify(doc));
   setEditorValue('editDocEditor', JSON.stringify(doc, null, 2));
   document.getElementById('editError').style.display = 'none';
+  const diffView = document.getElementById('diffView');
+  if (diffView) { diffView.style.display = 'none'; diffView.innerHTML = ''; }
+  const diffToggle = document.getElementById('editDiffToggle');
+  if (diffToggle) diffToggle.textContent = 'Preview Changes';
   modal.style.display = 'flex';
   focusEditor('editDocEditor');
 }
@@ -2605,11 +2612,38 @@ function setupEditModalHandlers(dbName, collectionName, docId) {
   const cancelBtn = document.getElementById('editCancel');
   const saveBtn = document.getElementById('editSave');
 
+  const diffToggle = document.getElementById('editDiffToggle');
+
   const closeModal = () => modal.style.display = 'none';
 
   backdrop.addEventListener('click', closeModal);
   closeBtn.addEventListener('click', closeModal);
   cancelBtn.addEventListener('click', closeModal);
+
+  diffToggle?.addEventListener('click', () => {
+    const diffView = document.getElementById('diffView');
+    if (!diffView) return;
+
+    if (diffView.style.display !== 'none') {
+      diffView.style.display = 'none';
+      diffToggle.textContent = 'Preview Changes';
+      return;
+    }
+
+    try {
+      const currentText = getEditorValue('editDocEditor');
+      const currentDoc = JSON.parse(currentText);
+      const originalText = JSON.stringify(editOriginalDoc, null, 2);
+      const newText = JSON.stringify(currentDoc, null, 2);
+
+      diffView.innerHTML = renderDiff(originalText, newText);
+      diffView.style.display = 'block';
+      diffToggle.textContent = 'Hide Diff';
+    } catch (e) {
+      diffView.innerHTML = `<div style="color:var(--danger);padding:12px">Invalid JSON: ${e.message}</div>`;
+      diffView.style.display = 'block';
+    }
+  });
 
   saveBtn.addEventListener('click', async () => {
     const errorEl = document.getElementById('editError');
@@ -3971,6 +4005,86 @@ function appendChangeEvent(container, data) {
   if (events.length > 200) {
     events[events.length - 1].remove();
   }
+}
+
+// ─── Diff Viewer ──────────────────────────────────────────────────────────────
+
+function renderDiff(oldText, newText) {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+
+  // Simple line-by-line diff using LCS
+  const lcs = computeLcs(oldLines, newLines);
+  const result = [];
+  let oi = 0, ni = 0, li = 0;
+
+  while (oi < oldLines.length || ni < newLines.length) {
+    if (li < lcs.length && oi < oldLines.length && ni < newLines.length && oldLines[oi] === lcs[li] && newLines[ni] === lcs[li]) {
+      result.push({ type: 'same', line: oldLines[oi] });
+      oi++; ni++; li++;
+    } else if (ni < newLines.length && (li >= lcs.length || newLines[ni] !== lcs[li])) {
+      result.push({ type: 'add', line: newLines[ni] });
+      ni++;
+    } else if (oi < oldLines.length && (li >= lcs.length || oldLines[oi] !== lcs[li])) {
+      result.push({ type: 'remove', line: oldLines[oi] });
+      oi++;
+    }
+  }
+
+  if (result.every(r => r.type === 'same')) {
+    return '<div class="diff-no-changes">No changes detected</div>';
+  }
+
+  let lineNum = 0;
+  const html = result.map(r => {
+    const prefix = r.type === 'add' ? '+' : r.type === 'remove' ? '-' : ' ';
+    const cls = r.type === 'add' ? 'diff-line-add' : r.type === 'remove' ? 'diff-line-remove' : 'diff-line-same';
+    if (r.type !== 'remove') lineNum++;
+    return `<div class="${cls}"><span class="diff-prefix">${prefix}</span><span class="diff-text">${escapeHtml(r.line)}</span></div>`;
+  }).join('');
+
+  return `<div class="diff-header">Changes Preview</div>${html}`;
+}
+
+function computeLcs(a, b) {
+  const m = a.length, n = b.length;
+  // Optimization: limit to reasonable size
+  if (m * n > 1000000) {
+    // Fallback: just find common lines in order
+    const result = [];
+    let j = 0;
+    for (let i = 0; i < m && j < n; i++) {
+      for (let k = j; k < n; k++) {
+        if (a[i] === b[k]) {
+          result.push(a[i]);
+          j = k + 1;
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+
+  const result = [];
+  let i = m, j = n;
+  while (i > 0 && j > 0) {
+    if (a[i - 1] === b[j - 1]) {
+      result.unshift(a[i - 1]);
+      i--; j--;
+    } else if (dp[i - 1][j] > dp[i][j - 1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  return result;
 }
 
 // ─── SQL to MQL Translator ────────────────────────────────────────────────────

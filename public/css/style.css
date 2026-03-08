@@ -3750,6 +3750,73 @@ textarea.inline-edit-input {
   flex-shrink: 0;
 }
 
+/* ─── Diff Viewer ───────────────────────────────────────────────────── */
+
+.diff-view {
+  margin-top: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: auto;
+  max-height: 300px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.diff-header {
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.diff-line-same,
+.diff-line-add,
+.diff-line-remove {
+  display: flex;
+  padding: 0 12px;
+  white-space: pre;
+}
+
+.diff-line-add {
+  background: rgba(0, 180, 100, 0.1);
+  color: #00b464;
+}
+
+.diff-line-remove {
+  background: rgba(220, 50, 50, 0.1);
+  color: var(--danger);
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+
+.diff-line-same {
+  color: var(--text-secondary);
+}
+
+.diff-prefix {
+  width: 20px;
+  flex-shrink: 0;
+  user-select: none;
+  opacity: 0.6;
+}
+
+.diff-text {
+  flex: 1;
+}
+
+.diff-no-changes {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+}
+
 /* ─── SQL to MQL Translator ─────────────────────────────────────────── */
 
 .sql-converter {
