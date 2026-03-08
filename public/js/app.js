@@ -1363,6 +1363,18 @@ async function initBrowser(dbName, collectionName) {
   initSqlPanel(dbName, collectionName);
   initViewModeToggle(dbName, collectionName);
   initShellPanel(dbName);
+
+  // Delegated click handler for expandable cells
+  document.addEventListener('click', (e) => {
+    const expandable = e.target.closest('.cell-expandable');
+    if (!expandable) return;
+    const pre = expandable.querySelector('.cell-expanded-json');
+    if (!pre) return;
+    e.stopPropagation();
+    const isVisible = pre.style.display !== 'none';
+    pre.style.display = isVisible ? 'none' : 'block';
+    expandable.classList.toggle('cell-expanded', !isVisible);
+  });
 }
 
 function runQuery(dbName, collectionName) {
@@ -2246,8 +2258,12 @@ function formatCellValue(value, field) {
   if (typeof value === 'object') {
     if (value.$oid) return `<span class="cell-id">${value.$oid}</span>`;
     if (value.$date) return `<span class="cell-value">${new Date(value.$date).toLocaleString()}</span>`;
-    if (Array.isArray(value)) return `<span class="cell-object">[${value.length} items]</span>`;
-    return `<span class="cell-object">{...}</span>`;
+    const jsonStr = JSON.stringify(value, null, 2);
+    const escapedJson = escapeHtml(jsonStr);
+    if (Array.isArray(value)) {
+      return `<span class="cell-object cell-expandable" title="Click to expand">[${value.length} items]<pre class="cell-expanded-json" style="display:none">${escapedJson}</pre></span>`;
+    }
+    return `<span class="cell-object cell-expandable" title="Click to expand">{...}<pre class="cell-expanded-json" style="display:none">${escapedJson}</pre></span>`;
   }
 
   if (typeof value === 'string') {

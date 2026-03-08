@@ -3874,3 +3874,35 @@ textarea.inline-edit-input {
     flex-direction: column;
   }
 }
+
+/* ─── Expandable Cell Values ────────────────────────────────────────── */
+
+.cell-expandable {
+  cursor: pointer;
+  position: relative;
+}
+
+.cell-expandable:hover {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.cell-expanded-json {
+  margin: 6px 0 0;
+  padding: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  color: var(--text-primary);
+}
+
+.cell-expanded .cell-expanded-json {
+  display: block;
+}
