@@ -508,6 +508,7 @@ function getCommandActions() {
     { label: 'Tab: Aggregation', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="aggregation"]')?.click() },
     { label: 'Tab: Validation', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="validation"]')?.click() },
     { label: 'Tab: Stats', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="stats"]')?.click() },
+    { label: 'Tab: Changes', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="changes"]')?.click() },
     { label: 'Focus Search', category: 'Actions', action: () => { const s = document.getElementById('searchInput'); if (s) { s.focus(); s.select(); } }},
     { label: 'Focus Filter', category: 'Actions', action: () => document.getElementById('queryFilter')?.focus() },
     { label: 'Select Columns', category: 'Actions', action: () => document.getElementById('columnsBtn')?.click() },
@@ -1357,6 +1358,7 @@ async function initBrowser(dbName, collectionName) {
   initAggregationPanel(dbName, collectionName);
   initValidationPanel(dbName, collectionName);
   initStatsPanel(dbName, collectionName);
+  initChangeStreamPanel(dbName, collectionName);
   initViewModeToggle(dbName, collectionName);
   initShellPanel(dbName);
 }
@@ -3712,6 +3714,176 @@ async function loadCollectionStats(dbName, collectionName) {
   }
 }
 
+// ─── Change Stream Viewer ─────────────────────────────────────────────────────
+
+let csEventSource = null;
+let csEventCount = 0;
+
+function initChangeStreamPanel(dbName, collectionName) {
+  const toggle = document.getElementById('csToggle');
+  const clearBtn = document.getElementById('csClear');
+  const opFilter = document.getElementById('csOpFilter');
+  if (!toggle) return;
+
+  toggle.addEventListener('click', () => {
+    if (csEventSource) {
+      stopChangeStream();
+    } else {
+      startChangeStream(dbName, collectionName);
+    }
+  });
+
+  clearBtn?.addEventListener('click', () => {
+    csEventCount = 0;
+    const container = document.getElementById('csEvents');
+    if (container) {
+      container.innerHTML = `
+        <div class="cs-empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          <p>Click <strong>Start Watching</strong> to listen for real-time changes on this collection.</p>
+          <p class="cs-hint">Requires a replica set or MongoDB Atlas. Changes from inserts, updates, and deletes will appear here live.</p>
+        </div>`;
+    }
+  });
+
+  opFilter?.addEventListener('change', () => {
+    if (csEventSource) {
+      stopChangeStream();
+      startChangeStream(dbName, collectionName);
+    }
+  });
+}
+
+function startChangeStream(dbName, collectionName) {
+  const toggle = document.getElementById('csToggle');
+  const opFilter = document.getElementById('csOpFilter');
+  const container = document.getElementById('csEvents');
+  if (!container) return;
+
+  const opType = opFilter?.value || 'all';
+  const url = `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/watch?operationType=${opType}`;
+
+  // Clear empty state on first start
+  if (csEventCount === 0) {
+    container.innerHTML = '';
+  }
+
+  csEventSource = new EventSource(url);
+  toggle.textContent = 'Stop Watching';
+  toggle.classList.remove('btn-primary');
+  toggle.classList.add('btn-danger');
+
+  // Add status indicator
+  const statusEl = document.createElement('div');
+  statusEl.className = 'cs-status cs-status-live';
+  statusEl.id = 'csStatus';
+  statusEl.innerHTML = '<span class="cs-status-dot"></span> Watching for changes...';
+  container.prepend(statusEl);
+
+  csEventSource.addEventListener('change', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      csEventCount++;
+      appendChangeEvent(container, data);
+    } catch (err) {
+      console.error('Failed to parse change event:', err);
+    }
+  });
+
+  csEventSource.addEventListener('error', (e) => {
+    const statusDot = document.getElementById('csStatus');
+    if (statusDot) {
+      statusDot.className = 'cs-status cs-status-error';
+      statusDot.innerHTML = '<span class="cs-status-dot"></span> Connection lost. Change streams require a replica set.';
+    }
+    stopChangeStream(true);
+  });
+}
+
+function stopChangeStream(keepStatus) {
+  if (csEventSource) {
+    csEventSource.close();
+    csEventSource = null;
+  }
+  const toggle = document.getElementById('csToggle');
+  if (toggle) {
+    toggle.textContent = 'Start Watching';
+    toggle.classList.remove('btn-danger');
+    toggle.classList.add('btn-primary');
+  }
+  if (!keepStatus) {
+    const statusEl = document.getElementById('csStatus');
+    if (statusEl) {
+      statusEl.className = 'cs-status cs-status-stopped';
+      statusEl.innerHTML = '<span class="cs-status-dot"></span> Stopped';
+    }
+  }
+}
+
+function appendChangeEvent(container, data) {
+  const el = document.createElement('div');
+  el.className = `cs-event cs-event-${data.operationType || 'unknown'}`;
+
+  const opBadge = {
+    insert: { label: 'INSERT', cls: 'cs-badge-insert' },
+    update: { label: 'UPDATE', cls: 'cs-badge-update' },
+    replace: { label: 'REPLACE', cls: 'cs-badge-update' },
+    delete: { label: 'DELETE', cls: 'cs-badge-delete' },
+    drop: { label: 'DROP', cls: 'cs-badge-delete' },
+    rename: { label: 'RENAME', cls: 'cs-badge-update' },
+  }[data.operationType] || { label: (data.operationType || 'EVENT').toUpperCase(), cls: 'cs-badge-default' };
+
+  const time = data.wallTime ? new Date(data.wallTime).toLocaleTimeString() : new Date().toLocaleTimeString();
+  const docKey = data.documentKey?._id?.$oid || data.documentKey?._id || '';
+
+  let details = '';
+  if (data.fullDocument) {
+    details = `<pre class="cs-event-doc">${escapeHtml(JSON.stringify(data.fullDocument, null, 2))}</pre>`;
+  } else if (data.updateDescription) {
+    const parts = [];
+    if (data.updateDescription.updatedFields) {
+      parts.push(`Updated: ${Object.keys(data.updateDescription.updatedFields).join(', ')}`);
+    }
+    if (data.updateDescription.removedFields?.length) {
+      parts.push(`Removed: ${data.updateDescription.removedFields.join(', ')}`);
+    }
+    details = `<div class="cs-event-update-info">${escapeHtml(parts.join(' | '))}</div>`;
+  }
+
+  el.innerHTML = `
+    <div class="cs-event-header">
+      <span class="cs-badge ${opBadge.cls}">${opBadge.label}</span>
+      <span class="cs-event-key" title="${escapeHtml(docKey)}">${docKey ? escapeHtml(docKey.substring(0, 24)) : '—'}</span>
+      <span class="cs-event-time">${time}</span>
+      <button class="cs-event-toggle btn-ghost" title="Toggle details">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+    <div class="cs-event-details" style="display:none">${details}</div>
+  `;
+
+  el.querySelector('.cs-event-toggle')?.addEventListener('click', () => {
+    const det = el.querySelector('.cs-event-details');
+    if (det) det.style.display = det.style.display === 'none' ? 'block' : 'none';
+  });
+
+  // Insert after status element
+  const statusEl = document.getElementById('csStatus');
+  if (statusEl && statusEl.nextSibling) {
+    container.insertBefore(el, statusEl.nextSibling);
+  } else {
+    container.appendChild(el);
+  }
+
+  // Limit to last 200 events
+  const events = container.querySelectorAll('.cs-event');
+  if (events.length > 200) {
+    events[events.length - 1].remove();
+  }
+}
+
 // ─── Performance Page ─────────────────────────────────────────────────────────
 
 function initPerformancePage() {
@@ -4102,6 +4274,7 @@ function initCollectionTabs(dbName, collectionName) {
     aggregation: document.getElementById('panel-aggregation'),
     validation: document.getElementById('panel-validation'),
     stats: document.getElementById('panel-stats'),
+    changes: document.getElementById('panel-changes'),
   };
 
   function switchTab(tabName) {
@@ -4117,6 +4290,7 @@ function initCollectionTabs(dbName, collectionName) {
       refreshEditor('validatorEditor');
     }
     if (tabName === 'stats') loadCollectionStats(dbName, collectionName);
+    if (tabName !== 'changes' && csEventSource) stopChangeStream();
     if (tabName === 'aggregation') {
       // Refresh all agg stage CodeMirror instances
       Object.keys(cmEditors).forEach(key => {

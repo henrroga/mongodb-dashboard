@@ -3452,3 +3452,201 @@ textarea.inline-edit-input {
 .cm-editor-hidden {
   display: none !important;
 }
+
+/* ─── Change Stream Viewer ──────────────────────────────────────────── */
+
+.cs-events-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+}
+
+.cs-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  text-align: center;
+  gap: 8px;
+}
+
+.cs-empty-state svg {
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+
+.cs-empty-state p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cs-hint {
+  font-size: 12px !important;
+  opacity: 0.7;
+}
+
+.cs-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cs-status-live {
+  background: rgba(0, 180, 100, 0.1);
+  color: #00b464;
+}
+
+.cs-status-stopped {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.cs-status-error {
+  background: rgba(220, 50, 50, 0.1);
+  color: var(--danger);
+}
+
+.cs-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.cs-status-live .cs-status-dot {
+  animation: csPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes csPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.cs-event {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: var(--bg-secondary);
+  animation: csSlideIn 0.2s ease-out;
+}
+
+@keyframes csSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cs-event-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: default;
+}
+
+.cs-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.cs-badge-insert {
+  background: rgba(0, 180, 100, 0.15);
+  color: #00b464;
+}
+
+.cs-badge-update {
+  background: rgba(60, 130, 246, 0.15);
+  color: #3c82f6;
+}
+
+.cs-badge-delete {
+  background: rgba(220, 50, 50, 0.15);
+  color: var(--danger);
+}
+
+.cs-badge-default {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.cs-event-key {
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-event-time {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.cs-event-toggle {
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.cs-event-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.cs-event-details {
+  padding: 0 12px 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.cs-event-doc {
+  margin: 8px 0 0;
+  padding: 10px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cs-event-update-info {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+.btn-danger:hover {
+  opacity: 0.9;
+}

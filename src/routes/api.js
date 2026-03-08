@@ -1324,4 +1324,58 @@ router.post("/disconnect", async (req, res) => {
   }
 });
 
+// Watch collection change stream (SSE)
+router.get("/:db/:collection/watch", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, collection: colName } = req.params;
+    const collection = client.db(dbName).collection(colName);
+
+    // Build optional pipeline filter
+    const pipeline = [];
+    const opFilter = req.query.operationType;
+    if (opFilter && opFilter !== "all") {
+      pipeline.push({ $match: { operationType: opFilter } });
+    }
+
+    // SSE headers
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    res.write("event: connected\ndata: {}\n\n");
+
+    const changeStream = collection.watch(pipeline, { fullDocument: "updateLookup" });
+
+    changeStream.on("change", (change) => {
+      const payload = {
+        operationType: change.operationType,
+        ns: change.ns,
+        documentKey: change.documentKey,
+        fullDocument: change.fullDocument || null,
+        updateDescription: change.updateDescription || null,
+        clusterTime: change.clusterTime?.toString() || null,
+        wallTime: change.wallTime || new Date().toISOString(),
+      };
+      res.write(`event: change\ndata: ${JSON.stringify(serializeDocument(payload))}\n\n`);
+    });
+
+    changeStream.on("error", (err) => {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+      changeStream.close();
+    });
+
+    req.on("close", () => {
+      changeStream.close();
+    });
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
 module.exports = router;

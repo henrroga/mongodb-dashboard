@@ -257,6 +257,7 @@
             <button class="collection-tab" data-tab="aggregation">Aggregation</button>
             <button class="collection-tab" data-tab="validation">Validation</button>
             <button class="collection-tab" data-tab="stats">Stats</button>
+            <button class="collection-tab" data-tab="changes">Changes</button>
           </div>
 
           <!-- Documents panel -->
@@ -685,6 +686,33 @@
             </div>
             <div id="statsContent" style="padding:24px">
               <div class="loading-spinner"></div>
+            </div>
+          </div>
+
+          <!-- Change Stream panel -->
+          <div id="panel-changes" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+            <div class="content-header">
+              <div class="content-title"><h2>Change Stream</h2></div>
+              <div class="content-actions" style="gap:8px">
+                <select id="csOpFilter" class="conn-field" style="width:auto;min-width:140px;height:32px;font-size:12px">
+                  <option value="all">All operations</option>
+                  <option value="insert">Insert</option>
+                  <option value="update">Update</option>
+                  <option value="replace">Replace</option>
+                  <option value="delete">Delete</option>
+                </select>
+                <button id="csToggle" class="btn btn-primary btn-sm">Start Watching</button>
+                <button id="csClear" class="btn btn-ghost btn-sm">Clear</button>
+              </div>
+            </div>
+            <div id="csEvents" class="cs-events-container">
+              <div class="cs-empty-state">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                <p>Click <strong>Start Watching</strong> to listen for real-time changes on this collection.</p>
+                <p class="cs-hint">Requires a replica set or MongoDB Atlas. Changes from inserts, updates, and deletes will appear here live.</p>
+              </div>
             </div>
           </div>
 
