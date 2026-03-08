@@ -227,6 +227,146 @@ async function autoReconnect() {
   }
 }
 
+// ─── Keyboard Shortcuts ──────────────────────────────────────────────────────
+
+function initKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    const isMod = e.metaKey || e.ctrlKey;
+    const tag = document.activeElement?.tagName;
+    const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.closest('.CodeMirror');
+
+    // Escape — close any open modal
+    if (e.key === 'Escape') {
+      const openModal = document.querySelector('.modal[style*="display: flex"], .modal[style*="display:flex"]');
+      if (openModal) {
+        openModal.style.display = 'none';
+        e.preventDefault();
+        return;
+      }
+      // Close shortcuts modal
+      const shortcutsModal = document.getElementById('shortcutsModal');
+      if (shortcutsModal && shortcutsModal.style.display !== 'none') {
+        shortcutsModal.style.display = 'none';
+        e.preventDefault();
+        return;
+      }
+    }
+
+    // Don't capture shortcuts when typing in inputs (except specific combos)
+    if (isEditing && !(isMod && (e.key === 'Enter' || e.key === '/' || e.key === 'k'))) return;
+
+    // Cmd/Ctrl + K — focus search input
+    if (isMod && e.key === 'k') {
+      e.preventDefault();
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) { searchInput.focus(); searchInput.select(); }
+      return;
+    }
+
+    // Cmd/Ctrl + Enter — run query
+    if (isMod && e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('queryRunBtn')?.click();
+      return;
+    }
+
+    // Cmd/Ctrl + Shift + N — new document
+    if (isMod && e.shiftKey && e.key === 'N') {
+      e.preventDefault();
+      document.getElementById('addDocBtn')?.click();
+      return;
+    }
+
+    // Cmd/Ctrl + / — toggle shell panel
+    if (isMod && e.key === '/') {
+      e.preventDefault();
+      const shellPanel = document.getElementById('shellPanel');
+      const shellOpenBtn = document.getElementById('shellOpenBtn');
+      if (shellPanel?.classList.contains('shell-panel-closed')) {
+        shellOpenBtn?.click();
+      } else {
+        document.getElementById('shellToggleBtn')?.click();
+      }
+      return;
+    }
+
+    // ? — show shortcuts help (when not editing)
+    if (e.key === '?' && !isEditing) {
+      e.preventDefault();
+      toggleShortcutsModal();
+      return;
+    }
+
+    // R — refresh (when not editing)
+    if (e.key === 'r' && !isEditing && !isMod) {
+      e.preventDefault();
+      document.getElementById('refreshBtn')?.click();
+      return;
+    }
+
+    // F — focus filter (when not editing)
+    if (e.key === 'f' && !isEditing && !isMod) {
+      e.preventDefault();
+      const filterEl = document.getElementById('queryFilter');
+      if (filterEl) filterEl.focus();
+      return;
+    }
+
+    // 1-5 — switch tabs (when not editing)
+    if (!isEditing && e.key >= '1' && e.key <= '5') {
+      const tabNames = ['documents', 'indexes', 'schema', 'aggregation', 'validation'];
+      const idx = parseInt(e.key) - 1;
+      if (idx < tabNames.length) {
+        const tab = document.querySelector(`.collection-tab[data-tab="${tabNames[idx]}"]`);
+        if (tab) { e.preventDefault(); tab.click(); }
+      }
+    }
+  });
+}
+
+function toggleShortcutsModal() {
+  let modal = document.getElementById('shortcutsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'shortcutsModal';
+    modal.className = 'modal';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+      <div class="modal-backdrop" onclick="document.getElementById('shortcutsModal').style.display='none'"></div>
+      <div class="modal-content modal-sm">
+        <div class="modal-header">
+          <h3>Keyboard Shortcuts</h3>
+          <button class="modal-close" onclick="document.getElementById('shortcutsModal').style.display='none'">&times;</button>
+        </div>
+        <div class="modal-body shortcuts-body">
+          <div class="shortcut-group">
+            <h4>General</h4>
+            <div class="shortcut-row"><kbd>?</kbd><span>Show shortcuts</span></div>
+            <div class="shortcut-row"><kbd>Esc</kbd><span>Close modal / panel</span></div>
+            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+K</kbd><span>Focus search</span></div>
+            <div class="shortcut-row"><kbd>R</kbd><span>Refresh documents</span></div>
+          </div>
+          <div class="shortcut-group">
+            <h4>Documents</h4>
+            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+⏎</kbd><span>Run query</span></div>
+            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+⇧+N</kbd><span>New document</span></div>
+            <div class="shortcut-row"><kbd>F</kbd><span>Focus filter bar</span></div>
+          </div>
+          <div class="shortcut-group">
+            <h4>Navigation</h4>
+            <div class="shortcut-row"><kbd>1</kbd>–<kbd>5</kbd><span>Switch tabs</span></div>
+            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+/</kbd><span>Toggle shell</span></div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+}
+
+// Initialize shortcuts on page load
+document.addEventListener('DOMContentLoaded', initKeyboardShortcuts);
+
 // ─── Open Tabs Bar ───────────────────────────────────────────────────────────
 
 const OPEN_TABS_KEY = 'mongodb_dashboard_open_tabs';
