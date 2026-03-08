@@ -79,6 +79,44 @@ function refreshEditor(id) {
   if (cm) setTimeout(() => cm.refresh(), 10);
 }
 
+// ─── Toast Notifications ─────────────────────────────────────────────────────
+
+const TOAST_ICONS = {
+  success: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  error: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+  warning: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+};
+
+function showToast(message, type = 'info', duration = 4000) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${TOAST_ICONS[type] || TOAST_ICONS.info}</span>
+    <span class="toast-message">${escapeHtml(message)}</span>
+    <button class="toast-close" onclick="this.parentElement.classList.add('toast-removing'); setTimeout(() => this.parentElement.remove(), 200)">&times;</button>
+  `;
+
+  container.appendChild(toast);
+
+  if (duration > 0) {
+    setTimeout(() => {
+      toast.classList.add('toast-removing');
+      setTimeout(() => toast.remove(), 200);
+    }, duration);
+  }
+
+  return toast;
+}
+
 // Storage keys
 const STORAGE_KEY = 'mongodb_dashboard_connections';
 const ACTIVE_CONNECTION_KEY = 'mongodb_dashboard_active_connection';
@@ -753,7 +791,7 @@ async function initBrowser(dbName, collectionName) {
       const projection = queryProjectionEl?.value.trim() || '';
       const sort = querySortEl?.value.trim() || '';
       if (!filter && !projection && !sort) {
-        alert('Enter at least a filter, projection, or sort to save.');
+        showToast('Enter at least a filter, projection, or sort to save.', 'warning');
         return;
       }
       const name = prompt('Name for this saved query:');
@@ -1901,7 +1939,7 @@ async function confirmDelete() {
       loadDocuments(deleteDbName, deleteColName);
     }
   } catch (err) {
-    alert('Delete failed: ' + err.message);
+    showToast('Delete failed: ' + err.message, 'error');
   } finally {
     confirmBtn.disabled = false;
     confirmBtn.textContent = 'Delete';
@@ -2063,7 +2101,7 @@ function openDeleteModalForPage(dbName, collectionName, docId) {
       // Go back to collection
       window.location.href = `/browse/${dbName}/${collectionName}`;
     } catch (err) {
-      alert('Delete failed: ' + err.message);
+      showToast('Delete failed: ' + err.message, 'error');
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Delete';
     }
@@ -2322,7 +2360,7 @@ function setupColumnsModalHandlers() {
       .map(cb => cb.value);
     
     if (selectedFields.length === 0) {
-      alert('Please select at least one column to display.');
+      showToast('Please select at least one column to display.', 'warning');
       return;
     }
 
@@ -2449,7 +2487,7 @@ function setupViewModalHandlers() {
       }, 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
-      alert('Failed to copy to clipboard');
+      showToast('Failed to copy to clipboard', 'error');
     }
   });
 }
@@ -2786,7 +2824,7 @@ function applyArrayFilter(fieldName) {
   const filterType = document.querySelector(`input[name="filter-type-${fieldId}"]:checked`)?.value;
   
   if (!filterType) {
-    alert('Please select a filter type');
+    showToast('Please select a filter type', 'warning');
     return;
   }
   
@@ -2800,7 +2838,7 @@ function applyArrayFilter(fieldName) {
     }
     const value = parseInt(valueInput.value);
     if (isNaN(value) || value < 0) {
-      alert('Please enter a valid number (>= 0)');
+      showToast('Please enter a valid number (>= 0)', 'warning');
       return;
     }
     arrayFilters[fieldName] = { type: 'gte', value: value };
@@ -3047,7 +3085,7 @@ window.killOp = async function(opid) {
     if (!res.ok) throw new Error(data.error);
     document.getElementById('refreshOps')?.click();
   } catch (err) {
-    alert('Error: ' + err.message);
+    showToast('Error: ' + err.message, 'error');
   }
 };
 
@@ -3601,7 +3639,7 @@ window.toggleIndexHidden = async function(dbName, collectionName, indexName, hid
     if (!res.ok) throw new Error(data.error);
     loadIndexes(decodeURIComponent(dbName), decodeURIComponent(collectionName));
   } catch (err) {
-    alert('Error: ' + err.message);
+    showToast('Error: ' + err.message, 'error');
   }
 };
 
@@ -3654,7 +3692,7 @@ function initAggregationPanel(dbName, collectionName) {
 
   // Save pipeline
   document.getElementById('aggSave')?.addEventListener('click', () => {
-    if (aggStages.length === 0) { alert('Add at least one stage to save.'); return; }
+    if (aggStages.length === 0) { showToast('Add at least one stage to save.', 'warning'); return; }
     const name = prompt('Name for this pipeline:');
     if (!name) return;
     const pipelines = getSavedPipelines(dbName, collectionName);
@@ -3699,7 +3737,9 @@ function initAggregationPanel(dbName, collectionName) {
   document.getElementById('aggExportModal')?.querySelector('.modal-backdrop')?.addEventListener('click', closeExportModal);
   document.getElementById('aggExportCopy')?.addEventListener('click', () => {
     const code = getEditorValue('aggExportCode');
-    navigator.clipboard.writeText(code).catch(() => {});
+    navigator.clipboard.writeText(code)
+      .then(() => showToast('Copied to clipboard', 'success', 2000))
+      .catch(() => showToast('Failed to copy to clipboard', 'error'));
   });
 }
 
