@@ -3708,9 +3708,96 @@ async function loadCollectionStats(dbName, collectionName) {
           `).join('')}
         </div>
       </div>` : ''}
+
+      ${buildStorageChart(data)}
+
+      <div style="margin-top:24px">
+        <h3 style="font-size:14px;margin-bottom:12px;color:var(--text-primary)">Field Type Distribution</h3>
+        <div id="fieldTypeChart" class="stats-chart-placeholder">
+          <button class="btn btn-ghost btn-sm" id="analyzeFieldTypes">Analyze Field Types</button>
+        </div>
+      </div>
     `;
+
+    document.getElementById('analyzeFieldTypes')?.addEventListener('click', async () => {
+      await loadFieldTypeDistribution(dbName, collectionName);
+    });
   } catch (err) {
     container.innerHTML = `<div style="color:var(--danger);padding:20px">Error: ${err.message}</div>`;
+  }
+}
+
+function buildStorageChart(data) {
+  const total = (data.storageSize || 0) + (data.totalIndexSize || 0) + (data.freeStorageSize || 0);
+  if (total === 0) return '';
+
+  const dataPct = ((data.storageSize || 0) / total * 100).toFixed(1);
+  const indexPct = ((data.totalIndexSize || 0) / total * 100).toFixed(1);
+  const freePct = ((data.freeStorageSize || 0) / total * 100).toFixed(1);
+
+  return `
+    <div style="margin-top:24px">
+      <h3 style="font-size:14px;margin-bottom:12px;color:var(--text-primary)">Storage Breakdown</h3>
+      <div class="storage-bar">
+        <div class="storage-bar-seg storage-bar-data" style="width:${Math.max(1, dataPct)}%" title="Data: ${formatBytes(data.storageSize)}"></div>
+        <div class="storage-bar-seg storage-bar-index" style="width:${Math.max(1, indexPct)}%" title="Indexes: ${formatBytes(data.totalIndexSize)}"></div>
+        <div class="storage-bar-seg storage-bar-free" style="width:${Math.max(1, freePct)}%" title="Free: ${formatBytes(data.freeStorageSize)}"></div>
+      </div>
+      <div class="storage-legend">
+        <span class="storage-legend-item"><span class="storage-dot storage-dot-data"></span>Data ${dataPct}%</span>
+        <span class="storage-legend-item"><span class="storage-dot storage-dot-index"></span>Indexes ${indexPct}%</span>
+        <span class="storage-legend-item"><span class="storage-dot storage-dot-free"></span>Free ${freePct}%</span>
+      </div>
+    </div>`;
+}
+
+async function loadFieldTypeDistribution(dbName, collectionName) {
+  const container = document.getElementById('fieldTypeChart');
+  if (!container) return;
+
+  container.innerHTML = '<div class="loading-spinner"></div>';
+
+  try {
+    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/schema-analysis?sampleSize=200`);
+    const schema = await res.json();
+    if (!res.ok) throw new Error(schema.error);
+
+    const typeCounts = {};
+    const fields = schema.fields || {};
+    Object.values(fields).forEach(f => {
+      Object.entries(f.types || {}).forEach(([t, count]) => {
+        typeCounts[t] = (typeCounts[t] || 0) + count;
+      });
+    });
+
+    const entries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+    const maxCount = entries[0]?.[1] || 1;
+
+    const typeColors = {
+      String: '#3c82f6', Number: '#f59e0b', Boolean: '#10b981', ObjectId: '#8b5cf6',
+      Date: '#ec4899', Array: '#06b6d4', Object: '#6366f1', Null: '#6b7280',
+      Double: '#f97316', Int32: '#eab308', Long: '#84cc16', Decimal128: '#14b8a6',
+    };
+
+    if (entries.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-muted);font-size:13px">No fields found in sample.</div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="field-type-bars">
+        ${entries.map(([type, count]) => `
+          <div class="field-type-row">
+            <span class="field-type-label">${escapeHtml(type)}</span>
+            <div class="field-type-bar-wrap">
+              <div class="field-type-bar" style="width:${(count / maxCount * 100)}%;background:${typeColors[type] || 'var(--accent)'}"></div>
+            </div>
+            <span class="field-type-count">${count} field${count !== 1 ? 's' : ''}</span>
+          </div>
+        `).join('')}
+      </div>`;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--danger);font-size:13px">Error: ${err.message}</div>`;
   }
 }
 
