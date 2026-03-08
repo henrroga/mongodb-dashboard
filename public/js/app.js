@@ -4769,15 +4769,27 @@ function exportPipeline(dbName, collectionName, lang) {
     } catch (e) { /* skip invalid */ }
   }
 
+  const pipeJson = JSON.stringify(pipeline, null, 2);
+  const pipeIndented = pipeJson.split('\n').join('\n  ');
+  const langTitles = { js: 'JavaScript (mongosh)', nodejs: 'Node.js Driver', python: 'Python (pymongo)', java: 'Java Driver', csharp: 'C# (.NET Driver)', go: 'Go Driver' };
+
   let code = '';
   if (lang === 'js') {
     code = `// MongoDB Aggregation Pipeline\n// Database: ${dbName}, Collection: ${collectionName}\n\ndb.getCollection('${collectionName}').aggregate([\n${pipeline.map(s => '  ' + JSON.stringify(s, null, 2).split('\n').join('\n  ')).join(',\n')}\n]);`;
+  } else if (lang === 'nodejs') {
+    code = `// MongoDB Aggregation Pipeline - Node.js Driver\nconst { MongoClient } = require('mongodb');\n\nasync function run() {\n  const client = new MongoClient('mongodb://localhost:27017/');\n  await client.connect();\n  const db = client.db('${dbName}');\n  const collection = db.collection('${collectionName}');\n\n  const pipeline = ${pipeIndented};\n\n  const results = await collection.aggregate(pipeline).toArray();\n  console.log(results);\n  await client.close();\n}\n\nrun().catch(console.error);`;
   } else if (lang === 'python') {
-    const pipeStr = JSON.stringify(pipeline, null, 2).split('\n').join('\n  ');
-    code = `# MongoDB Aggregation Pipeline\n# Database: ${dbName}, Collection: ${collectionName}\n\nfrom pymongo import MongoClient\n\nclient = MongoClient("mongodb://localhost:27017/")\ndb = client["${dbName}"]\ncollection = db["${collectionName}"]\n\npipeline = ${pipeStr}\n\nresults = list(collection.aggregate(pipeline))\nfor doc in results:\n    print(doc)`;
+    code = `# MongoDB Aggregation Pipeline - Python (pymongo)\nfrom pymongo import MongoClient\n\nclient = MongoClient("mongodb://localhost:27017/")\ndb = client["${dbName}"]\ncollection = db["${collectionName}"]\n\npipeline = ${pipeIndented}\n\nresults = list(collection.aggregate(pipeline))\nfor doc in results:\n    print(doc)`;
+  } else if (lang === 'java') {
+    const stages = pipeline.map(s => `    new Document(${JSON.stringify(s).replace(/"/g, '\\"')})`).join(',\n');
+    code = `// MongoDB Aggregation Pipeline - Java Driver\nimport com.mongodb.client.*;\nimport org.bson.Document;\nimport java.util.*;\n\npublic class Aggregation {\n  public static void main(String[] args) {\n    MongoClient client = MongoClients.create("mongodb://localhost:27017/");\n    MongoDatabase db = client.getDatabase("${dbName}");\n    MongoCollection<Document> collection = db.getCollection("${collectionName}");\n\n    List<Document> pipeline = Arrays.asList(\n${stages}\n    );\n\n    collection.aggregate(pipeline)\n      .forEach(doc -> System.out.println(doc.toJson()));\n    client.close();\n  }\n}`;
+  } else if (lang === 'csharp') {
+    code = `// MongoDB Aggregation Pipeline - C# (.NET Driver)\nusing MongoDB.Driver;\nusing MongoDB.Bson;\n\nvar client = new MongoClient("mongodb://localhost:27017/");\nvar db = client.GetDatabase("${dbName}");\nvar collection = db.GetCollection<BsonDocument>("${collectionName}");\n\nvar pipeline = new BsonDocument[] {\n${pipeline.map(s => '  BsonDocument.Parse(@"' + JSON.stringify(s).replace(/"/g, '""') + '")').join(',\n')}\n};\n\nvar results = await collection.Aggregate<BsonDocument>(\n  PipelineDefinition<BsonDocument, BsonDocument>.Create(pipeline)\n).ToListAsync();\n\nforeach (var doc in results)\n  Console.WriteLine(doc);`;
+  } else if (lang === 'go') {
+    code = `// MongoDB Aggregation Pipeline - Go Driver\npackage main\n\nimport (\n  "context"\n  "fmt"\n  "go.mongodb.org/mongo-driver/bson"\n  "go.mongodb.org/mongo-driver/mongo"\n  "go.mongodb.org/mongo-driver/mongo/options"\n)\n\nfunc main() {\n  client, _ := mongo.Connect(context.TODO(),\n    options.Client().ApplyURI("mongodb://localhost:27017/"))\n  defer client.Disconnect(context.TODO())\n\n  collection := client.Database("${dbName}").Collection("${collectionName}")\n\n  pipeline := mongo.Pipeline{\n${pipeline.map(s => `    bson.D{${JSON.stringify(Object.entries(s)[0]).replace(/\["/g, '{"').replace(/",/g, '",').replace(/\]/g, '}')}}`).join(',\n')}\n  }\n\n  cursor, _ := collection.Aggregate(context.TODO(), pipeline)\n  var results []bson.M\n  cursor.All(context.TODO(), &results)\n  for _, doc := range results {\n    fmt.Println(doc)\n  }\n}`;
   }
 
-  document.getElementById('aggExportTitle').textContent = lang === 'js' ? 'Export — JavaScript (mongosh)' : 'Export — Python (pymongo)';
+  document.getElementById('aggExportTitle').textContent = `Export — ${langTitles[lang] || lang}`;
 
   // Initialize CodeMirror for export code if not yet created
   const exportEl = document.getElementById('aggExportCode');
