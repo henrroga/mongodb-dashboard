@@ -3887,6 +3887,19 @@ textarea.inline-edit-input {
   }
 }
 
+/* ─── Server Version Badge ───────────────────────────────────────────── */
+
+.server-version-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: default;
+  white-space: nowrap;
+}
+
 /* ─── Auto Refresh ───────────────────────────────────────────────────── */
 
 .auto-refresh-wrap {

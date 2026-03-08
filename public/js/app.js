@@ -1133,6 +1133,24 @@ function initSidebarResize() {
 
 document.addEventListener('DOMContentLoaded', initSidebarResize);
 
+function loadServerInfo() {
+  const badge = document.getElementById('serverVersionBadge');
+  if (!badge) return;
+
+  fetch('/api/server-info')
+    .then(r => r.json())
+    .then(data => {
+      if (data.version) {
+        badge.textContent = `MongoDB ${data.version}`;
+        badge.title = `Host: ${data.host || '?'}\nEngine: ${data.storageEngine || '?'}\nUptime: ${data.uptime ? Math.floor(data.uptime / 3600) + 'h' : '?'}`;
+        badge.style.display = '';
+      }
+    })
+    .catch(() => {});
+}
+
+document.addEventListener('DOMContentLoaded', loadServerInfo);
+
 let autoRefreshInterval = null;
 
 function initAutoRefresh(dbName, collectionName) {

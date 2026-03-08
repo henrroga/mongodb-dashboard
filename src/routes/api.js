@@ -1293,6 +1293,33 @@ router.delete("/server/currentop/:opid", async (req, res) => {
   }
 });
 
+// Server info (version, uptime, etc.)
+router.get("/server-info", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const admin = client.db().admin();
+    const info = await admin.command({ buildInfo: 1 });
+    const status = await admin.command({ serverStatus: 1 });
+
+    res.json({
+      version: info.version,
+      gitVersion: info.gitVersion,
+      modules: info.modules || [],
+      storageEngine: status.storageEngine?.name || 'unknown',
+      uptime: status.uptime,
+      host: status.host,
+      connections: {
+        current: status.connections?.current,
+        available: status.connections?.available,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Check connection status
 router.get("/status", async (req, res) => {
   try {
