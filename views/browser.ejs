@@ -367,6 +367,20 @@
                 </svg>
                 Columns
               </button>
+              <div class="auto-refresh-wrap">
+                <button id="autoRefreshToggle" class="btn btn-ghost btn-sm" title="Auto-refresh">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                  </svg>
+                </button>
+                <div id="autoRefreshDropdown" class="auto-refresh-dropdown" style="display:none">
+                  <button class="auto-refresh-option" data-interval="0">Off</button>
+                  <button class="auto-refresh-option" data-interval="5">5s</button>
+                  <button class="auto-refresh-option" data-interval="10">10s</button>
+                  <button class="auto-refresh-option" data-interval="30">30s</button>
+                  <button class="auto-refresh-option" data-interval="60">60s</button>
+                </div>
+              </div>
               <button id="refreshBtn" class="btn btn-ghost" title="Refresh">
                 <svg
                   width="16"

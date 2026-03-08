@@ -1133,6 +1133,47 @@ function initSidebarResize() {
 
 document.addEventListener('DOMContentLoaded', initSidebarResize);
 
+let autoRefreshInterval = null;
+
+function initAutoRefresh(dbName, collectionName) {
+  const toggle = document.getElementById('autoRefreshToggle');
+  const dropdown = document.getElementById('autoRefreshDropdown');
+  if (!toggle || !dropdown) return;
+
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.style.display = dropdown.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  document.addEventListener('click', () => { dropdown.style.display = 'none'; });
+
+  dropdown.querySelectorAll('.auto-refresh-option').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const interval = parseInt(btn.dataset.interval);
+      dropdown.style.display = 'none';
+
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+      }
+
+      if (interval > 0) {
+        toggle.classList.add('auto-refresh-active');
+        toggle.title = `Auto-refresh: ${interval}s`;
+        autoRefreshInterval = setInterval(() => {
+          document.getElementById('refreshBtn')?.click();
+        }, interval * 1000);
+        showToast(`Auto-refresh every ${interval}s`, 'info', 2000);
+      } else {
+        toggle.classList.remove('auto-refresh-active');
+        toggle.title = 'Auto-refresh';
+        showToast('Auto-refresh off', 'info', 1500);
+      }
+    });
+  });
+}
+
 function initCollectionSearch() {
   const searchInput = document.getElementById('collectionSearch');
   if (!searchInput) return;
@@ -1396,6 +1437,9 @@ async function initBrowser(dbName, collectionName) {
   document.getElementById('columnsBtn')?.addEventListener('click', () => {
     openColumnsModal(dbName, collectionName);
   });
+
+  // Auto-refresh toggle
+  initAutoRefresh(dbName, collectionName);
 
   // Load more button — handles both cursor and offset pagination modes
   document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
