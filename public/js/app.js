@@ -823,6 +823,7 @@ let currentDbName = '';
 let currentCollectionName = '';
 let arrayFilters = {}; // Store filters for array columns: { fieldName: { type: 'empty' | 'gte', value: number } }
 let currentViewMode = localStorage.getItem('mongodb_dashboard_view_mode') || 'table';
+let selectedDocIds = new Set();
 
 // MQL Query Bar state
 let currentFilter = '';
@@ -1185,6 +1186,8 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
     tableBody.innerHTML = '<tr class="loading-row"><td colspan="100"><div class="loading-spinner"></div></td></tr>';
     allDocuments = [];
     allAvailableFields = [];
+    selectedDocIds.clear();
+    updateBulkBar();
   }
 
   try {
@@ -1402,7 +1405,22 @@ function renderTableHeader() {
     `;
   }).join('');
   
-  tableHeader.innerHTML = headerCells + '<th>Extra Fields</th><th>Actions</th>';
+  const selectAll = `<th class="th-select"><input type="checkbox" id="selectAllDocs" title="Select all"></th>`;
+  tableHeader.innerHTML = selectAll + headerCells + '<th>Extra Fields</th><th>Actions</th>';
+
+  document.getElementById('selectAllDocs')?.addEventListener('change', (e) => {
+    const checked = e.target.checked;
+    if (checked) {
+      allDocuments.forEach(doc => {
+        const id = doc._id?.$oid || doc._id;
+        if (id) selectedDocIds.add(String(id));
+      });
+    } else {
+      selectedDocIds.clear();
+    }
+    document.querySelectorAll('.doc-select-cb').forEach(cb => { cb.checked = checked; });
+    updateBulkBar();
+  });
   
   // Attach click handlers for filter icons using event delegation
   tableHeader.addEventListener('click', (e) => {
@@ -1523,6 +1541,21 @@ function isArrayField(fieldName) {
 function createDocumentRow(doc, dbName, collectionName) {
   const tr = document.createElement('tr');
   const docId = doc._id?.$oid || doc._id;
+
+  // Checkbox column
+  const selectTd = document.createElement('td');
+  selectTd.className = 'td-select';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'doc-select-cb';
+  cb.checked = selectedDocIds.has(String(docId));
+  cb.addEventListener('change', () => {
+    if (cb.checked) { selectedDocIds.add(String(docId)); }
+    else { selectedDocIds.delete(String(docId)); }
+    updateBulkBar();
+  });
+  selectTd.appendChild(cb);
+  tr.appendChild(selectTd);
 
   tableFields.forEach(field => {
     const td = document.createElement('td');
@@ -1650,6 +1683,89 @@ async function duplicateDocument(doc, dbName, collectionName) {
   } catch (err) {
     showToast('Duplicate failed: ' + err.message, 'error');
   }
+}
+
+// ─── Bulk Operations ─────────────────────────────────────────────────────────
+
+function updateBulkBar() {
+  let bar = document.getElementById('bulkBar');
+  if (selectedDocIds.size === 0) {
+    if (bar) bar.style.display = 'none';
+    return;
+  }
+
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'bulkBar';
+    bar.className = 'bulk-bar';
+    const tableContainer = document.getElementById('tableViewContainer');
+    if (tableContainer) tableContainer.parentNode.insertBefore(bar, tableContainer);
+  }
+
+  bar.style.display = 'flex';
+  bar.innerHTML = `
+    <span class="bulk-count">${selectedDocIds.size} document${selectedDocIds.size !== 1 ? 's' : ''} selected</span>
+    <button class="btn btn-sm btn-danger" id="bulkDeleteBtn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+      </svg>
+      Delete Selected
+    </button>
+    <button class="btn btn-sm btn-ghost" id="bulkClearBtn">Clear Selection</button>
+  `;
+
+  document.getElementById('bulkDeleteBtn')?.addEventListener('click', () => {
+    if (confirm(`Delete ${selectedDocIds.size} documents? This cannot be undone.`)) {
+      bulkDelete();
+    }
+  });
+
+  document.getElementById('bulkClearBtn')?.addEventListener('click', () => {
+    selectedDocIds.clear();
+    document.querySelectorAll('.doc-select-cb').forEach(cb => { cb.checked = false; });
+    const selectAll = document.getElementById('selectAllDocs');
+    if (selectAll) selectAll.checked = false;
+    updateBulkBar();
+  });
+}
+
+async function bulkDelete() {
+  const ids = Array.from(selectedDocIds);
+  const dbName = currentDbName;
+  const collectionName = currentCollectionName;
+  let deleted = 0;
+  let errors = 0;
+
+  showToast(`Deleting ${ids.length} documents...`, 'info', 2000);
+
+  for (const id of ids) {
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) deleted++;
+      else errors++;
+    } catch {
+      errors++;
+    }
+  }
+
+  selectedDocIds.clear();
+  const selectAll = document.getElementById('selectAllDocs');
+  if (selectAll) selectAll.checked = false;
+  updateBulkBar();
+
+  if (errors > 0) {
+    showToast(`Deleted ${deleted} documents, ${errors} failed`, 'warning');
+  } else {
+    showToast(`Deleted ${deleted} documents`, 'success');
+  }
+
+  // Reload
+  currentCursor = null;
+  currentNextSkip = null;
+  allDocuments = [];
+  loadDocuments(dbName, collectionName);
 }
 
 // ─── View Mode Switching ─────────────────────────────────────────────────────

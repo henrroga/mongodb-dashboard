@@ -2700,6 +2700,39 @@ a:hover {
   }
 }
 
+/* Bulk Operations Bar */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(56, 139, 253, 0.08);
+  border: 1px solid rgba(56, 139, 253, 0.3);
+  border-radius: var(--radius);
+  margin: 0 0 8px 0;
+  animation: toast-in 0.2s ease;
+}
+
+.bulk-count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  flex: 1;
+}
+
+.th-select, .td-select {
+  width: 36px;
+  text-align: center;
+  padding: 0 8px !important;
+}
+
+.th-select input, .td-select input {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
 /* Collection Stats */
 .stats-grid {
   display: grid;
