@@ -604,6 +604,7 @@ let currentSearchTerm = '';
 let currentDbName = '';
 let currentCollectionName = '';
 let arrayFilters = {}; // Store filters for array columns: { fieldName: { type: 'empty' | 'gte', value: number } }
+let currentViewMode = localStorage.getItem('mongodb_dashboard_view_mode') || 'table';
 
 // MQL Query Bar state
 let currentFilter = '';
@@ -920,6 +921,7 @@ async function initBrowser(dbName, collectionName) {
   initSchemaPanel(dbName, collectionName);
   initAggregationPanel(dbName, collectionName);
   initValidationPanel(dbName, collectionName);
+  initViewModeToggle(dbName, collectionName);
   initShellPanel(dbName);
 }
 
@@ -1030,11 +1032,14 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
     if (!cursor && nextSkip === null) {
       tableBody.innerHTML = '';
     }
-    
+
     documents.forEach(doc => {
       const row = createDocumentRow(doc, dbName, collectionName);
       tableBody.appendChild(row);
     });
+
+    // Render alternative views
+    renderCurrentView(dbName, collectionName);
 
     // Ensure table header is rendered
     if (tableFields.length > 0 && tableHeader.innerHTML.trim() === '') {
@@ -1365,6 +1370,123 @@ function createDocumentRow(doc, dbName, collectionName) {
   actionsTd.appendChild(actionsDiv);
   tr.appendChild(actionsTd);
   return tr;
+}
+
+// ─── View Mode Switching ─────────────────────────────────────────────────────
+
+function initViewModeToggle(dbName, collectionName) {
+  const toggle = document.getElementById('viewModeToggle');
+  if (!toggle) return;
+
+  // Set initial state
+  toggle.querySelectorAll('.view-mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === currentViewMode);
+    btn.addEventListener('click', () => {
+      currentViewMode = btn.dataset.view;
+      localStorage.setItem('mongodb_dashboard_view_mode', currentViewMode);
+      toggle.querySelectorAll('.view-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+      renderCurrentView(dbName, collectionName);
+    });
+  });
+}
+
+function renderCurrentView(dbName, collectionName) {
+  const tableContainer = document.getElementById('tableViewContainer');
+  const listContainer = document.getElementById('listViewContainer');
+  const jsonContainer = document.getElementById('jsonViewContainer');
+  if (!tableContainer) return;
+
+  tableContainer.style.display = currentViewMode === 'table' ? '' : 'none';
+  listContainer.style.display = currentViewMode === 'list' ? '' : 'none';
+  jsonContainer.style.display = currentViewMode === 'json' ? '' : 'none';
+
+  if (currentViewMode === 'list') {
+    renderListView(dbName, collectionName);
+  } else if (currentViewMode === 'json') {
+    renderJsonView();
+  }
+}
+
+function renderListView(dbName, collectionName) {
+  const body = document.getElementById('listViewBody');
+  if (!body) return;
+
+  if (allDocuments.length === 0) {
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">No documents found</div>';
+    return;
+  }
+
+  body.innerHTML = allDocuments.map((doc, idx) => {
+    const docId = doc._id?.$oid || doc._id || idx;
+    const fields = Object.entries(doc);
+    return `
+      <div class="list-view-card" data-idx="${idx}">
+        <div class="list-view-card-header" onclick="this.parentElement.classList.toggle('collapsed')">
+          <span class="list-view-card-id">${escapeHtml(String(docId))}</span>
+          <div class="list-view-card-actions">
+            <button class="action-btn edit" title="Edit" onclick="event.stopPropagation(); openDocModal('${escapeHtml(dbName)}','${escapeHtml(collectionName)}', allDocuments[${idx}])">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="action-btn delete" title="Delete" onclick="event.stopPropagation(); openDeleteModal('${escapeHtml(dbName)}','${escapeHtml(collectionName)}','${escapeHtml(String(docId))}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              </svg>
+            </button>
+            <span class="list-view-card-toggle">&#9660;</span>
+          </div>
+        </div>
+        <div class="list-view-card-body">
+          ${fields.map(([key, val]) => renderListField(key, val)).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderListField(key, value, depth = 0) {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value) && !value.$oid && !value.$date && !value.$numberDecimal) {
+    const entries = Object.entries(value);
+    return `
+      <div class="list-view-field">
+        <span class="list-view-field-key">${escapeHtml(key)}</span>
+        <span class="list-view-field-value">{${entries.length} fields}</span>
+      </div>
+      <div class="list-view-nested">
+        ${entries.map(([k, v]) => renderListField(k, v, depth + 1)).join('')}
+      </div>`;
+  }
+  return `
+    <div class="list-view-field">
+      <span class="list-view-field-key">${escapeHtml(key)}</span>
+      <span class="list-view-field-value">${formatListValue(value)}</span>
+    </div>`;
+}
+
+function formatListValue(value) {
+  if (value === null || value === undefined) return '<span class="cell-null">null</span>';
+  if (value.$oid) return `<span class="cell-id">ObjectId("${value.$oid}")</span>`;
+  if (value.$date) return `<span class="cell-string">${new Date(value.$date).toISOString()}</span>`;
+  if (value.$numberDecimal) return `<span class="cell-number">${value.$numberDecimal}</span>`;
+  if (typeof value === 'string') return `<span class="cell-string">"${escapeHtml(value)}"</span>`;
+  if (typeof value === 'number') return `<span class="cell-number">${value}</span>`;
+  if (typeof value === 'boolean') return `<span class="cell-boolean">${value}</span>`;
+  if (Array.isArray(value)) return `<span class="cell-string">[${value.length} elements]</span>`;
+  return `<span>${escapeHtml(JSON.stringify(value))}</span>`;
+}
+
+function renderJsonView() {
+  const body = document.getElementById('jsonViewBody');
+  if (!body) return;
+
+  if (allDocuments.length === 0) {
+    body.textContent = '[]';
+    return;
+  }
+
+  // Use renderJsonTree for syntax-colored JSON
+  body.innerHTML = renderJsonTree(allDocuments, 0);
 }
 
 function formatCellValue(value, field) {

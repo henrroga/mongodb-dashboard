@@ -2572,6 +2572,172 @@ a:hover {
   }
 }
 
+/* View Mode Toggle */
+.view-mode-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.view-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.view-mode-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.view-mode-btn.active {
+  color: var(--accent);
+  background: rgba(56, 139, 253, 0.1);
+}
+
+.view-mode-btn + .view-mode-btn {
+  border-left: 1px solid var(--border);
+}
+
+/* List View */
+.list-view-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px;
+}
+
+.list-view-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+  transition: border-color 0.15s;
+}
+
+.list-view-card:hover {
+  border-color: var(--accent);
+}
+
+.list-view-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.list-view-card-id {
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.list-view-card-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.list-view-card-toggle {
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.list-view-card.collapsed .list-view-card-toggle {
+  transform: rotate(-90deg);
+}
+
+.list-view-card-body {
+  padding: 10px 14px;
+  font-size: 13px;
+  overflow-x: auto;
+}
+
+.list-view-card.collapsed .list-view-card-body {
+  display: none;
+}
+
+.list-view-field {
+  display: flex;
+  padding: 3px 0;
+  line-height: 1.5;
+}
+
+.list-view-field-key {
+  color: var(--text-secondary);
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  min-width: 160px;
+  flex-shrink: 0;
+  padding-right: 12px;
+}
+
+.list-view-field-value {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.list-view-field-value .cell-null {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.list-view-field-value .cell-string { color: #a5d6ff; }
+.list-view-field-value .cell-number { color: #79c0ff; }
+.list-view-field-value .cell-boolean { color: #ff7b72; }
+.list-view-field-value .cell-id { color: var(--text-muted); font-size: 11px; }
+
+[data-theme="light"] .list-view-field-value .cell-string { color: #0a3069; }
+[data-theme="light"] .list-view-field-value .cell-number { color: #0550ae; }
+[data-theme="light"] .list-view-field-value .cell-boolean { color: #cf222e; }
+
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] .list-view-field-value .cell-string { color: #0a3069; }
+  [data-theme="system"] .list-view-field-value .cell-number { color: #0550ae; }
+  [data-theme="system"] .list-view-field-value .cell-boolean { color: #cf222e; }
+}
+
+.list-view-nested {
+  margin-left: 16px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+/* JSON View */
+.json-view-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px;
+}
+
+.json-view-pre {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 16px;
+  margin: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
 /* CodeMirror Custom Theme */
 .CodeMirror {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Fira Code', monospace;
