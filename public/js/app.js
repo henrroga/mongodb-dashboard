@@ -240,6 +240,33 @@ function setActiveConnection(connectionString) {
   }
 }
 
+// Apply connection-aware header color and page title
+function applyConnectionBranding() {
+  const activeUri = getActiveConnection();
+  if (!activeUri) return;
+
+  const conns = getConnections();
+  const conn = conns.find(c => c.uri === activeUri);
+
+  // Apply color to header
+  if (conn?.color) {
+    const header = document.querySelector('.header');
+    if (header) header.style.borderBottomColor = conn.color;
+  }
+
+  // Update page title with connection name
+  if (conn?.name) {
+    const baseTitle = document.title;
+    if (!baseTitle.includes('|')) {
+      document.title = `${baseTitle} — ${conn.name}`;
+    } else {
+      document.title = baseTitle.replace(/\|/, `— ${conn.name} |`);
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', applyConnectionBranding);
+
 async function checkConnectionStatus() {
   try {
     const res = await fetch('/api/status');
