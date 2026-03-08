@@ -1185,6 +1185,12 @@ router.get("/:db/:collection/export", async (req, res) => {
       return res.send(csv);
     }
 
+    if (format === "jsonl") {
+      res.setHeader("Content-Type", "application/x-ndjson");
+      res.setHeader("Content-Disposition", `attachment; filename="${colName}.jsonl"`);
+      return res.send(serialized.map((d) => JSON.stringify(d)).join("\n"));
+    }
+
     // JSON
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="${colName}.json"`);
