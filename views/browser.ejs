@@ -256,6 +256,7 @@
             <button class="collection-tab" data-tab="schema">Schema</button>
             <button class="collection-tab" data-tab="aggregation">Aggregation</button>
             <button class="collection-tab" data-tab="validation">Validation</button>
+            <button class="collection-tab" data-tab="stats">Stats</button>
           </div>
 
           <!-- Documents panel -->
@@ -667,6 +668,19 @@
                 <button id="testValidation" class="btn btn-ghost btn-sm">Test against 10 sample docs</button>
                 <div id="validationTestResults" style="margin-top:12px;font-size:13px"></div>
               </div>
+            </div>
+          </div>
+
+          <!-- Stats panel -->
+          <div id="panel-stats" style="display:none;flex:1;flex-direction:column;overflow:auto">
+            <div class="content-header">
+              <div class="content-title"><h2>Collection Statistics</h2></div>
+              <div class="content-actions">
+                <button id="refreshStats" class="btn btn-ghost btn-sm">Refresh</button>
+              </div>
+            </div>
+            <div id="statsContent" style="padding:24px">
+              <div class="loading-spinner"></div>
             </div>
           </div>
 

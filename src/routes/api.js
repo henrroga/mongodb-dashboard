@@ -1194,6 +1194,36 @@ router.get("/:db/:collection/export", async (req, res) => {
   }
 });
 
+// Collection stats
+router.get("/:db/:collection/stats", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const db = client.db(req.params.db);
+    const stats = await db.command({ collStats: req.params.collection });
+    const indexes = await db.collection(req.params.collection).indexes();
+
+    res.json({
+      ns: stats.ns,
+      count: stats.count,
+      size: stats.size,
+      avgObjSize: stats.avgObjSize || 0,
+      storageSize: stats.storageSize,
+      totalIndexSize: stats.totalIndexSize,
+      indexSizes: stats.indexSizes || {},
+      nindexes: stats.nindexes,
+      capped: stats.capped || false,
+      maxSize: stats.maxSize,
+      maxDocs: stats.max,
+      freeStorageSize: stats.freeStorageSize || 0,
+      indexes: indexes.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Server stats for performance page
 router.get("/server/stats", async (req, res) => {
   try {

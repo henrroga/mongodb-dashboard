@@ -1099,6 +1099,7 @@ async function initBrowser(dbName, collectionName) {
   initSchemaPanel(dbName, collectionName);
   initAggregationPanel(dbName, collectionName);
   initValidationPanel(dbName, collectionName);
+  initStatsPanel(dbName, collectionName);
   initViewModeToggle(dbName, collectionName);
   initShellPanel(dbName);
 }
@@ -3261,6 +3262,83 @@ function applyQueryToBar(q) {
   if (querySkipEl) querySkipEl.value = q.skip || 0;
 }
 
+// ─── Collection Stats ─────────────────────────────────────────────────────────
+
+function initStatsPanel(dbName, collectionName) {
+  document.getElementById('refreshStats')?.addEventListener('click', () => {
+    loadCollectionStats(dbName, collectionName);
+  });
+}
+
+async function loadCollectionStats(dbName, collectionName) {
+  const container = document.getElementById('statsContent');
+  if (!container) return;
+
+  container.innerHTML = '<div class="loading-spinner"></div>';
+
+  try {
+    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/stats`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    const indexEntries = Object.entries(data.indexSizes || {});
+
+    container.innerHTML = `
+      <div class="stats-grid">
+        <div class="stats-card">
+          <div class="stats-card-value">${formatCount(data.count)}</div>
+          <div class="stats-card-label">Documents</div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-value">${formatBytes(data.size)}</div>
+          <div class="stats-card-label">Data Size</div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-value">${formatBytes(data.avgObjSize)}</div>
+          <div class="stats-card-label">Avg Document Size</div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-value">${formatBytes(data.storageSize)}</div>
+          <div class="stats-card-label">Storage Size</div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-value">${data.nindexes}</div>
+          <div class="stats-card-label">Indexes</div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-value">${formatBytes(data.totalIndexSize)}</div>
+          <div class="stats-card-label">Total Index Size</div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-value">${formatBytes(data.freeStorageSize)}</div>
+          <div class="stats-card-label">Free Storage</div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-value">${data.capped ? 'Yes' : 'No'}</div>
+          <div class="stats-card-label">Capped Collection</div>
+        </div>
+      </div>
+      ${indexEntries.length > 0 ? `
+      <div style="margin-top:24px">
+        <h3 style="font-size:14px;margin-bottom:12px;color:var(--text-primary)">Index Sizes</h3>
+        <div class="stats-index-list">
+          ${indexEntries.map(([name, size]) => `
+            <div class="stats-index-row">
+              <span class="stats-index-name">${escapeHtml(name)}</span>
+              <div class="stats-index-bar-wrap">
+                <div class="stats-index-bar" style="width:${Math.max(2, (size / data.totalIndexSize) * 100)}%"></div>
+              </div>
+              <span class="stats-index-size">${formatBytes(size)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>` : ''}
+    `;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--danger);padding:20px">Error: ${err.message}</div>`;
+  }
+}
+
 // ─── Performance Page ─────────────────────────────────────────────────────────
 
 function initPerformancePage() {
@@ -3650,6 +3728,7 @@ function initCollectionTabs(dbName, collectionName) {
     schema: document.getElementById('panel-schema'),
     aggregation: document.getElementById('panel-aggregation'),
     validation: document.getElementById('panel-validation'),
+    stats: document.getElementById('panel-stats'),
   };
 
   function switchTab(tabName) {
@@ -3664,6 +3743,7 @@ function initCollectionTabs(dbName, collectionName) {
       panels.validation?._load?.();
       refreshEditor('validatorEditor');
     }
+    if (tabName === 'stats') loadCollectionStats(dbName, collectionName);
     if (tabName === 'aggregation') {
       // Refresh all agg stage CodeMirror instances
       Object.keys(cmEditors).forEach(key => {
