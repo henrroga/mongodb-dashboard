@@ -158,15 +158,16 @@
           </div>
           <nav class="collection-list" id="collectionList">
             <% collections.forEach(function(col) { %>
-            <div class="collection-item-wrapper <%= activeCollection === col.name ? 'active' : '' %>">
+            <div class="collection-item-wrapper <%= activeCollection === col.name ? 'active' : '' %>" data-collection="<%= col.name %>">
               <a
                 href="/browse/<%= dbName %>/<%= col.name %>"
                 class="collection-item <%= activeCollection === col.name ? 'active' : '' %>"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
-                </svg>
+                <button class="col-action-btn col-fav-btn" data-col="<%= col.name %>" title="Pin to top">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
+                </button>
                 <span class="collection-name"><%= col.name %></span>
                 <span class="collection-doc-count" data-count="<%= col.count %>"><%= col.count %></span>
               </a>

@@ -3985,6 +3985,34 @@ textarea.inline-edit-input {
   opacity: 0.5;
 }
 
+/* ─── Favorite Collections ───────────────────────────────────────────── */
+
+.col-fav-btn {
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.15s, color 0.15s;
+  padding: 2px;
+  margin-right: -2px;
+}
+
+.collection-item:hover .col-fav-btn,
+.col-fav-btn.fav-active {
+  opacity: 1;
+}
+
+.col-fav-btn.fav-active svg {
+  fill: #f59e0b;
+  stroke: #f59e0b;
+}
+
+.collection-favorited {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.collection-favorited:last-of-type {
+  border-bottom: none;
+}
+
 /* ─── Sidebar Collection Search ──────────────────────────────────────── */
 
 .sidebar-search {

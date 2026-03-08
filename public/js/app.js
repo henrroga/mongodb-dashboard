@@ -1192,6 +1192,71 @@ function initAutoRefresh(dbName, collectionName) {
   });
 }
 
+function initFavoriteCollections() {
+  const FAV_KEY = 'mongodb_fav_collections';
+  const getFavs = () => {
+    try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch { return []; }
+  };
+  const setFavs = (favs) => localStorage.setItem(FAV_KEY, JSON.stringify(favs));
+
+  const favs = getFavs();
+  const list = document.getElementById('collectionList');
+  if (!list) return;
+
+  // Apply fav state and sort
+  const items = Array.from(list.querySelectorAll('.collection-item-wrapper'));
+  items.forEach(item => {
+    const name = item.dataset.collection;
+    const btn = item.querySelector('.col-fav-btn');
+    if (favs.includes(name)) {
+      item.classList.add('collection-favorited');
+      if (btn) btn.classList.add('fav-active');
+    }
+  });
+
+  // Sort: favorites first
+  items
+    .sort((a, b) => {
+      const aFav = favs.includes(a.dataset.collection) ? 0 : 1;
+      const bFav = favs.includes(b.dataset.collection) ? 0 : 1;
+      return aFav - bFav;
+    })
+    .forEach(item => list.appendChild(item));
+
+  // Click handlers
+  document.querySelectorAll('.col-fav-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const col = btn.dataset.col;
+      let current = getFavs();
+      if (current.includes(col)) {
+        current = current.filter(c => c !== col);
+        btn.classList.remove('fav-active');
+        btn.closest('.collection-item-wrapper')?.classList.remove('collection-favorited');
+      } else {
+        current.push(col);
+        btn.classList.add('fav-active');
+        btn.closest('.collection-item-wrapper')?.classList.add('collection-favorited');
+      }
+      setFavs(current);
+
+      // Re-sort
+      const items = Array.from(list.querySelectorAll('.collection-item-wrapper'));
+      const newFavs = current;
+      items
+        .sort((a, b) => {
+          const aFav = newFavs.includes(a.dataset.collection) ? 0 : 1;
+          const bFav = newFavs.includes(b.dataset.collection) ? 0 : 1;
+          return aFav - bFav;
+        })
+        .forEach(item => list.appendChild(item));
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initFavoriteCollections);
+
 function initCollectionSearch() {
   const searchInput = document.getElementById('collectionSearch');
   if (!searchInput) return;
