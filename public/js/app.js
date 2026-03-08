@@ -5724,8 +5724,20 @@ function initDatabasesPage() {
       dropTarget = btn.dataset.db;
       document.getElementById('dropDbName').textContent = dropTarget;
       document.getElementById('dropDbError').style.display = 'none';
+      const confirmInput = document.getElementById('dropDbConfirmInput');
+      const confirmBtn = document.getElementById('dropDbConfirm');
+      if (confirmInput) { confirmInput.value = ''; }
+      if (confirmBtn) { confirmBtn.disabled = true; }
       dropDbModal.style.display = 'flex';
+      confirmInput?.focus();
     });
+  });
+
+  document.getElementById('dropDbConfirmInput')?.addEventListener('input', (e) => {
+    const confirmBtn = document.getElementById('dropDbConfirm');
+    if (confirmBtn) {
+      confirmBtn.disabled = e.target.value !== dropTarget;
+    }
   });
 
   const closeDropDb = () => { dropDbModal.style.display = 'none'; dropTarget = null; };
@@ -5802,8 +5814,20 @@ function initCollectionManagement(dbName) {
       dropColTarget = btn.dataset.col;
       document.getElementById('dropColName').textContent = dropColTarget;
       document.getElementById('dropColError').style.display = 'none';
+      const confirmInput = document.getElementById('dropColConfirmInput');
+      const confirmBtn = document.getElementById('dropColConfirm');
+      if (confirmInput) { confirmInput.value = ''; }
+      if (confirmBtn) { confirmBtn.disabled = true; }
       dropColModal.style.display = 'flex';
+      confirmInput?.focus();
     });
+  });
+
+  document.getElementById('dropColConfirmInput')?.addEventListener('input', (e) => {
+    const confirmBtn = document.getElementById('dropColConfirm');
+    if (confirmBtn) {
+      confirmBtn.disabled = e.target.value !== dropColTarget;
+    }
   });
 
   const closeDropCol = () => { dropColModal.style.display = 'none'; dropColTarget = null; };

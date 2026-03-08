@@ -146,11 +146,15 @@
           </div>
           <div class="modal-body">
             <p>Are you sure you want to drop <strong id="dropDbName"></strong>? This will permanently delete all collections and documents.</p>
+            <div class="form-field" style="margin-top:12px">
+              <label>Type the database name to confirm:</label>
+              <input type="text" id="dropDbConfirmInput" class="query-input" placeholder="database name" autocomplete="off" spellcheck="false"/>
+            </div>
             <p id="dropDbError" class="error-message" style="display:none"></p>
           </div>
           <div class="modal-footer">
             <button id="dropDbCancel" class="btn btn-ghost">Cancel</button>
-            <button id="dropDbConfirm" class="btn btn-danger">Drop Database</button>
+            <button id="dropDbConfirm" class="btn btn-danger" disabled>Drop Database</button>
           </div>
         </div>
       </div>
