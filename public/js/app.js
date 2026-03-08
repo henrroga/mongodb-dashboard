@@ -269,11 +269,10 @@ function initKeyboardShortcuts() {
     // Don't capture shortcuts when typing in inputs (except specific combos)
     if (isEditing && !(isMod && (e.key === 'Enter' || e.key === '/' || e.key === 'k'))) return;
 
-    // Cmd/Ctrl + K — focus search input
+    // Cmd/Ctrl + K — open command palette
     if (isMod && e.key === 'k') {
       e.preventDefault();
-      const searchInput = document.getElementById('searchInput');
-      if (searchInput) { searchInput.focus(); searchInput.select(); }
+      toggleCommandPalette();
       return;
     }
 
@@ -357,7 +356,7 @@ function toggleShortcutsModal() {
             <h4>General</h4>
             <div class="shortcut-row"><kbd>?</kbd><span>Show shortcuts</span></div>
             <div class="shortcut-row"><kbd>Esc</kbd><span>Close modal / panel</span></div>
-            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+K</kbd><span>Focus search</span></div>
+            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+K</kbd><span>Command palette</span></div>
             <div class="shortcut-row"><kbd>R</kbd><span>Refresh documents</span></div>
           </div>
           <div class="shortcut-group">
@@ -376,6 +375,157 @@ function toggleShortcutsModal() {
     document.body.appendChild(modal);
   }
   modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+}
+
+// ─── Command Palette ─────────────────────────────────────────────────────────
+
+function toggleCommandPalette() {
+  let palette = document.getElementById('commandPalette');
+  if (palette && palette.style.display !== 'none') {
+    palette.style.display = 'none';
+    return;
+  }
+
+  if (!palette) {
+    palette = document.createElement('div');
+    palette.id = 'commandPalette';
+    palette.className = 'command-palette';
+    palette.innerHTML = `
+      <div class="command-palette-backdrop" onclick="document.getElementById('commandPalette').style.display='none'"></div>
+      <div class="command-palette-dialog">
+        <div class="command-palette-input-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="command-palette-icon">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input type="text" id="commandPaletteInput" class="command-palette-input" placeholder="Search actions, collections, or pages..." autocomplete="off" spellcheck="false"/>
+        </div>
+        <div id="commandPaletteResults" class="command-palette-results"></div>
+      </div>
+    `;
+    document.body.appendChild(palette);
+
+    const input = document.getElementById('commandPaletteInput');
+    input.addEventListener('input', () => renderPaletteResults(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { palette.style.display = 'none'; return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); movePaletteSelection(1); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); movePaletteSelection(-1); }
+      if (e.key === 'Enter') { e.preventDefault(); executePaletteSelection(); }
+    });
+  }
+
+  palette.style.display = 'flex';
+  const input = document.getElementById('commandPaletteInput');
+  input.value = '';
+  input.focus();
+  renderPaletteResults('');
+}
+
+function getCommandActions() {
+  const actions = [
+    { label: 'Go to Databases', category: 'Navigation', action: () => window.location.href = '/databases' },
+    { label: 'Go to Performance', category: 'Navigation', action: () => window.location.href = '/performance' },
+    { label: 'Go to Connect', category: 'Navigation', action: () => window.location.href = '/' },
+    { label: 'New Document', category: 'Actions', action: () => document.getElementById('addDocBtn')?.click() },
+    { label: 'Refresh Documents', category: 'Actions', action: () => document.getElementById('refreshBtn')?.click() },
+    { label: 'Run Query', category: 'Actions', action: () => document.getElementById('queryRunBtn')?.click() },
+    { label: 'Import Documents', category: 'Actions', action: () => document.getElementById('importBtn')?.click() },
+    { label: 'Export Documents', category: 'Actions', action: () => document.getElementById('exportBtn')?.click() },
+    { label: 'Toggle Shell', category: 'Actions', action: () => {
+      const panel = document.getElementById('shellPanel');
+      if (panel?.classList.contains('shell-panel-closed')) document.getElementById('shellOpenBtn')?.click();
+      else document.getElementById('shellToggleBtn')?.click();
+    }},
+    { label: 'Keyboard Shortcuts', category: 'Actions', action: toggleShortcutsModal },
+    { label: 'Tab: Documents', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="documents"]')?.click() },
+    { label: 'Tab: Indexes', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="indexes"]')?.click() },
+    { label: 'Tab: Schema', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="schema"]')?.click() },
+    { label: 'Tab: Aggregation', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="aggregation"]')?.click() },
+    { label: 'Tab: Validation', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="validation"]')?.click() },
+    { label: 'Tab: Stats', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="stats"]')?.click() },
+    { label: 'Focus Search', category: 'Actions', action: () => { const s = document.getElementById('searchInput'); if (s) { s.focus(); s.select(); } }},
+    { label: 'Focus Filter', category: 'Actions', action: () => document.getElementById('queryFilter')?.focus() },
+    { label: 'Select Columns', category: 'Actions', action: () => document.getElementById('columnsBtn')?.click() },
+  ];
+
+  // Add open tabs as navigation options
+  const tabs = getOpenTabs();
+  tabs.forEach(tab => {
+    actions.push({
+      label: `${tab.db} / ${tab.collection}`,
+      category: 'Collections',
+      action: () => window.location.href = `/browse/${encodeURIComponent(tab.db)}/${encodeURIComponent(tab.collection)}`,
+    });
+  });
+
+  return actions;
+}
+
+let paletteSelectedIdx = 0;
+let paletteFiltered = [];
+
+function renderPaletteResults(query) {
+  const results = document.getElementById('commandPaletteResults');
+  const actions = getCommandActions();
+  const q = query.toLowerCase().trim();
+
+  paletteFiltered = q
+    ? actions.filter(a => a.label.toLowerCase().includes(q) || a.category.toLowerCase().includes(q))
+    : actions;
+
+  paletteSelectedIdx = 0;
+
+  if (paletteFiltered.length === 0) {
+    results.innerHTML = '<div class="command-palette-empty">No results found</div>';
+    return;
+  }
+
+  // Group by category
+  const grouped = {};
+  paletteFiltered.forEach((a, i) => {
+    if (!grouped[a.category]) grouped[a.category] = [];
+    grouped[a.category].push({ ...a, idx: i });
+  });
+
+  let html = '';
+  for (const [category, items] of Object.entries(grouped)) {
+    html += `<div class="command-palette-group">${escapeHtml(category)}</div>`;
+    html += items.map(item => `
+      <div class="command-palette-item ${item.idx === 0 ? 'selected' : ''}" data-idx="${item.idx}">
+        ${escapeHtml(item.label)}
+      </div>
+    `).join('');
+  }
+  results.innerHTML = html;
+
+  results.querySelectorAll('.command-palette-item').forEach(el => {
+    el.addEventListener('click', () => {
+      paletteSelectedIdx = parseInt(el.dataset.idx);
+      executePaletteSelection();
+    });
+    el.addEventListener('mouseenter', () => {
+      paletteSelectedIdx = parseInt(el.dataset.idx);
+      results.querySelectorAll('.command-palette-item').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+    });
+  });
+}
+
+function movePaletteSelection(delta) {
+  const results = document.getElementById('commandPaletteResults');
+  paletteSelectedIdx = Math.max(0, Math.min(paletteFiltered.length - 1, paletteSelectedIdx + delta));
+  results.querySelectorAll('.command-palette-item').forEach(el => {
+    el.classList.toggle('selected', parseInt(el.dataset.idx) === paletteSelectedIdx);
+  });
+  results.querySelector('.command-palette-item.selected')?.scrollIntoView({ block: 'nearest' });
+}
+
+function executePaletteSelection() {
+  const action = paletteFiltered[paletteSelectedIdx];
+  if (action) {
+    document.getElementById('commandPalette').style.display = 'none';
+    action.action();
+  }
 }
 
 // Initialize shortcuts on page load
