@@ -1088,6 +1088,51 @@ function updateUrlParams() {
   window.history.replaceState({}, '', url);
 }
 
+function initSidebarResize() {
+  const sidebar = document.querySelector('.sidebar');
+  if (!sidebar) return;
+
+  const handle = document.createElement('div');
+  handle.className = 'sidebar-resize-handle';
+  sidebar.appendChild(handle);
+
+  let startX, startWidth;
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startWidth = sidebar.offsetWidth;
+    handle.classList.add('active');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (e) => {
+      const newWidth = Math.min(500, Math.max(180, startWidth + (e.clientX - startX)));
+      sidebar.style.width = newWidth + 'px';
+    };
+
+    const onUp = () => {
+      handle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      try { localStorage.setItem('mongodb_sidebar_width', sidebar.style.width); } catch (e) {}
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // Restore saved width
+  try {
+    const saved = localStorage.getItem('mongodb_sidebar_width');
+    if (saved) sidebar.style.width = saved;
+  } catch (e) {}
+}
+
+document.addEventListener('DOMContentLoaded', initSidebarResize);
+
 function initCollectionSearch() {
   const searchInput = document.getElementById('collectionSearch');
   if (!searchInput) return;

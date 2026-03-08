@@ -576,10 +576,13 @@ a:hover {
 /* Sidebar */
 .sidebar {
   width: 260px;
+  min-width: 180px;
+  max-width: 500px;
   flex-shrink: 0;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
+  position: relative;
   flex-direction: column;
 }
 
@@ -3873,6 +3876,25 @@ textarea.inline-edit-input {
   .sql-converter {
     flex-direction: column;
   }
+}
+
+/* ─── Sidebar Resize Handle ──────────────────────────────────────────── */
+
+.sidebar-resize-handle {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background 0.15s;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.active {
+  background: var(--accent);
+  opacity: 0.5;
 }
 
 /* ─── Sidebar Collection Search ──────────────────────────────────────── */
