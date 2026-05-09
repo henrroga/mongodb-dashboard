@@ -4,6 +4,53 @@ const mongoService = require("../services/mongodb");
 const { ObjectId } = require("mongodb");
 const { serializeDocument, parseDocument } = require("../utils/bson");
 const { inferSchema } = require("../utils/schema");
+const config = require("../config");
+const audit = require("../utils/audit");
+
+// Routes that use POST/PUT/DELETE but are NOT considered "writes" against the DB.
+// (Connection management, query helpers that don't mutate.)
+const NON_WRITE_PATHS = new Set([
+  "/connect",
+  "/disconnect",
+]);
+const NON_WRITE_SUFFIXES = ["/explain", "/aggregate"];
+
+router.use((req, res, next) => {
+  const method = req.method;
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS")
+    return next();
+
+  const p = req.path;
+  if (NON_WRITE_PATHS.has(p)) return next();
+  if (NON_WRITE_SUFFIXES.some((s) => p.endsWith(s))) return next();
+  // Shell exec is gated separately (read-only ops are still allowed inside).
+  if (p === "/shell/exec") return next();
+
+  if (config.readOnly) {
+    audit.log({
+      event: "write_blocked_read_only",
+      method,
+      path: p,
+      ip: req.ip,
+    });
+    return res
+      .status(403)
+      .json({ error: "Dashboard is in read-only mode (READ_ONLY=true)" });
+  }
+  // Audit destructive operations.
+  if (
+    method === "DELETE" ||
+    p === "/databases" ||
+    p.endsWith("/import") ||
+    p.includes("/indexes") ||
+    p.includes("/validation") ||
+    p.match(/^\/[^/]+\/collections/) ||
+    /^\/[^/]+\/[^/]+(\/[^/]+)?$/.test(p)
+  ) {
+    audit.log({ event: "write", method, path: p, ip: req.ip });
+  }
+  next();
+});
 
 /**
  * Recursively extract all field paths from a document that can be searched
@@ -449,15 +496,8 @@ router.get("/:db/:collection", async (req, res) => {
 
 // ─── Shell ───────────────────────────────────────────────────────────────────
 
-// Node vm for safely evaluating MQL-like JS argument expressions
-const vm = require("vm");
-
-function evalArg(str) {
-  const sandbox = {};
-  vm.createContext(sandbox);
-  // eslint-disable-next-line no-new-func
-  return vm.runInContext(`(${str.trim()})`, sandbox, { timeout: 500 });
-}
+// Parse MQL-style argument expressions WITHOUT eval. See src/utils/shellArg.js.
+const { evalArg } = require("../utils/shellArg");
 
 router.post("/shell/exec", async (req, res) => {
   try {
@@ -501,6 +541,39 @@ router.post("/shell/exec", async (req, res) => {
     if (colMatch) {
       const [, colName, method, argsStr] = colMatch;
       const col = db.collection(colName);
+
+      const WRITE_METHODS = new Set([
+        "insertOne",
+        "insertMany",
+        "updateOne",
+        "updateMany",
+        "replaceOne",
+        "deleteOne",
+        "deleteMany",
+        "drop",
+        "createIndex",
+        "dropIndex",
+        "renameCollection",
+      ]);
+      if (config.readOnly && WRITE_METHODS.has(method)) {
+        audit.log({
+          event: "shell_write_blocked_read_only",
+          method,
+          colName,
+          ip: req.ip,
+        });
+        return res
+          .status(403)
+          .json({ error: "Dashboard is in read-only mode (READ_ONLY=true)" });
+      }
+      if (WRITE_METHODS.has(method)) {
+        audit.log({
+          event: "shell_write",
+          method,
+          colName,
+          ip: req.ip,
+        });
+      }
 
       // Parse args: split by top-level commas
       const args = argsStr.trim()
