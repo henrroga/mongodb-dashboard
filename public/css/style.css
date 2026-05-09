@@ -4278,3 +4278,82 @@ textarea.inline-edit-input {
   background: linear-gradient(45deg, transparent calc(50% - 1px), var(--text-muted) calc(50% - 1px), var(--text-muted) calc(50% + 1px), transparent calc(50% + 1px));
   border-radius: 50%;
 }
+
+/* ─── Skeleton loaders ─────────────────────────────────────────────────────── */
+
+@keyframes ui-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 0%,
+    var(--bg-secondary) 50%,
+    var(--bg-tertiary) 100%
+  );
+  background-size: 800px 100%;
+  animation: ui-shimmer 1.4s linear infinite;
+  border-radius: 4px;
+}
+
+.skeleton-text {
+  height: 12px;
+  margin: 4px 0;
+}
+
+.skeleton-row td {
+  padding: 12px !important;
+}
+
+.skeleton-row .skeleton {
+  height: 14px;
+}
+
+/* Polished empty state — works with existing .empty-state */
+.empty-state-polished {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  gap: 16px;
+}
+
+.empty-state-polished .empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent, #388bfd);
+  margin-bottom: 4px;
+}
+
+.empty-state-polished h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.empty-state-polished p {
+  margin: 0;
+  font-size: 13px;
+  max-width: 360px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.empty-state-polished .empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}

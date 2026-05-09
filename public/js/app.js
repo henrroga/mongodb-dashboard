@@ -117,6 +117,46 @@ function showToast(message, type = 'info', duration = 4000) {
   return toast;
 }
 
+// ─── Skeleton loaders + polished empty states ────────────────────────────────
+
+function renderTableSkeleton(rowCount = 6, colCount = 5) {
+  const cells = Array.from({ length: colCount }, (_, i) => {
+    // Vary widths so it looks organic, not a grid of identical bars.
+    const widths = ['90%', '60%', '75%', '40%', '85%', '55%'];
+    return `<td><span class="skeleton skeleton-text" style="width:${widths[i % widths.length]}"></span></td>`;
+  }).join('');
+  const rows = Array.from({ length: rowCount }, () =>
+    `<tr class="skeleton-row">${cells}</tr>`
+  ).join('');
+  return rows;
+}
+
+function renderEmptyState({
+  icon,
+  title,
+  message,
+  actions = [],
+} = {}) {
+  const iconHtml = icon ||
+    `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+  const actionsHtml = actions.length
+    ? `<div class="empty-actions">${actions
+        .map(
+          (a) =>
+            `<button class="btn ${a.primary ? 'btn-primary' : 'btn-ghost'} btn-sm" data-empty-action="${escapeHtml(a.id || '')}">${escapeHtml(a.label)}</button>`
+        )
+        .join('')}</div>`
+    : '';
+  return `
+    <div class="empty-state-polished">
+      <div class="empty-icon">${iconHtml}</div>
+      <h3>${escapeHtml(title || '')}</h3>
+      ${message ? `<p>${escapeHtml(message)}</p>` : ''}
+      ${actionsHtml}
+    </div>
+  `;
+}
+
 // ─── UI Modals (confirm / prompt / alert) ─────────────────────────────────────
 // Replaces the browser-native dialogs. All return Promises so they're easy to
 // drop into existing async flows without callback nesting.
@@ -1911,7 +1951,7 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
   const docCount = document.getElementById('docCount');
 
   if (!cursor && nextSkip === null) {
-    tableBody.innerHTML = '<tr class="loading-row"><td colspan="100"><div class="loading-spinner"></div></td></tr>';
+    tableBody.innerHTML = renderTableSkeleton(8);
     allDocuments = [];
     allAvailableFields = [];
     selectedDocIds.clear();
@@ -2032,10 +2072,48 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
     }
 
     if (documents.length === 0 && !cursor) {
-      tableBody.innerHTML = '<tr><td colspan="100" style="text-align: center; padding: 40px; color: var(--text-muted);">No documents found</td></tr>';
+      const filterEl = document.getElementById('queryFilter');
+      const searchEl = document.getElementById('searchInput');
+      const hasFilter = (filterEl && filterEl.value.trim()) || (searchEl && searchEl.value.trim());
+      const empty = hasFilter
+        ? renderEmptyState({
+            title: 'No matching documents',
+            message: 'Nothing in this collection matches your filter or search. Try widening the criteria or clearing them.',
+            actions: [
+              { id: 'clearFilter', label: 'Clear filter', primary: true },
+            ],
+          })
+        : renderEmptyState({
+            icon: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>',
+            title: 'This collection is empty',
+            message: 'Add the first document to see it here. You can also import a JSON or CSV file.',
+            actions: [
+              { id: 'addDoc', label: 'Add document', primary: true },
+              { id: 'importDocs', label: 'Import' },
+            ],
+          });
+      tableBody.innerHTML = `<tr><td colspan="100" style="padding:0">${empty}</td></tr>`;
+      tableBody.querySelectorAll('[data-empty-action]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.emptyAction;
+          if (id === 'clearFilter') {
+            if (filterEl) filterEl.value = '';
+            if (searchEl) searchEl.value = '';
+            document.getElementById('queryRunBtn')?.click();
+          } else if (id === 'addDoc') {
+            document.getElementById('addDocBtn')?.click();
+          } else if (id === 'importDocs') {
+            document.getElementById('importBtn')?.click();
+          }
+        });
+      });
     }
   } catch (err) {
-    tableBody.innerHTML = `<tr><td colspan="100" style="text-align: center; padding: 40px; color: var(--danger);">Error: ${err.message}</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="100">${renderEmptyState({
+      icon: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+      title: 'Could not load documents',
+      message: err.message,
+    })}</td></tr>`;
   }
 }
 
@@ -5479,7 +5557,7 @@ async function loadIndexes(dbName, collectionName) {
   const countEl = document.getElementById('indexCount');
   if (!tbody) return;
 
-  tbody.innerHTML = '<tr class="loading-row"><td colspan="5"><div class="loading-spinner"></div></td></tr>';
+  tbody.innerHTML = renderTableSkeleton(4, 5);
 
   try {
     const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes`);
