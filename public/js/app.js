@@ -333,6 +333,165 @@ async function openCopyAsCodeModal({ dbName, collectionName, getInputs, kind = '
   });
 }
 
+// ─── Context menu ─────────────────────────────────────────────────────────────
+
+let activeContextMenu = null;
+
+function closeContextMenu() {
+  if (activeContextMenu) {
+    activeContextMenu.remove();
+    activeContextMenu = null;
+    document.removeEventListener('click', _ctxOnDocClick, true);
+    document.removeEventListener('keydown', _ctxOnKey, true);
+    window.removeEventListener('resize', closeContextMenu);
+    window.removeEventListener('scroll', closeContextMenu, true);
+  }
+}
+
+function _ctxOnDocClick(e) {
+  if (activeContextMenu && !activeContextMenu.contains(e.target)) {
+    closeContextMenu();
+  }
+}
+function _ctxOnKey(e) {
+  if (e.key === 'Escape') closeContextMenu();
+}
+
+function showContextMenu(x, y, items) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML = items
+    .map((it) => {
+      if (it.divider) return '<div class="ctx-menu-divider"></div>';
+      const danger = it.danger ? ' ctx-menu-item-danger' : '';
+      const disabled = it.disabled ? ' ctx-menu-item-disabled' : '';
+      const icon = it.icon ? `<span class="ctx-menu-icon">${it.icon}</span>` : '<span class="ctx-menu-icon"></span>';
+      const shortcut = it.shortcut ? `<span class="ctx-menu-shortcut">${escapeHtml(it.shortcut)}</span>` : '';
+      return `<div class="ctx-menu-item${danger}${disabled}" data-id="${escapeHtml(it.id || '')}" role="menuitem">${icon}<span class="ctx-menu-label">${escapeHtml(it.label)}</span>${shortcut}</div>`;
+    })
+    .join('');
+
+  // Pre-position offscreen so we can measure size, then clamp into viewport.
+  menu.style.position = 'fixed';
+  menu.style.left = '-9999px';
+  menu.style.top = '-9999px';
+  document.body.appendChild(menu);
+  const { width, height } = menu.getBoundingClientRect();
+  const px = Math.min(x, window.innerWidth - width - 8);
+  const py = Math.min(y, window.innerHeight - height - 8);
+  menu.style.left = px + 'px';
+  menu.style.top = py + 'px';
+
+  menu.addEventListener('click', (e) => {
+    const item = e.target.closest('.ctx-menu-item');
+    if (!item || item.classList.contains('ctx-menu-item-disabled')) return;
+    const id = item.dataset.id;
+    const found = items.find((i) => i.id === id);
+    closeContextMenu();
+    if (found && found.action) found.action();
+  });
+
+  // Schedule listeners on next tick so the click that opened the menu doesn't close it.
+  setTimeout(() => {
+    document.addEventListener('click', _ctxOnDocClick, true);
+    document.addEventListener('keydown', _ctxOnKey, true);
+    window.addEventListener('resize', closeContextMenu);
+    window.addEventListener('scroll', closeContextMenu, true);
+  }, 0);
+
+  activeContextMenu = menu;
+  return menu;
+}
+
+function openRowContextMenu(e, doc, dbName, collectionName) {
+  const docId = doc._id?.$oid || doc._id;
+  const cleanId = String(docId).replace(/^"|"$/g, '');
+  const docUrl = `/browse/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(cleanId)}`;
+  showContextMenu(e.clientX, e.clientY, [
+    {
+      id: 'open',
+      label: 'Open document',
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      shortcut: 'Click',
+      action: () => { window.location.href = docUrl; },
+    },
+    {
+      id: 'open-new-tab',
+      label: 'Open in new tab',
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
+      shortcut: 'Ctrl+Click',
+      action: () => { window.open(docUrl, '_blank', 'noopener'); },
+    },
+    { divider: true },
+    {
+      id: 'copy-id',
+      label: 'Copy _id',
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>',
+      action: async () => {
+        try {
+          await navigator.clipboard.writeText(cleanId);
+          showToast('Copied _id', 'success', 1800);
+        } catch {
+          showToast('Could not access clipboard', 'error');
+        }
+      },
+    },
+    {
+      id: 'copy-json',
+      label: 'Copy as JSON',
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      action: async () => {
+        try {
+          await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
+          showToast('Copied document JSON', 'success', 1800);
+        } catch {
+          showToast('Could not access clipboard', 'error');
+        }
+      },
+    },
+    {
+      id: 'copy-filter',
+      label: 'Copy as { _id: … } filter',
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>',
+      action: async () => {
+        const expr = `{ _id: ObjectId("${cleanId}") }`;
+        try {
+          await navigator.clipboard.writeText(expr);
+          showToast('Copied filter', 'success', 1800);
+        } catch {
+          showToast('Could not access clipboard', 'error');
+        }
+      },
+    },
+    { divider: true },
+    {
+      id: 'duplicate',
+      label: 'Duplicate document',
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>',
+      disabled: isReadOnly(),
+      action: () => {
+        if (typeof duplicateDocument === 'function') {
+          duplicateDocument(doc, dbName, collectionName);
+        }
+      },
+    },
+    {
+      id: 'delete',
+      label: 'Delete document…',
+      danger: true,
+      disabled: isReadOnly(),
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
+      action: () => {
+        if (typeof openDeleteModal === 'function') {
+          openDeleteModal(dbName, collectionName, cleanId);
+        }
+      },
+    },
+  ]);
+}
+
 // ─── Skeleton loaders + polished empty states ────────────────────────────────
 
 function renderTableSkeleton(rowCount = 6, colCount = 5) {
@@ -2787,6 +2946,14 @@ function isArrayField(fieldName) {
 function createDocumentRow(doc, dbName, collectionName) {
   const tr = document.createElement('tr');
   const docId = doc._id?.$oid || doc._id;
+  tr.dataset.docId = String(docId);
+
+  // Right-click context menu
+  tr.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('.doc-select-cb')) return; // let checkbox use default menu
+    e.preventDefault();
+    openRowContextMenu(e, doc, dbName, collectionName);
+  });
 
   // Checkbox column
   const selectTd = document.createElement('td');
