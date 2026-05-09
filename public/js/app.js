@@ -1283,6 +1283,11 @@ function getCommandActions() {
     { label: 'Keyboard Shortcuts', category: 'Actions', action: toggleShortcutsModal },
     { label: 'Show Onboarding Tour', category: 'Help', action: () => window.showOnboardingTour && window.showOnboardingTour() },
     { label: 'Toggle Scratchpad', category: 'Actions', action: () => document.getElementById('scratchpadBtn')?.click() },
+    ...THEME_VARIANTS.map((t) => ({
+      label: `Theme: ${t.label}`,
+      category: 'Settings',
+      action: () => setTheme(t.id),
+    })),
     { label: 'Tab: Documents', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="documents"]')?.click() },
     { label: 'Tab: Indexes', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="indexes"]')?.click() },
     { label: 'Tab: Schema', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="schema"]')?.click() },
@@ -7975,36 +7980,60 @@ function applyTheme(theme) {
   });
 }
 
+const THEME_VARIANTS = [
+  { id: 'system', label: 'System', swatches: ['#e6edf3', '#0d1117', '#58a6ff'] },
+  { id: 'light', label: 'Light', swatches: ['#ffffff', '#f6f8fa', '#0969da'] },
+  { id: 'dark', label: 'Dark', swatches: ['#0d1117', '#161b22', '#58a6ff'] },
+  { id: 'dracula', label: 'Dracula', swatches: ['#282a36', '#44475a', '#bd93f9'] },
+  { id: 'nord', label: 'Nord', swatches: ['#2e3440', '#3b4252', '#88c0d0'] },
+  { id: 'solarized-dark', label: 'Solarized Dark', swatches: ['#002b36', '#073642', '#268bd2'] },
+  { id: 'solarized-light', label: 'Solarized Light', swatches: ['#fdf6e3', '#eee8d5', '#268bd2'] },
+];
+
+function ensureThemeDropdownVariants() {
+  const dropdown = document.querySelector('.theme-dropdown');
+  if (!dropdown) return;
+  if (dropdown.dataset.variantsInjected) return;
+  dropdown.dataset.variantsInjected = '1';
+
+  // Clear existing markup and rebuild from THEME_VARIANTS so all themes get a swatch row.
+  dropdown.innerHTML = THEME_VARIANTS.map((t) => `
+    <div class="theme-option" data-theme="${t.id}">
+      <span class="theme-option-swatches" aria-hidden="true">
+        ${t.swatches.map((c) => `<span class="theme-option-swatch" style="background:${c}"></span>`).join('')}
+      </span>
+      <span>${escapeHtml(t.label)}</span>
+    </div>
+  `).join('');
+}
+
 function updateThemeToggleUI(theme) {
   const btn = document.querySelector('.theme-toggle-btn');
   if (!btn) return;
-  
   const icon = btn.querySelector('svg');
   const text = btn.querySelector('.theme-toggle-text');
-  
-  if (theme === 'light') {
-    if (icon) {
+  const variant = THEME_VARIANTS.find((v) => v.id === theme) || THEME_VARIANTS[0];
+  if (text) text.textContent = variant.label;
+
+  if (icon) {
+    if (theme === 'light' || theme === 'solarized-light') {
       icon.innerHTML = '<path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>';
-    }
-    if (text) text.textContent = 'Light';
-  } else if (theme === 'dark') {
-    if (icon) {
+    } else if (theme === 'system') {
+      icon.innerHTML = '<path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>';
+    } else {
       icon.innerHTML = '<path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>';
     }
-    if (text) text.textContent = 'Dark';
-  } else {
-    if (icon) {
-      icon.innerHTML = '<path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>';
-    }
-    if (text) text.textContent = 'System';
   }
 }
 
 function initThemeToggle() {
+  // Inject the extended theme list before applying (so the active marker lands on a real DOM node).
+  ensureThemeDropdownVariants();
+
   // Apply saved theme on load
   const savedTheme = getTheme();
   applyTheme(savedTheme);
-  
+
   // Listen for system theme changes
   const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
   mediaQuery.addEventListener('change', () => {
@@ -8012,26 +8041,24 @@ function initThemeToggle() {
       applyTheme('system');
     }
   });
-  
+
   // Setup dropdown toggle
   const toggleBtn = document.querySelector('.theme-toggle-btn');
   const dropdown = document.querySelector('.theme-dropdown');
-  
+
   if (toggleBtn && dropdown) {
     toggleBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       dropdown.classList.toggle('show');
     });
-    
-    // Close dropdown when clicking outside
+
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.theme-toggle')) {
         dropdown.classList.remove('show');
       }
     });
-    
-    // Handle theme option clicks
-    document.querySelectorAll('.theme-option').forEach(option => {
+
+    dropdown.querySelectorAll('.theme-option').forEach(option => {
       option.addEventListener('click', () => {
         const theme = option.dataset.theme;
         setTheme(theme);

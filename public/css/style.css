@@ -77,6 +77,78 @@
   }
 }
 
+/* ─── Dracula ──────────────────────────────────────────────────────────── */
+[data-theme="dracula"] {
+  --bg-primary: #282a36;
+  --bg-secondary: #21222c;
+  --bg-tertiary: #343746;
+  --bg-hover: #44475a;
+  --border: #44475a;
+  --text-primary: #f8f8f2;
+  --text-secondary: #bbbbcc;
+  --text-muted: #6272a4;
+  --accent: #bd93f9;
+  --accent-hover: #d6acff;
+  --success: #50fa7b;
+  --warning: #f1fa8c;
+  --danger: #ff5555;
+  --shadow: 0 8px 24px rgba(0,0,0,0.45);
+}
+
+/* ─── Nord ─────────────────────────────────────────────────────────────── */
+[data-theme="nord"] {
+  --bg-primary: #2e3440;
+  --bg-secondary: #3b4252;
+  --bg-tertiary: #434c5e;
+  --bg-hover: #4c566a;
+  --border: #4c566a;
+  --text-primary: #eceff4;
+  --text-secondary: #d8dee9;
+  --text-muted: #81a1c1;
+  --accent: #88c0d0;
+  --accent-hover: #8fbcbb;
+  --success: #a3be8c;
+  --warning: #ebcb8b;
+  --danger: #bf616a;
+  --shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+
+/* ─── Solarized Dark ───────────────────────────────────────────────────── */
+[data-theme="solarized-dark"] {
+  --bg-primary: #002b36;
+  --bg-secondary: #073642;
+  --bg-tertiary: #094352;
+  --bg-hover: #0a4a5e;
+  --border: #0e5266;
+  --text-primary: #fdf6e3;
+  --text-secondary: #93a1a1;
+  --text-muted: #657b83;
+  --accent: #268bd2;
+  --accent-hover: #2aa198;
+  --success: #859900;
+  --warning: #b58900;
+  --danger: #dc322f;
+  --shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+/* ─── Solarized Light ──────────────────────────────────────────────────── */
+[data-theme="solarized-light"] {
+  --bg-primary: #fdf6e3;
+  --bg-secondary: #eee8d5;
+  --bg-tertiary: #e4dcc1;
+  --bg-hover: #d8d2bd;
+  --border: #d3cbb7;
+  --text-primary: #073642;
+  --text-secondary: #586e75;
+  --text-muted: #93a1a1;
+  --accent: #268bd2;
+  --accent-hover: #2aa198;
+  --success: #859900;
+  --warning: #b58900;
+  --danger: #dc322f;
+  --shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -5019,4 +5091,45 @@ textarea.inline-edit-input {
 @keyframes query-err-in {
   from { opacity: 0; transform: translateY(-2px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Theme picker swatches ───────────────────────────────────────────────── */
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 5px;
+  transition: background 120ms ease;
+}
+
+.theme-option:hover {
+  background: var(--bg-tertiary);
+}
+
+.theme-option.active {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.theme-option-swatches {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  width: 28px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.theme-option-swatch {
+  flex: 1;
+}
+
+/* The dropdown was originally sized for 3 entries; let it grow now that we have 7. */
+.theme-dropdown {
+  min-width: 180px;
 }
