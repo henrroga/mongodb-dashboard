@@ -117,6 +117,222 @@ function showToast(message, type = 'info', duration = 4000) {
   return toast;
 }
 
+// ─── Copy-as-code: generate driver code for queries / aggregations ────────────
+
+const CODE_LANGUAGES = [
+  { id: 'mongosh', label: 'mongosh', mode: 'javascript' },
+  { id: 'node',    label: 'Node.js (driver)', mode: 'javascript' },
+  { id: 'python',  label: 'Python (pymongo)', mode: 'python' },
+  { id: 'java',    label: 'Java (driver)', mode: 'java' },
+  { id: 'go',      label: 'Go (mongo-go-driver)', mode: 'go' },
+];
+
+function safeParseJsonish(input, fallback = null) {
+  if (!input || !input.trim()) return fallback;
+  try { return JSON.parse(input); }
+  catch (_) {}
+  // Try MQL-style (unquoted keys, single quotes) via the same trick we use server-side.
+  try {
+    const normalized = input
+      .replace(/'((?:\\.|[^'\\])*)'/g, (_m, body) => JSON.stringify(body))
+      .replace(/([{,\s])([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g, '$1"$2":');
+    return JSON.parse(normalized);
+  } catch (e) {
+    throw new Error('Could not parse: ' + e.message);
+  }
+}
+
+function indentJson(value, indent = 2) {
+  if (value === undefined || value === null) return '{}';
+  return JSON.stringify(value, null, indent);
+}
+
+function pythonRepr(value, indent = 0) {
+  const pad = ' '.repeat(indent);
+  if (value === null) return 'None';
+  if (value === true) return 'True';
+  if (value === false) return 'False';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    const inner = value.map((v) => pad + '    ' + pythonRepr(v, indent + 4)).join(',\n');
+    return '[\n' + inner + '\n' + pad + ']';
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return '{}';
+    const inner = keys
+      .map((k) => `${pad}    ${JSON.stringify(k)}: ${pythonRepr(value[k], indent + 4)}`)
+      .join(',\n');
+    return '{\n' + inner + '\n' + pad + '}';
+  }
+  return JSON.stringify(value);
+}
+
+function generateCode({ language, dbName, collectionName, filter, projection, sort, limit, skip, pipeline }) {
+  const filterObj = pipeline ? null : safeParseJsonish(filter, {});
+  const projObj = pipeline ? null : safeParseJsonish(projection, null);
+  const sortObj = pipeline ? null : safeParseJsonish(sort, null);
+
+  switch (language) {
+    case 'mongosh': {
+      if (pipeline) {
+        return `use ${dbName};\n\ndb.getCollection(${JSON.stringify(collectionName)}).aggregate(${indentJson(pipeline)});`;
+      }
+      // In mongosh, find(filter, projection) takes the projection directly;
+      // sort/skip/limit are chained.
+      const findArgs = projObj
+        ? `${indentJson(filterObj)}, ${indentJson(projObj)}`
+        : indentJson(filterObj);
+      let chain = `db.getCollection(${JSON.stringify(collectionName)}).find(${findArgs})`;
+      if (sortObj) chain += `.sort(${indentJson(sortObj)})`;
+      if (skip) chain += `.skip(${skip})`;
+      if (limit) chain += `.limit(${limit})`;
+      return `use ${dbName};\n\n${chain};`;
+    }
+    case 'node': {
+      const setupHead = `const { MongoClient } = require('mongodb');\n\nconst client = new MongoClient(process.env.MONGODB_URI);\nawait client.connect();\nconst db = client.db(${JSON.stringify(dbName)});\nconst col = db.collection(${JSON.stringify(collectionName)});\n\n`;
+      if (pipeline) {
+        return `${setupHead}const docs = await col.aggregate(${indentJson(pipeline)}).toArray();\nconsole.log(docs);`;
+      }
+      const findArgs = projObj
+        ? `${indentJson(filterObj)}, { projection: ${indentJson(projObj)} }`
+        : indentJson(filterObj);
+      let chain = `col.find(${findArgs})`;
+      if (sortObj) chain += `\n  .sort(${indentJson(sortObj)})`;
+      if (skip) chain += `\n  .skip(${skip})`;
+      if (limit) chain += `\n  .limit(${limit})`;
+      return `${setupHead}const docs = await ${chain}.toArray();\nconsole.log(docs);`;
+    }
+    case 'python': {
+      const head = `from pymongo import MongoClient\nimport os\n\nclient = MongoClient(os.environ["MONGODB_URI"])\ncol = client[${JSON.stringify(dbName)}][${JSON.stringify(collectionName)}]\n\n`;
+      if (pipeline) {
+        return `${head}docs = list(col.aggregate(${pythonRepr(pipeline)}))\nprint(docs)`;
+      }
+      const args = [`filter=${pythonRepr(filterObj)}`];
+      if (projObj) args.push(`projection=${pythonRepr(projObj)}`);
+      let cursorExpr = `col.find(${args.join(', ')})`;
+      if (sortObj) cursorExpr += `.sort(list(${pythonRepr(sortObj)}.items()))`;
+      if (skip) cursorExpr += `.skip(${skip})`;
+      if (limit) cursorExpr += `.limit(${limit})`;
+      return `${head}for doc in ${cursorExpr}:\n    print(doc)`;
+    }
+    case 'java': {
+      const head = `// requires org.mongodb:mongodb-driver-sync\nimport com.mongodb.client.*;\nimport org.bson.Document;\n\nMongoClient client = MongoClients.create(System.getenv("MONGODB_URI"));\nMongoCollection<Document> col = client\n  .getDatabase(${JSON.stringify(dbName)})\n  .getCollection(${JSON.stringify(collectionName)});\n\n`;
+      if (pipeline) {
+        return `${head}// pipeline as parsed JSON Documents:\nList<Document> pipeline = ${JSON.stringify(pipeline)
+          .split('},').join('},\n  ')};\n// .aggregate(pipeline.stream().map(s -> Document.parse(s.toJson())).toList())`;
+      }
+      let chain = `Document filter = Document.parse(${JSON.stringify(JSON.stringify(filterObj || {}))});\nFindIterable<Document> it = col.find(filter)`;
+      if (projObj) chain += `\n  .projection(Document.parse(${JSON.stringify(JSON.stringify(projObj))}))`;
+      if (sortObj) chain += `\n  .sort(Document.parse(${JSON.stringify(JSON.stringify(sortObj))}))`;
+      if (skip) chain += `\n  .skip(${skip})`;
+      if (limit) chain += `\n  .limit(${limit})`;
+      return `${head}${chain};\nfor (Document doc : it) System.out.println(doc.toJson());`;
+    }
+    case 'go': {
+      const head = `// requires go.mongodb.org/mongo-driver\nimport (\n  "context"\n  "os"\n  "go.mongodb.org/mongo-driver/bson"\n  "go.mongodb.org/mongo-driver/mongo"\n  "go.mongodb.org/mongo-driver/mongo/options"\n)\n\nclient, _ := mongo.Connect(context.TODO(), options.Client().ApplyURI(os.Getenv("MONGODB_URI")))\ncol := client.Database(${JSON.stringify(dbName)}).Collection(${JSON.stringify(collectionName)})\n\n`;
+      const filterGo = `bson.M${JSON.stringify(filterObj || {}).replace(/"([^"]+)":/g, '"$1": ')}`;
+      if (pipeline) {
+        return `${head}cursor, _ := col.Aggregate(context.TODO(), bson.A${JSON.stringify(pipeline).replace(/"([^"]+)":/g, '"$1": ')})\nvar docs []bson.M\ncursor.All(context.TODO(), &docs)`;
+      }
+      const opts = [];
+      if (projObj) opts.push(`SetProjection(bson.M${JSON.stringify(projObj).replace(/"([^"]+)":/g, '"$1": ')})`);
+      if (sortObj) opts.push(`SetSort(bson.M${JSON.stringify(sortObj).replace(/"([^"]+)":/g, '"$1": ')})`);
+      if (limit) opts.push(`SetLimit(${limit})`);
+      if (skip) opts.push(`SetSkip(${skip})`);
+      const optExpr = opts.length ? `, options.Find().${opts.join('.')}` : '';
+      return `${head}cursor, _ := col.Find(context.TODO(), ${filterGo}${optExpr})\nvar docs []bson.M\ncursor.All(context.TODO(), &docs)`;
+    }
+    default:
+      return '// unsupported language';
+  }
+}
+
+let copyAsCodeLanguage = localStorage.getItem('mdb_code_lang') || 'mongosh';
+
+async function openCopyAsCodeModal({ dbName, collectionName, getInputs, kind = 'find' }) {
+  const root = document.createElement('div');
+  root.className = 'ui-modal ui-modal-code';
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  const langTabs = CODE_LANGUAGES.map(
+    (l) => `<button class="code-lang-tab${l.id === copyAsCodeLanguage ? ' active' : ''}" data-lang="${l.id}">${escapeHtml(l.label)}</button>`
+  ).join('');
+  root.innerHTML = `
+    <div class="ui-modal-backdrop"></div>
+    <div class="ui-modal-dialog ui-modal-dialog-wide" tabindex="-1">
+      <header class="ui-modal-header">
+        <h3 class="ui-modal-title">Copy as code</h3>
+        <button class="ui-modal-close" aria-label="Close">&times;</button>
+      </header>
+      <div class="ui-modal-body" style="padding:0">
+        <div class="code-lang-tabs">${langTabs}</div>
+        <pre class="code-output mono" id="codeOutput"></pre>
+      </div>
+      <footer class="ui-modal-actions">
+        <span class="code-hint">Generated client-side from your current ${kind === 'aggregate' ? 'pipeline' : 'query'}.</span>
+        <button class="btn btn-primary" id="codeCopyBtn">Copy</button>
+      </footer>
+    </div>
+  `;
+  document.body.appendChild(root);
+  // eslint-disable-next-line no-unused-expressions
+  root.offsetWidth;
+  root.classList.add('ui-modal-open');
+
+  const out = root.querySelector('#codeOutput');
+  function refresh() {
+    let inputs;
+    try {
+      inputs = getInputs();
+    } catch (e) {
+      out.textContent = '// ' + e.message;
+      return;
+    }
+    try {
+      out.textContent = generateCode({
+        language: copyAsCodeLanguage,
+        dbName,
+        collectionName,
+        ...inputs,
+      });
+    } catch (e) {
+      out.textContent = '// ' + e.message;
+    }
+  }
+  refresh();
+
+  root.querySelectorAll('.code-lang-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      copyAsCodeLanguage = btn.dataset.lang;
+      localStorage.setItem('mdb_code_lang', copyAsCodeLanguage);
+      root.querySelectorAll('.code-lang-tab').forEach((b) => b.classList.toggle('active', b === btn));
+      refresh();
+    });
+  });
+
+  const cleanup = () => {
+    root.classList.remove('ui-modal-open');
+    setTimeout(() => root.remove(), 150);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') cleanup(); };
+  document.addEventListener('keydown', onKey);
+  root.querySelector('.ui-modal-close').addEventListener('click', cleanup);
+  root.querySelector('.ui-modal-backdrop').addEventListener('click', cleanup);
+
+  root.querySelector('#codeCopyBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(out.textContent);
+      showToast('Code copied to clipboard', 'success', 2000);
+    } catch {
+      showToast('Could not access clipboard', 'error');
+    }
+  });
+}
+
 // ─── Skeleton loaders + polished empty states ────────────────────────────────
 
 function renderTableSkeleton(rowCount = 6, colCount = 5) {
@@ -1619,6 +1835,24 @@ async function initBrowser(dbName, collectionName) {
   const savedQueriesBtn = document.getElementById('savedQueriesBtn');
   const savedQueriesDropdown = document.getElementById('savedQueriesDropdown');
   const saveQueryBtn = document.getElementById('saveQueryBtn');
+  const queryCopyCodeBtn = document.getElementById('queryCopyCodeBtn');
+
+  if (queryCopyCodeBtn) {
+    queryCopyCodeBtn.addEventListener('click', () => {
+      openCopyAsCodeModal({
+        dbName,
+        collectionName,
+        kind: 'find',
+        getInputs: () => ({
+          filter: queryFilterEl?.value || '',
+          projection: queryProjectionEl?.value || '',
+          sort: querySortEl?.value || '',
+          limit: parseInt(queryLimitEl?.value) || null,
+          skip: parseInt(querySkipEl?.value) || null,
+        }),
+      });
+    });
+  }
 
   if (queryOptionsToggle && queryBarOptions) {
     queryOptionsToggle.addEventListener('click', () => {

@@ -4357,3 +4357,61 @@ textarea.inline-edit-input {
   gap: 8px;
   margin-top: 8px;
 }
+
+/* ─── Copy-as-code modal ──────────────────────────────────────────────────── */
+
+.ui-modal-dialog-wide {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.code-lang-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  overflow-x: auto;
+}
+
+.code-lang-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.code-lang-tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.code-lang-tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 1px 0 var(--border-color);
+}
+
+.code-output {
+  margin: 0;
+  padding: 16px 20px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  min-height: 220px;
+  max-height: 60vh;
+}
+
+.code-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex: 1;
+}
