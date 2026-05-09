@@ -21,10 +21,11 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        // CodeMirror is loaded from cdnjs in browser.ejs.
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
         imgSrc: ["'self'", "data:"],
-        fontSrc: ["'self'", "data:"],
+        fontSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com"],
         connectSrc: ["'self'"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
@@ -59,6 +60,15 @@ app.use(express.static(path.join(__dirname, "public"), { maxAge: "1d" }));
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
+
+app.use((req, res, next) => {
+  res.locals.appConfig = {
+    authEnabled: config.auth.enabled,
+    readOnly: config.readOnly,
+    presetLocked: !!config.presetMongoUri,
+  };
+  next();
+});
 
 const generalLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,

@@ -158,7 +158,39 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('readonly-mode');
     updateReadOnlyBadge();
   }
+  injectLogoutControl();
 });
+
+function injectLogoutControl() {
+  const cfg = window.__APP_CONFIG__ || {};
+  if (!cfg.authEnabled) return;
+  const headerActions = document.querySelector('.header-actions');
+  if (!headerActions) return;
+  if (headerActions.querySelector('[data-logout-btn]')) return;
+
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/logout';
+  form.style.display = 'inline-flex';
+  form.dataset.logoutBtn = '1';
+
+  const btn = document.createElement('button');
+  btn.type = 'submit';
+  btn.className = 'btn btn-sm btn-ghost';
+  btn.title = 'Sign out';
+  btn.setAttribute('aria-label', 'Sign out');
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
+
+  form.appendChild(btn);
+  headerActions.appendChild(form);
+
+  // When auth is enabled and a preset URI is in use, the user-controlled
+  // disconnect button doesn't apply — hide it to avoid confusion.
+  if (cfg.presetLocked) {
+    const dc = document.getElementById('disconnectBtn');
+    if (dc) dc.style.display = 'none';
+  }
+}
 
 // Utility functions
 function formatBytes(bytes) {
