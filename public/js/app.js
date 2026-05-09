@@ -1427,7 +1427,7 @@ function renderOpenTabsBar(currentDb, currentCollection) {
   const currentId = currentDb && currentCollection ? `${currentDb}/${currentCollection}` : null;
 
   bar.innerHTML = tabs.map(tab => `
-    <div class="open-tab ${tab.id === currentId ? 'open-tab-active' : ''}">
+    <div class="open-tab ${tab.id === currentId ? 'open-tab-active' : ''}" draggable="true" data-tab-id="${escapeHtml(tab.id)}">
       <a href="/browse/${encodeURIComponent(tab.db)}/${encodeURIComponent(tab.collection)}" class="open-tab-link">
         <span class="open-tab-db">${escapeHtml(tab.db)}</span>
         <span class="open-tab-sep">/</span>
@@ -1450,6 +1450,57 @@ function renderOpenTabsBar(currentDb, currentCollection) {
       }
     });
   });
+
+  // Drag-to-reorder
+  let dragId = null;
+  bar.querySelectorAll('.open-tab').forEach((el) => {
+    el.addEventListener('dragstart', (e) => {
+      dragId = el.dataset.tabId;
+      el.classList.add('open-tab-dragging');
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); } catch (_) {}
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('open-tab-dragging');
+      bar.querySelectorAll('.open-tab-drop-before, .open-tab-drop-after').forEach((n) =>
+        n.classList.remove('open-tab-drop-before', 'open-tab-drop-after')
+      );
+    });
+    el.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!dragId || dragId === el.dataset.tabId) return;
+      const rect = el.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      el.classList.toggle('open-tab-drop-before', before);
+      el.classList.toggle('open-tab-drop-after', !before);
+    });
+    el.addEventListener('dragleave', () => {
+      el.classList.remove('open-tab-drop-before', 'open-tab-drop-after');
+    });
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!dragId || dragId === el.dataset.tabId) return;
+      const rect = el.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      reorderOpenTabs(dragId, el.dataset.tabId, before ? 'before' : 'after');
+      dragId = null;
+      renderOpenTabsBar(currentDb, currentCollection);
+    });
+  });
+}
+
+function reorderOpenTabs(sourceId, targetId, position) {
+  const tabs = getOpenTabs();
+  const fromIdx = tabs.findIndex((t) => t.id === sourceId);
+  if (fromIdx === -1) return;
+  const [moved] = tabs.splice(fromIdx, 1);
+  let toIdx = tabs.findIndex((t) => t.id === targetId);
+  if (toIdx === -1) {
+    tabs.push(moved);
+  } else {
+    if (position === 'after') toIdx += 1;
+    tabs.splice(toIdx, 0, moved);
+  }
+  saveOpenTabs(tabs);
 }
 
 // ─── Shell Panel ─────────────────────────────────────────────────────────────
