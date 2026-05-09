@@ -4615,3 +4615,22 @@ textarea.inline-edit-input {
   pointer-events: none;
   opacity: 0.55;
 }
+
+/* ─── Copyable JSON tree keys ─────────────────────────────────────────────── */
+
+.json-key[data-path] {
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+  padding: 0 1px;
+  border-radius: 3px;
+}
+
+.json-key[data-path]:hover {
+  background: rgba(56, 139, 253, 0.18);
+  color: var(--accent, #79c0ff);
+}
+
+.json-key-copied {
+  background: rgba(63, 185, 80, 0.25) !important;
+  color: var(--success, #3fb950) !important;
+}

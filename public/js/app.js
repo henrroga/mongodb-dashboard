@@ -3751,7 +3751,7 @@ async function initDocumentPage(dbName, collectionName, docId) {
   }
 }
 
-function renderJsonTree(obj, indent = 0) {
+function renderJsonTree(obj, indent = 0, path = '') {
   if (obj === null) return '<span class="json-null">null</span>';
   if (typeof obj === 'boolean') return `<span class="json-boolean">${obj}</span>`;
   if (typeof obj === 'number') return `<span class="json-number">${obj}</span>`;
@@ -3766,8 +3766,9 @@ function renderJsonTree(obj, indent = 0) {
 
   if (Array.isArray(obj)) {
     if (obj.length === 0) return '<span class="json-bracket">[]</span>';
-    const items = obj.map(item => {
-      const rendered = renderJsonTree(item, indent + 1);
+    const items = obj.map((item, i) => {
+      const childPath = path ? `${path}.${i}` : String(i);
+      const rendered = renderJsonTree(item, indent + 1, childPath);
       return `${innerSpaces}${rendered}`;
     }).join(',\n');
     return `<span class="json-bracket">[</span>\n${items}\n${spaces}<span class="json-bracket">]</span>`;
@@ -3777,12 +3778,29 @@ function renderJsonTree(obj, indent = 0) {
   if (keys.length === 0) return '<span class="json-bracket">{}</span>';
 
   const entries = keys.map(key => {
-    const rendered = renderJsonTree(obj[key], indent + 1);
-    return `${innerSpaces}<span class="json-key">"${escapeHtml(key)}"</span>: ${rendered}`;
+    const childPath = path ? `${path}.${key}` : key;
+    const rendered = renderJsonTree(obj[key], indent + 1, childPath);
+    return `${innerSpaces}<span class="json-key" data-path="${escapeHtml(childPath)}" title="Click to copy field path">"${escapeHtml(key)}"</span>: ${rendered}`;
   }).join(',\n');
 
   return `<span class="json-bracket">{</span>\n${entries}\n${spaces}<span class="json-bracket">}</span>`;
 }
+
+// Single delegated listener for copy-on-click on any json key in the doc page.
+document.addEventListener('click', async (e) => {
+  const key = e.target.closest('.json-key[data-path]');
+  if (!key) return;
+  const path = key.dataset.path;
+  if (!path) return;
+  try {
+    await navigator.clipboard.writeText(path);
+    showToast(`Copied field path: ${path}`, 'success', 1800);
+    key.classList.add('json-key-copied');
+    setTimeout(() => key.classList.remove('json-key-copied'), 600);
+  } catch {
+    showToast('Could not access clipboard', 'error');
+  }
+});
 
 let editOriginalDoc = null;
 
