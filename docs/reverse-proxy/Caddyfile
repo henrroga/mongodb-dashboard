@@ -1,0 +1,29 @@
+# Caddy is the simplest path: automatic HTTPS via Let's Encrypt, HTTP/2,
+# no extra config. Replace mongo.example.com with your domain.
+#
+# 1. Install Caddy: https://caddyserver.com/docs/install
+# 2. Save this as /etc/caddy/Caddyfile
+# 3. systemctl reload caddy
+#
+# DNS: point mongo.example.com to your server. Caddy gets a cert on first hit.
+
+mongo.example.com {
+    encode gzip
+
+    # Optional: allowlist source IPs (e.g., your home IP + tailnet).
+    # @blocked not remote_ip 203.0.113.0/24 100.64.0.0/10
+    # respond @blocked 403
+
+    reverse_proxy 127.0.0.1:3000 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote}
+    }
+
+    # Hardening headers that Caddy adds on top of helmet's.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "same-origin"
+        Permissions-Policy "interest-cohort=(), browsing-topics=()"
+    }
+}

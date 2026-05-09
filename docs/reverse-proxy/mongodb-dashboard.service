@@ -1,0 +1,40 @@
+# systemd unit for running the dashboard directly under Node (no Docker).
+# Install:
+#   sudo cp docs/reverse-proxy/mongodb-dashboard.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mongodb-dashboard
+
+[Unit]
+Description=MongoDB Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mongodb-dashboard
+Group=mongodb-dashboard
+WorkingDirectory=/opt/mongodb-dashboard
+EnvironmentFile=/opt/mongodb-dashboard/.env
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mongodb-dashboard/logs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

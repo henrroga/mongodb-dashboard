@@ -1,95 +1,102 @@
 # MongoDB Dashboard
 
-A fast, lightweight MongoDB browser built with Node.js, Express, and vanilla JavaScript. Designed to be faster than MongoDB Compass for quick database browsing.
+A fast, self-hosted, open-source MongoDB browser. Built to replace MongoDB
+Compass for day-to-day work and to run safely on a domain you control.
+
+- **No telemetry, no cloud.** Your connection string never leaves your server.
+- **Designed to be exposed on the internet.** Password auth, brute-force
+  lockout, helmet-set CSP/security headers, rate limiting, and a `READ_ONLY`
+  switch are built in.
+- **Drop-in self-host.** One Dockerfile, one compose file, one `.env`.
 
 ## Features
 
-- **Fast Connection**: Connect to any MongoDB instance via connection string
-- **Database Browser**: View all databases with sizes, similar to Supabase project selector
-- **Collection Browser**: Left sidebar with all collections, main table view for documents
-- **Document Viewer**: Full JSON tree view with syntax highlighting
-- **CRUD Operations**: Create, read, update, and delete documents
-- **Cursor-based Pagination**: Fast navigation through large collections
-- **Recent Connections**: LocalStorage-based connection history
-- **Dark Theme**: Easy on the eyes for extended use
+Browser, document viewer + JSON editor, schema/index/validation tools,
+aggregation/explain runner, server stats, change-stream tab, import/export,
+saved connections, dark/light/system theme, and a guarded `db.collection.foo()`
+shell — all over plain HTTP/JSON, no heavy framework.
 
-## Quick Start
+## Quick start (local)
 
 ```bash
-# Install dependencies
+git clone https://github.com/henrroga/mongodb-dashboard
+cd mongodb-dashboard
 npm install
-
-# Start the server
+cp .env.example .env
+# Edit .env and either set AUTH_PASSWORD or generate a hash:
+npm run hash-password
 npm start
-
-# Or run in development mode (with auto-restart)
-npm run dev
 ```
 
-Then open http://localhost:3000 in your browser.
+Open <http://localhost:3000>.
 
-## Usage
+## Self-host (Docker, recommended)
 
-1. Enter your MongoDB connection string (e.g., `mongodb://localhost:27017` or `mongodb+srv://...`)
-2. Select a database from the list
-3. Click on a collection in the sidebar to browse documents
-4. Use the action buttons to view, edit, or delete documents
-5. Click "Add Document" to create new documents
+```bash
+cp .env.example .env
+# Set at minimum:
+#   AUTH_PASSWORD_HASH    (run: npm run hash-password)
+#   SESSION_SECRET=$(openssl rand -hex 32)
+#   MONGODB_URI=mongodb://...
+docker compose up -d --build
+```
 
-## Speed Optimizations
+The compose file binds the dashboard to `127.0.0.1:3000` only. Put a reverse
+proxy in front to terminate TLS and expose it on a domain you own. See
+[`docs/reverse-proxy/`](./docs/reverse-proxy) for ready-to-paste configs.
 
-- **Connection Pooling**: Reuses MongoDB connections across requests
-- **Estimated Counts**: Uses `estimatedDocumentCount()` for fast collection stats
-- **Cursor Pagination**: Uses `_id` cursors instead of skip/limit for large collections
-- **Minimal JS**: No heavy frameworks, just vanilla JavaScript
-- **Server-side Rendering**: EJS templates for fast initial page loads
+## Configuration
 
-## Project Structure
+All config is via environment variables (see `.env.example`). The most
+important knobs:
+
+| Variable             | Default    | Notes                                                                                |
+| -------------------- | ---------- | ------------------------------------------------------------------------------------ |
+| `AUTH_ENABLED`       | auto       | `true` if password set. **Always `true` for internet-exposed deployments.**          |
+| `AUTH_PASSWORD_HASH` | —          | bcrypt hash. Generate with `npm run hash-password`.                                  |
+| `AUTH_PASSWORD`      | —          | Plain password (dev only — hashed in memory at boot, never persisted).               |
+| `SESSION_SECRET`     | —          | 32+ random bytes. **Required in production.** `openssl rand -hex 32`.                |
+| `COOKIE_SECURE`      | prod=true  | Only send the session cookie over HTTPS. Leave on for any public deployment.         |
+| `TRUST_PROXY`        | `loopback` | `1` for one proxy, or a CIDR. Required for correct client IPs / secure cookies.      |
+| `MONGODB_URI`        | —          | Preset connection. When set, the connect form is disabled and disconnect is blocked. |
+| `READ_ONLY`          | `false`    | Reject all DB writes (insert/update/delete/drop/index/validation/import).            |
+| `LOGIN_MAX_ATTEMPTS` | 5          | Lock the IP after N failed attempts.                                                 |
+| `LOGIN_LOCKOUT_MS`   | 900000     | Lockout duration (15 min).                                                           |
+| `RATE_LIMIT_MAX`     | 300        | Requests per minute per IP.                                                          |
+| `AUDIT_LOG_DIR`      | `./logs`   | Where write-op audit log is written.                                                 |
+
+## Security
+
+See [`SECURITY.md`](./SECURITY.md) for the threat model and a deployment
+checklist. **Do not expose the dashboard on a public domain without
+`AUTH_ENABLED=true`, `SESSION_SECRET`, HTTPS, and a reverse proxy.**
+
+## Project structure
 
 ```
-mongodb-dashboard/
-├── server.js              # Express entry point
+.
+├── server.js              # Express entry — auth, helmet, rate limit, sessions
 ├── src/
+│   ├── config.js          # env → typed config
+│   ├── middleware/auth.js # session gate, brute-force lockout
 │   ├── routes/
-│   │   ├── api.js        # REST API endpoints
-│   │   └── pages.js      # Page rendering routes
-│   ├── services/
-│   │   └── mongodb.js    # Connection pool manager
+│   │   ├── api.js         # JSON API (read-only enforcement, audit, write guards)
+│   │   ├── auth.js        # /login, /logout
+│   │   └── pages.js       # SSR pages
+│   ├── services/mongodb.js
 │   └── utils/
-│       └── bson.js       # BSON serialization helpers
-├── views/                 # EJS templates
-│   ├── layouts/
-│   ├── partials/
-│   ├── connect.ejs
-│   ├── databases.ejs
-│   ├── browser.ejs
-│   └── document.ejs
-└── public/
-    ├── css/style.css     # Dark theme styles
-    └── js/app.js         # Client-side interactions
+│       ├── audit.js       # JSONL audit log of writes
+│       ├── bson.js
+│       ├── schema.js
+│       └── shellArg.js    # MQL arg parser (no eval)
+├── views/                 # EJS
+├── public/                # CSS + vanilla JS
+├── docs/reverse-proxy/    # Caddy + nginx + systemd examples
+├── scripts/hash-password.js
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example
 ```
-
-## API Endpoints
-
-| Method | Endpoint                   | Description                       |
-| ------ | -------------------------- | --------------------------------- |
-| POST   | `/api/connect`             | Test connection, return databases |
-| GET    | `/api/databases`           | List all databases                |
-| GET    | `/api/:db/collections`     | List collections in database      |
-| GET    | `/api/:db/:collection`     | Get documents (paginated)         |
-| GET    | `/api/:db/:collection/:id` | Get single document               |
-| POST   | `/api/:db/:collection`     | Create document                   |
-| PUT    | `/api/:db/:collection/:id` | Update document                   |
-| DELETE | `/api/:db/:collection/:id` | Delete document                   |
-| POST   | `/api/disconnect`          | Close connection                  |
-
-## Keyboard Shortcuts
-
-- `Escape` - Close any open modal
-
-## Environment Variables
-
-- `PORT` - Server port (default: 3000)
 
 ## License
 
