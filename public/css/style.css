@@ -4823,3 +4823,172 @@ textarea.inline-edit-input {
   color: var(--accent, #79c0ff);
   border-color: var(--accent, #388bfd);
 }
+
+/* ─── Scratchpad panel ────────────────────────────────────────────────────── */
+
+.scratchpad-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(440px, 100vw);
+  z-index: 9500;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 200ms cubic-bezier(.2,.8,.2,1);
+}
+
+.scratchpad-panel.scratchpad-panel-open {
+  transform: translateX(0);
+}
+
+.scratchpad-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.scratchpad-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scratchpad-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.scratchpad-tab {
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.scratchpad-tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.scratchpad-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.scratchpad-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.scratchpad-body {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.scratchpad-textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-primary);
+  border: none;
+  resize: none;
+  padding: 16px 18px;
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  display: none;
+}
+
+.scratchpad-preview {
+  position: absolute;
+  inset: 0;
+  padding: 16px 22px;
+  overflow-y: auto;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+  display: none;
+}
+
+.scratchpad-mode-edit .scratchpad-textarea { display: block; }
+.scratchpad-mode-preview .scratchpad-preview { display: block; }
+
+.scratchpad-preview h1 { font-size: 18px; margin: 16px 0 8px; }
+.scratchpad-preview h2 { font-size: 16px; margin: 14px 0 8px; }
+.scratchpad-preview h3 { font-size: 14px; margin: 12px 0 6px; }
+.scratchpad-preview p  { margin: 6px 0; }
+.scratchpad-preview ul { margin: 6px 0; padding-left: 22px; }
+.scratchpad-preview blockquote {
+  border-left: 3px solid var(--border-color);
+  padding: 4px 12px;
+  color: var(--text-secondary);
+  margin: 8px 0;
+}
+.scratchpad-preview code {
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12.5px;
+}
+.scratchpad-preview pre {
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+.scratchpad-preview pre code {
+  background: transparent;
+  padding: 0;
+}
+.scratchpad-preview a {
+  color: var(--accent, #79c0ff);
+}
+
+.scratchpad-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.scratchpad-saved {
+  opacity: 0;
+  transition: opacity 120ms ease;
+  color: var(--success, #3fb950);
+}
+
+.scratchpad-saved.scratchpad-saved-flash {
+  opacity: 1;
+}

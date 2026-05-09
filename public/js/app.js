@@ -1282,6 +1282,7 @@ function getCommandActions() {
     }},
     { label: 'Keyboard Shortcuts', category: 'Actions', action: toggleShortcutsModal },
     { label: 'Show Onboarding Tour', category: 'Help', action: () => window.showOnboardingTour && window.showOnboardingTour() },
+    { label: 'Toggle Scratchpad', category: 'Actions', action: () => document.getElementById('scratchpadBtn')?.click() },
     { label: 'Tab: Documents', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="documents"]')?.click() },
     { label: 'Tab: Indexes', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="indexes"]')?.click() },
     { label: 'Tab: Schema', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="schema"]')?.click() },
@@ -1378,6 +1379,195 @@ function executePaletteSelection() {
 
 // Initialize shortcuts on page load
 document.addEventListener('DOMContentLoaded', initKeyboardShortcuts);
+
+// ─── Scratchpad (per-collection markdown notes) ──────────────────────────────
+
+const SCRATCHPAD_KEY = 'mongodb_dashboard_scratchpad';
+
+function getScratchpad(dbName, collectionName) {
+  try {
+    const all = JSON.parse(localStorage.getItem(SCRATCHPAD_KEY) || '{}');
+    return all[`${dbName}/${collectionName}`] || '';
+  } catch { return ''; }
+}
+
+function setScratchpad(dbName, collectionName, value) {
+  let all;
+  try { all = JSON.parse(localStorage.getItem(SCRATCHPAD_KEY) || '{}'); }
+  catch { all = {}; }
+  const key = `${dbName}/${collectionName}`;
+  if (value && value.trim()) all[key] = value;
+  else delete all[key];
+  localStorage.setItem(SCRATCHPAD_KEY, JSON.stringify(all));
+}
+
+// Tiny markdown subset: # / ## / ### headers, **bold**, *italic*, `code`,
+// fenced ``` blocks, [link](url), bullet lists, blockquote, and paragraphs.
+// Intentionally minimal — no images, no HTML passthrough.
+function renderMiniMarkdown(src) {
+  if (!src) return '';
+  // Escape first.
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  // Pull fenced code blocks out so inline rules don't touch them.
+  const blocks = [];
+  let safe = esc(src).replace(/```([\s\S]*?)```/g, (_, body) => {
+    blocks.push(body);
+    return `CODEBLOCK${blocks.length - 1}`;
+  });
+
+  // Inline code
+  safe = safe.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  // Bold then italic (order matters because ** is a superset of *)
+  safe = safe.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  safe = safe.replace(/(^|\W)\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  // Links — only safe schemes.
+  safe = safe.replace(/\[([^\]]+)\]\(((?:https?:|mailto:|\/)[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+  // Block-level processing: headers, lists, blockquote, paragraphs.
+  const lines = safe.split('\n');
+  const out = [];
+  let inUl = false;
+  const closeUl = () => { if (inUl) { out.push('</ul>'); inUl = false; } };
+  for (let line of lines) {
+    if (/^#{3} (.+)/.test(line)) { closeUl(); out.push(line.replace(/^#{3} (.+)/, '<h3>$1</h3>')); continue; }
+    if (/^#{2} (.+)/.test(line)) { closeUl(); out.push(line.replace(/^#{2} (.+)/, '<h2>$1</h2>')); continue; }
+    if (/^# (.+)/.test(line))    { closeUl(); out.push(line.replace(/^# (.+)/, '<h1>$1</h1>')); continue; }
+    if (/^[-*] (.+)/.test(line)) {
+      if (!inUl) { out.push('<ul>'); inUl = true; }
+      out.push(line.replace(/^[-*] (.+)/, '<li>$1</li>'));
+      continue;
+    }
+    if (/^&gt; (.+)/.test(line)) { closeUl(); out.push(line.replace(/^&gt; (.+)/, '<blockquote>$1</blockquote>')); continue; }
+    closeUl();
+    if (line.trim() === '') out.push('');
+    else out.push(`<p>${line}</p>`);
+  }
+  closeUl();
+  let html = out.join('\n');
+
+  // Restore code blocks.
+  html = html.replace(/CODEBLOCK(\d+)/g, (_, idx) =>
+    `<pre><code>${blocks[parseInt(idx)]}</code></pre>`
+  );
+  return html;
+}
+
+let scratchpadOpen = false;
+let scratchpadEditMode = true;
+
+function mountScratchpad(dbName, collectionName) {
+  const btn = document.getElementById('scratchpadBtn');
+  if (!btn || !dbName || !collectionName) return;
+
+  // Reflect "has notes" on the button.
+  const refreshBtn = () => {
+    const hasNotes = !!(getScratchpad(dbName, collectionName) || '').trim();
+    btn.classList.toggle('btn-active', hasNotes);
+    btn.setAttribute('title', hasNotes ? 'Open scratchpad (notes saved)' : 'Open scratchpad (empty)');
+  };
+  refreshBtn();
+
+  btn.addEventListener('click', () => toggleScratchpad(dbName, collectionName, refreshBtn));
+}
+
+function toggleScratchpad(dbName, collectionName, onChange) {
+  let panel = document.getElementById('scratchpadPanel');
+  if (panel) { panel.remove(); scratchpadOpen = false; return; }
+  scratchpadOpen = true;
+
+  panel = document.createElement('aside');
+  panel.id = 'scratchpadPanel';
+  panel.className = 'scratchpad-panel';
+  panel.innerHTML = `
+    <header class="scratchpad-header">
+      <span class="scratchpad-title">Notes · ${escapeHtml(dbName)}.${escapeHtml(collectionName)}</span>
+      <div class="scratchpad-tabs">
+        <button data-mode="edit" class="scratchpad-tab ${scratchpadEditMode ? 'active' : ''}">Edit</button>
+        <button data-mode="preview" class="scratchpad-tab ${!scratchpadEditMode ? 'active' : ''}">Preview</button>
+      </div>
+      <button class="scratchpad-close" aria-label="Close" title="Close">&times;</button>
+    </header>
+    <div class="scratchpad-body">
+      <textarea class="scratchpad-textarea mono" placeholder="Markdown notes for this collection — only visible to you, stored locally.&#10;&#10;Examples:&#10; - quirks of this dataset&#10; - pinned MQL queries&#10; - PRD links"></textarea>
+      <div class="scratchpad-preview"></div>
+    </div>
+    <footer class="scratchpad-footer">
+      <span class="scratchpad-hint">Cmd/Ctrl-S saves · Esc closes · supports basic markdown</span>
+      <span class="scratchpad-saved">Saved</span>
+    </footer>
+  `;
+  document.body.appendChild(panel);
+  // eslint-disable-next-line no-unused-expressions
+  panel.offsetWidth;
+  panel.classList.add('scratchpad-panel-open');
+
+  const textarea = panel.querySelector('.scratchpad-textarea');
+  const preview = panel.querySelector('.scratchpad-preview');
+  const savedBadge = panel.querySelector('.scratchpad-saved');
+  textarea.value = getScratchpad(dbName, collectionName);
+
+  function applyMode() {
+    panel.classList.toggle('scratchpad-mode-edit', scratchpadEditMode);
+    panel.classList.toggle('scratchpad-mode-preview', !scratchpadEditMode);
+    panel.querySelectorAll('.scratchpad-tab').forEach((t) =>
+      t.classList.toggle('active', (t.dataset.mode === 'edit') === scratchpadEditMode)
+    );
+    if (!scratchpadEditMode) preview.innerHTML = renderMiniMarkdown(textarea.value);
+  }
+  applyMode();
+
+  let saveTimer = null;
+  const flashSaved = () => {
+    savedBadge.classList.add('scratchpad-saved-flash');
+    setTimeout(() => savedBadge.classList.remove('scratchpad-saved-flash'), 700);
+  };
+  const debouncedSave = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      setScratchpad(dbName, collectionName, textarea.value);
+      flashSaved();
+      onChange && onChange();
+    }, 300);
+  };
+
+  textarea.addEventListener('input', debouncedSave);
+
+  panel.querySelectorAll('.scratchpad-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      scratchpadEditMode = tab.dataset.mode === 'edit';
+      applyMode();
+      if (scratchpadEditMode) textarea.focus();
+    });
+  });
+
+  const close = () => {
+    setScratchpad(dbName, collectionName, textarea.value);
+    onChange && onChange();
+    panel.classList.remove('scratchpad-panel-open');
+    setTimeout(() => panel.remove(), 180);
+    document.removeEventListener('keydown', onKey);
+    scratchpadOpen = false;
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape' && !e.target.closest('.scratchpad-panel') === false) {
+      // Only close on Esc when no other modal is open.
+      if (!document.querySelector('.ui-modal.ui-modal-open, .onboarding-overlay.onboarding-open')) {
+        close();
+      }
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && e.target.closest('.scratchpad-panel')) {
+      e.preventDefault();
+      setScratchpad(dbName, collectionName, textarea.value);
+      flashSaved();
+      onChange && onChange();
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  panel.querySelector('.scratchpad-close').addEventListener('click', close);
+
+  if (scratchpadEditMode) setTimeout(() => textarea.focus(), 100);
+}
 
 // ─── Recently viewed documents ────────────────────────────────────────────────
 
@@ -2383,6 +2573,7 @@ async function initBrowser(dbName, collectionName) {
 
   if (collectionName) {
     mountRecentDocsWidget(dbName, collectionName);
+    mountScratchpad(dbName, collectionName);
   }
 
   // Restore state from URL query parameters
