@@ -5,13 +5,27 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "hash-password": "node scripts/hash-password.js"
   },
-  "keywords": ["mongodb", "dashboard", "database", "browser"],
+  "keywords": [
+    "mongodb",
+    "dashboard",
+    "database",
+    "browser"
+  ],
   "license": "MIT",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.4.2",
     "ejs": "^3.1.9",
     "express": "^4.18.2",
-    "mongodb": "^6.3.0"
+    "express-rate-limit": "^8.5.1",
+    "express-session": "^1.19.0",
+    "helmet": "^8.1.0",
+    "mongodb": "^6.3.0",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0"
   }
 }
