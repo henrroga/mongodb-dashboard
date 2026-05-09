@@ -4571,6 +4571,161 @@ function saveQuery(dbName, collectionName, query) {
   localStorage.setItem(savedQueriesKey(dbName, collectionName), JSON.stringify(queries.slice(0, 20)));
 }
 
+function downloadJsonFile(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function pickJsonFile() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      input.remove();
+      resolve(file || null);
+    });
+    input.addEventListener('cancel', () => {
+      input.remove();
+      resolve(null);
+    });
+    input.click();
+  });
+}
+
+function exportSavedQueries(dbName, collectionName) {
+  const queries = getSavedQueries(dbName, collectionName);
+  if (!queries.length) {
+    showToast('Nothing to export — save a query first.', 'warning');
+    return;
+  }
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadJsonFile(`mongodb-dashboard-queries-${dbName}-${collectionName}-${stamp}.json`, {
+    app: 'mongodb-dashboard',
+    kind: 'saved-queries',
+    version: 1,
+    db: dbName,
+    collection: collectionName,
+    exportedAt: new Date().toISOString(),
+    queries,
+  });
+  showToast(`Exported ${queries.length} saved quer${queries.length === 1 ? 'y' : 'ies'}`, 'success');
+}
+
+async function importSavedQueries(dbName, collectionName) {
+  const file = await pickJsonFile();
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const incoming = Array.isArray(data) ? data : data.queries;
+    if (!Array.isArray(incoming)) throw new Error('File is not a saved-queries export');
+
+    const cleaned = incoming
+      .map((q) => {
+        if (!q || typeof q !== 'object') return null;
+        const name = typeof q.name === 'string' && q.name.trim() ? q.name : 'Imported query';
+        return {
+          name,
+          filter: typeof q.filter === 'string' ? q.filter : '',
+          projection: typeof q.projection === 'string' ? q.projection : '',
+          sort: typeof q.sort === 'string' ? q.sort : '',
+          limit: Number.isFinite(q.limit) ? q.limit : 50,
+          skip: Number.isFinite(q.skip) ? q.skip : 0,
+        };
+      })
+      .filter(Boolean);
+    if (!cleaned.length) {
+      showToast('File contained no usable queries.', 'warning');
+      return;
+    }
+
+    const sourceLabel =
+      data.db && data.collection ? ` from ${data.db}.${data.collection}` : '';
+    const ok = await ui.confirm({
+      title: `Import ${cleaned.length} quer${cleaned.length === 1 ? 'y' : 'ies'}?`,
+      message: `These will be added to your saved queries for ${dbName}.${collectionName}${sourceLabel}.`,
+      confirmText: 'Import',
+    });
+    if (!ok) return;
+
+    const existing = getSavedQueries(dbName, collectionName);
+    const merged = [...cleaned, ...existing].slice(0, 50);
+    localStorage.setItem(savedQueriesKey(dbName, collectionName), JSON.stringify(merged));
+    showToast(`Imported ${cleaned.length} quer${cleaned.length === 1 ? 'y' : 'ies'}`, 'success');
+  } catch (err) {
+    showToast('Import failed: ' + err.message, 'error');
+  }
+}
+
+function exportSavedPipelines(dbName, collectionName) {
+  const pipelines = getSavedPipelines(dbName, collectionName);
+  if (!pipelines.length) {
+    showToast('Nothing to export — save a pipeline first.', 'warning');
+    return;
+  }
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadJsonFile(`mongodb-dashboard-pipelines-${dbName}-${collectionName}-${stamp}.json`, {
+    app: 'mongodb-dashboard',
+    kind: 'saved-pipelines',
+    version: 1,
+    db: dbName,
+    collection: collectionName,
+    exportedAt: new Date().toISOString(),
+    pipelines,
+  });
+  showToast(`Exported ${pipelines.length} pipeline${pipelines.length === 1 ? '' : 's'}`, 'success');
+}
+
+async function importSavedPipelines(dbName, collectionName) {
+  const file = await pickJsonFile();
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const incoming = Array.isArray(data) ? data : data.pipelines;
+    if (!Array.isArray(incoming)) throw new Error('File is not a saved-pipelines export');
+    const cleaned = incoming
+      .map((p) => {
+        if (!p || typeof p !== 'object' || !Array.isArray(p.stages)) return null;
+        return {
+          name: typeof p.name === 'string' && p.name.trim() ? p.name : 'Imported pipeline',
+          stages: p.stages,
+        };
+      })
+      .filter(Boolean);
+    if (!cleaned.length) {
+      showToast('File contained no usable pipelines.', 'warning');
+      return;
+    }
+
+    const ok = await ui.confirm({
+      title: `Import ${cleaned.length} pipeline${cleaned.length === 1 ? '' : 's'}?`,
+      message: `These will be added to your saved pipelines for ${dbName}.${collectionName}.`,
+      confirmText: 'Import',
+    });
+    if (!ok) return;
+
+    const key = `mongodb_dashboard_pipelines_${dbName}_${collectionName}`;
+    const existing = getSavedPipelines(dbName, collectionName);
+    const merged = [...cleaned, ...existing].slice(0, 50);
+    localStorage.setItem(key, JSON.stringify(merged));
+    showToast(`Imported ${cleaned.length} pipeline${cleaned.length === 1 ? '' : 's'}`, 'success');
+  } catch (err) {
+    showToast('Import failed: ' + err.message, 'error');
+  }
+}
+
 function addToQueryHistory(dbName, collectionName, query) {
   const history = getQueryHistory(dbName, collectionName);
   // Avoid duplicates of exact same filter/sort/projection
@@ -4624,6 +4779,22 @@ function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
     renderSavedQueriesDropdown(dbName, collectionName, dropdown);
   });
 
+  // Toolbar (export / import) handlers
+  dropdown.querySelectorAll('[data-action="export-queries"]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportSavedQueries(dbName, collectionName);
+    });
+  });
+  dropdown.querySelectorAll('[data-action="import-queries"]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      importSavedQueries(dbName, collectionName).then(() => {
+        renderSavedQueriesDropdown(dbName, collectionName, dropdown);
+      });
+    });
+  });
+
   // Item click handlers
   dropdown.querySelectorAll('.saved-query-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -4651,18 +4822,27 @@ function renderSavedQueriesDropdown(dbName, collectionName, dropdown) {
 }
 
 function renderSavedList(queries) {
-  if (queries.length === 0) return '<div class="saved-queries-empty">No saved queries yet.</div>';
-  return queries.map((q, i) => `
-    <div class="saved-query-item" data-index="${i}">
-      <div class="saved-query-info">
-        <div class="saved-query-name">${escapeHtml(q.name)}</div>
-        <div class="saved-query-preview">${escapeHtml(q.filter || '{}')}</div>
+  const toolbar = `
+    <div class="saved-queries-toolbar">
+      <button class="saved-queries-action" data-action="export-queries" title="Export saved queries to JSON">Export</button>
+      <button class="saved-queries-action" data-action="import-queries" title="Import saved queries from JSON">Import</button>
+    </div>`;
+  if (queries.length === 0)
+    return toolbar + '<div class="saved-queries-empty">No saved queries yet.</div>';
+  return (
+    toolbar +
+    queries.map((q, i) => `
+      <div class="saved-query-item" data-index="${i}">
+        <div class="saved-query-info">
+          <div class="saved-query-name">${escapeHtml(q.name)}</div>
+          <div class="saved-query-preview">${escapeHtml(q.filter || '{}')}</div>
+        </div>
+        <button class="saved-query-delete" data-index="${i}" title="Delete">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
-      <button class="saved-query-delete" data-index="${i}" title="Delete">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-  `).join('');
+    `).join('')
+  );
 }
 
 function renderHistoryList(history) {
@@ -6502,23 +6682,41 @@ async function previewStage(stageId, dbName, collectionName) {
 
 function renderAggSavedDropdown(dbName, collectionName, dropdown) {
   const pipelines = getSavedPipelines(dbName, collectionName);
+  const toolbar = `
+    <div class="saved-queries-toolbar">
+      <button class="saved-queries-action" data-action="export-pipelines">Export</button>
+      <button class="saved-queries-action" data-action="import-pipelines">Import</button>
+    </div>`;
   if (pipelines.length === 0) {
-    dropdown.innerHTML = '<div class="saved-queries-empty">No saved pipelines.</div>';
-    return;
-  }
-  dropdown.innerHTML = pipelines.map((p, i) => `
-    <div class="saved-query-item" data-idx="${i}">
-      <div class="saved-query-info">
-        <div class="saved-query-name">${escapeHtml(p.name)}</div>
-        <div class="saved-query-preview">${p.stages.length} stage${p.stages.length !== 1 ? 's' : ''}</div>
+    dropdown.innerHTML = toolbar + '<div class="saved-queries-empty">No saved pipelines.</div>';
+  } else {
+    dropdown.innerHTML = toolbar + pipelines.map((p, i) => `
+      <div class="saved-query-item" data-idx="${i}">
+        <div class="saved-query-info">
+          <div class="saved-query-name">${escapeHtml(p.name)}</div>
+          <div class="saved-query-preview">${p.stages.length} stage${p.stages.length !== 1 ? 's' : ''}</div>
+        </div>
+        <button class="saved-query-delete" data-idx="${i}" title="Delete">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
       </div>
-      <button class="saved-query-delete" data-idx="${i}" title="Delete">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6L6 18M6 6l12 12"/>
-        </svg>
-      </button>
-    </div>
-  `).join('');
+    `).join('');
+  }
+
+  dropdown.querySelector('[data-action="export-pipelines"]')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    exportSavedPipelines(dbName, collectionName);
+  });
+  dropdown.querySelector('[data-action="import-pipelines"]')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    importSavedPipelines(dbName, collectionName).then(() =>
+      renderAggSavedDropdown(dbName, collectionName, dropdown)
+    );
+  });
+
+  if (pipelines.length === 0) return;
 
   dropdown.querySelectorAll('.saved-query-item').forEach(item => {
     item.addEventListener('click', (e) => {

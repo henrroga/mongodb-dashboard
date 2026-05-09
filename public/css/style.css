@@ -4511,3 +4511,30 @@ textarea.inline-edit-input {
   display: flex;
   gap: 4px;
 }
+
+/* ─── Saved-queries toolbar (export/import) ───────────────────────────────── */
+
+.saved-queries-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.saved-queries-action {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.saved-queries-action:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--accent, #388bfd);
+}
