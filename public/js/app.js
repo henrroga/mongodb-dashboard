@@ -1213,6 +1213,8 @@ function toggleShortcutsModal() {
             <h4>Navigation</h4>
             <div class="shortcut-row"><kbd>1</kbd>–<kbd>5</kbd><span>Switch tabs</span></div>
             <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+/</kbd><span>Toggle shell</span></div>
+            <div class="shortcut-row"><kbd>J</kbd><span>Next recent document (on doc page)</span></div>
+            <div class="shortcut-row"><kbd>K</kbd><span>Previous recent document</span></div>
           </div>
         </div>
       </div>`;
@@ -4338,9 +4340,43 @@ async function initDocumentPage(dbName, collectionName, docId) {
 
     // Setup edit modal handlers
     setupEditModalHandlers(dbName, collectionName, docId);
+
+    // J / K navigation between recently viewed docs in the same collection.
+    setupDocPageJkNav(dbName, collectionName, docId);
   } catch (err) {
     treeEl.innerHTML = `<div style="color: var(--danger);">Error: ${err.message}</div>`;
   }
+}
+
+function setupDocPageJkNav(dbName, collectionName, currentId) {
+  const cleanId = String(currentId).replace(/^"|"$/g, '');
+  const handler = (e) => {
+    // Ignore if user is typing in an input/textarea/contenteditable.
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (e.target.isContentEditable) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const k = e.key.toLowerCase();
+    if (k !== 'j' && k !== 'k') return;
+
+    const recents = getRecentDocuments(dbName, collectionName);
+    if (recents.length < 2) {
+      showToast('Open a few documents first to enable J/K navigation', 'info', 2200);
+      return;
+    }
+    const idx = recents.findIndex((r) => r.id === cleanId);
+    if (idx === -1) return;
+    const nextIdx = k === 'j' ? idx + 1 : idx - 1;
+    if (nextIdx < 0 || nextIdx >= recents.length) {
+      showToast(k === 'j' ? 'End of recents' : 'Top of recents', 'info', 1500);
+      return;
+    }
+    e.preventDefault();
+    const target = recents[nextIdx];
+    window.location.href = `/browse/${encodeURIComponent(target.db)}/${encodeURIComponent(target.collection)}/${encodeURIComponent(target.id)}`;
+  };
+  document.addEventListener('keydown', handler);
 }
 
 function renderJsonTree(obj, indent = 0, path = '') {
