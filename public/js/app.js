@@ -333,6 +333,123 @@ async function openCopyAsCodeModal({ dbName, collectionName, getInputs, kind = '
   });
 }
 
+// ─── First-run onboarding ────────────────────────────────────────────────────
+
+const ONBOARDING_KEY = 'mongodb_dashboard_onboarded_v1';
+
+const ONBOARDING_STEPS = [
+  {
+    title: 'Welcome to your MongoDB dashboard',
+    body: `<p>A quick tour. You can skip it any time — this only shows once.</p>
+           <ul class="onboarding-list">
+             <li>Browse, edit, import, and export documents.</li>
+             <li>Save queries, run aggregation pipelines, watch change streams.</li>
+             <li>Built to be self-hosted with auth + read-only mode.</li>
+           </ul>`,
+  },
+  {
+    title: 'Command palette: <kbd>Cmd</kbd> / <kbd>Ctrl</kbd> + <kbd>K</kbd>',
+    body: `<p>The fastest way around. Hit it from anywhere to:</p>
+           <ul class="onboarding-list">
+             <li>Jump to any open collection</li>
+             <li>Open a tab (Schema, Indexes, Aggregation, Changes…)</li>
+             <li>Run any action without reaching for the mouse</li>
+           </ul>`,
+  },
+  {
+    title: 'Read-only mode',
+    body: `<p>Toggle read-only from the command palette to lock writes — useful when poking around production.</p>
+           <p>For self-hosted instances, set <code>READ_ONLY=true</code> server-side and writes are blocked at the API layer too.</p>`,
+  },
+  {
+    title: 'Right-click anywhere to act',
+    body: `<p>Right-click a row in the table for a context menu — Open in new tab, Copy <code>_id</code>, Duplicate, Delete.</p>
+           <p>Click any field name in the JSON tree to copy its dotted path.</p>`,
+  },
+  {
+    title: 'Theme + keyboard shortcuts',
+    body: `<p>Toggle light/dark/system from the top-right.</p>
+           <p>Press <kbd>?</kbd> to see the full keyboard shortcut list.</p>`,
+  },
+];
+
+function showOnboardingIfFirstRun() {
+  try {
+    if (localStorage.getItem(ONBOARDING_KEY)) return;
+  } catch (_) {}
+  // Don't interrupt the login page or any unauthenticated state.
+  if (document.body.classList.contains('connect-page')) return;
+  setTimeout(showOnboardingTour, 600);
+}
+
+function showOnboardingTour(force = false) {
+  let stepIdx = 0;
+  const root = document.createElement('div');
+  root.className = 'onboarding-overlay';
+  root.innerHTML = `
+    <div class="onboarding-backdrop"></div>
+    <div class="onboarding-card" role="dialog" aria-modal="true">
+      <div class="onboarding-progress"></div>
+      <div class="onboarding-body"></div>
+      <footer class="onboarding-footer">
+        <button class="btn btn-ghost btn-sm" data-onb="skip">Skip tour</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost btn-sm" data-onb="prev">Back</button>
+        <button class="btn btn-primary btn-sm" data-onb="next">Next</button>
+      </footer>
+    </div>
+  `;
+  document.body.appendChild(root);
+  // eslint-disable-next-line no-unused-expressions
+  root.offsetWidth;
+  root.classList.add('onboarding-open');
+
+  const bodyEl = root.querySelector('.onboarding-body');
+  const progressEl = root.querySelector('.onboarding-progress');
+  const prevBtn = root.querySelector('[data-onb="prev"]');
+  const nextBtn = root.querySelector('[data-onb="next"]');
+  const skipBtn = root.querySelector('[data-onb="skip"]');
+
+  function render() {
+    const step = ONBOARDING_STEPS[stepIdx];
+    bodyEl.innerHTML = `<h2>${step.title}</h2>${step.body}`;
+    progressEl.innerHTML = ONBOARDING_STEPS.map(
+      (_, i) => `<span class="onboarding-dot${i === stepIdx ? ' active' : ''}"></span>`
+    ).join('');
+    prevBtn.disabled = stepIdx === 0;
+    nextBtn.textContent = stepIdx === ONBOARDING_STEPS.length - 1 ? 'Done' : 'Next';
+  }
+  function close(remember = true) {
+    if (remember && !force) {
+      try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_) {}
+    }
+    root.classList.remove('onboarding-open');
+    setTimeout(() => root.remove(), 180);
+    document.removeEventListener('keydown', onKey);
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowRight') { stepIdx = Math.min(ONBOARDING_STEPS.length - 1, stepIdx + 1); render(); }
+    if (e.key === 'ArrowLeft')  { stepIdx = Math.max(0, stepIdx - 1); render(); }
+  }
+  document.addEventListener('keydown', onKey);
+
+  prevBtn.addEventListener('click', () => { stepIdx = Math.max(0, stepIdx - 1); render(); });
+  nextBtn.addEventListener('click', () => {
+    if (stepIdx === ONBOARDING_STEPS.length - 1) close(true);
+    else { stepIdx += 1; render(); }
+  });
+  skipBtn.addEventListener('click', () => close(true));
+  root.querySelector('.onboarding-backdrop').addEventListener('click', () => close(true));
+
+  render();
+}
+
+// Expose so the command palette / a future menu item can re-trigger.
+window.showOnboardingTour = () => showOnboardingTour(true);
+
+document.addEventListener('DOMContentLoaded', showOnboardingIfFirstRun);
+
 // ─── Context menu ─────────────────────────────────────────────────────────────
 
 let activeContextMenu = null;
@@ -1164,6 +1281,7 @@ function getCommandActions() {
       else document.getElementById('shellToggleBtn')?.click();
     }},
     { label: 'Keyboard Shortcuts', category: 'Actions', action: toggleShortcutsModal },
+    { label: 'Show Onboarding Tour', category: 'Help', action: () => window.showOnboardingTour && window.showOnboardingTour() },
     { label: 'Tab: Documents', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="documents"]')?.click() },
     { label: 'Tab: Indexes', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="indexes"]')?.click() },
     { label: 'Tab: Schema', category: 'Tabs', action: () => document.querySelector('.collection-tab[data-tab="schema"]')?.click() },
