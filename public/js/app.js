@@ -3560,11 +3560,56 @@ function startInlineEdit(td, doc, field, dbName, collectionName, docId) {
     await saveInlineEdit(td, doc, field, newValue, dbName, collectionName, docId, originalHtml);
   };
 
-  input.addEventListener('blur', save);
+  let nextDirection = null; // 'next' | 'prev' | 'down' | null
+
+  const focusAdjacent = (direction) => {
+    // Find next editable cell in the same row (Tab) or same column (Enter for non-complex).
+    if (!direction) return;
+    if (direction === 'next' || direction === 'prev') {
+      const row = td.parentElement;
+      if (!row) return;
+      const cells = Array.from(row.querySelectorAll('td.cell-editable'));
+      const idx = cells.indexOf(td);
+      if (idx === -1) return;
+      const target = direction === 'next' ? cells[idx + 1] : cells[idx - 1];
+      if (target) setTimeout(() => target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })), 0);
+    } else if (direction === 'down') {
+      const tbody = td.closest('tbody');
+      if (!tbody) return;
+      const row = td.parentElement;
+      const colIdx = Array.from(row.children).indexOf(td);
+      const nextRow = row.nextElementSibling;
+      if (!nextRow) return;
+      const targetCell = nextRow.children[colIdx];
+      if (targetCell && targetCell.classList.contains('cell-editable')) {
+        setTimeout(() => targetCell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })), 0);
+      }
+    }
+  };
+
+  let isSaving = false;
+  const wrappedSave = async () => {
+    if (isSaving) return;
+    isSaving = true;
+    try { await save(); } finally { focusAdjacent(nextDirection); }
+  };
+
+  input.addEventListener('blur', wrappedSave);
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !isComplex) save();
-    if (e.key === 'Enter' && isComplex && (e.ctrlKey || e.metaKey)) save();
-    if (e.key === 'Escape') { td.innerHTML = originalHtml; }
+    if (e.key === 'Enter' && !isComplex) {
+      e.preventDefault();
+      nextDirection = e.shiftKey ? null : 'down';
+      input.blur();
+    } else if (e.key === 'Enter' && isComplex && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      input.blur();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      nextDirection = e.shiftKey ? 'prev' : 'next';
+      input.blur();
+    } else if (e.key === 'Escape') {
+      td.innerHTML = originalHtml;
+    }
   });
 }
 
