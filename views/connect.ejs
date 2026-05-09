@@ -155,7 +155,14 @@
       </form>
 
       <div id="recentConnections" class="recent-connections" style="display: none;">
-        <h3>Saved Connections</h3>
+        <div class="saved-connections-header">
+          <h3>Saved Connections</h3>
+          <div class="saved-connections-actions">
+            <button type="button" id="connExportBtn" class="btn btn-ghost btn-sm" title="Download saved connections as JSON">Export</button>
+            <button type="button" id="connImportBtn" class="btn btn-ghost btn-sm" title="Import saved connections from JSON">Import</button>
+            <input type="file" id="connImportFile" accept="application/json,.json" style="display:none">
+          </div>
+        </div>
         <ul id="recentList"></ul>
       </div>
     </div>

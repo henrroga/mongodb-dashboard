@@ -4493,3 +4493,21 @@ textarea.inline-edit-input {
   font-size: 10.5px;
   color: var(--text-muted);
 }
+
+/* ─── Saved connections export/import ─────────────────────────────────────── */
+
+.saved-connections-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.saved-connections-header h3 {
+  margin: 0;
+}
+
+.saved-connections-actions {
+  display: flex;
+  gap: 4px;
+}

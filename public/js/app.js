@@ -1484,6 +1484,93 @@ async function initConnectPage() {
   const errorEl = document.getElementById('connectError');
   const recentEl = document.getElementById('recentConnections');
   const recentList = document.getElementById('recentList');
+  const connExportBtn = document.getElementById('connExportBtn');
+  const connImportBtn = document.getElementById('connImportBtn');
+  const connImportFile = document.getElementById('connImportFile');
+
+  if (connExportBtn) {
+    connExportBtn.addEventListener('click', () => {
+      const conns = getConnections();
+      if (!conns.length) {
+        showToast('Nothing to export — save a connection first.', 'warning');
+        return;
+      }
+      // Strip embedded credentials before export so a backup file isn't a
+      // walking secret. The host & options ride along; user re-enters the
+      // password on the importing machine.
+      const sanitized = conns.map((c) => ({
+        ...c,
+        uri: String(c.uri).replace(/(\/\/)[^@/]+@/, '$1<credentials>@'),
+      }));
+      const blob = new Blob(
+        [
+          JSON.stringify(
+            {
+              app: 'mongodb-dashboard',
+              version: 1,
+              exportedAt: new Date().toISOString(),
+              connections: sanitized,
+            },
+            null,
+            2
+          ),
+        ],
+        { type: 'application/json' }
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mongodb-dashboard-connections-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${sanitized.length} connection${sanitized.length === 1 ? '' : 's'} (credentials stripped)`, 'success');
+    });
+  }
+
+  if (connImportBtn && connImportFile) {
+    connImportBtn.addEventListener('click', () => connImportFile.click());
+    connImportFile.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      connImportFile.value = '';
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const incoming = Array.isArray(data) ? data : data.connections;
+        if (!Array.isArray(incoming)) throw new Error('File does not contain a connections array');
+
+        const cleaned = incoming
+          .map((c) => {
+            if (typeof c === 'string') return { uri: c, name: '', color: '' };
+            if (c && typeof c.uri === 'string') {
+              return { uri: c.uri, name: c.name || '', color: c.color || '' };
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        const ok = await ui.confirm({
+          title: `Import ${cleaned.length} connection${cleaned.length === 1 ? '' : 's'}?`,
+          message:
+            'Imported entries are merged into your saved list. URIs missing credentials need to be edited before they can connect.',
+          confirmText: 'Import',
+        });
+        if (!ok) return;
+
+        const existing = getConnections();
+        const byUri = new Map(existing.map((c) => [c.uri, c]));
+        for (const c of cleaned) byUri.set(c.uri, { ...byUri.get(c.uri), ...c });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...byUri.values()]));
+        renderBookmarks();
+        showToast(`Imported ${cleaned.length} connection${cleaned.length === 1 ? '' : 's'}`, 'success');
+      } catch (err) {
+        showToast('Import failed: ' + err.message, 'error');
+      }
+    });
+  }
+
   const connectBtn = document.getElementById('connectBtn');
   const connectContent = document.getElementById('connectContent');
   const reconnectLoading = document.getElementById('reconnectLoading');
