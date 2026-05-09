@@ -117,6 +117,221 @@ function showToast(message, type = 'info', duration = 4000) {
   return toast;
 }
 
+// ─── UI Modals (confirm / prompt / alert) ─────────────────────────────────────
+// Replaces the browser-native dialogs. All return Promises so they're easy to
+// drop into existing async flows without callback nesting.
+
+const ui = (window.ui = window.ui || {});
+
+function _uiBuildModal({ title, body, actions, kind = 'default' }) {
+  const root = document.createElement('div');
+  root.className = `ui-modal ui-modal-${kind}`;
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  root.innerHTML = `
+    <div class="ui-modal-backdrop"></div>
+    <div class="ui-modal-dialog" tabindex="-1">
+      <header class="ui-modal-header">
+        <h3 class="ui-modal-title"></h3>
+        <button class="ui-modal-close" aria-label="Close">&times;</button>
+      </header>
+      <div class="ui-modal-body"></div>
+      <footer class="ui-modal-actions"></footer>
+    </div>
+  `;
+  root.querySelector('.ui-modal-title').textContent = title || '';
+  const bodyEl = root.querySelector('.ui-modal-body');
+  if (typeof body === 'string') bodyEl.innerHTML = body;
+  else if (body instanceof Node) bodyEl.appendChild(body);
+
+  const actionsEl = root.querySelector('.ui-modal-actions');
+  return { root, bodyEl, actionsEl };
+}
+
+function _uiOpen(root, dialog, onClose) {
+  document.body.appendChild(root);
+  // Force reflow before adding class so the transition runs.
+  // eslint-disable-next-line no-unused-expressions
+  root.offsetWidth;
+  root.classList.add('ui-modal-open');
+  setTimeout(() => dialog.focus(), 50);
+
+  const cleanup = (result) => {
+    root.classList.remove('ui-modal-open');
+    setTimeout(() => {
+      root.remove();
+      document.removeEventListener('keydown', onKey);
+      onClose && onClose(result);
+    }, 150);
+  };
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cleanup({ cancelled: true });
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  root.querySelector('.ui-modal-close').addEventListener('click', () => cleanup({ cancelled: true }));
+  root.querySelector('.ui-modal-backdrop').addEventListener('click', () => cleanup({ cancelled: true }));
+  return cleanup;
+}
+
+ui.confirm = function ({
+  title = 'Are you sure?',
+  message = '',
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  danger = false,
+} = {}) {
+  return new Promise((resolve) => {
+    const { root, actionsEl } = _uiBuildModal({
+      title,
+      body: `<p class="ui-modal-message">${escapeHtml(message)}</p>`,
+      kind: danger ? 'danger' : 'default',
+    });
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-ghost';
+    cancelBtn.textContent = cancelText;
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
+    confirmBtn.textContent = confirmText;
+    actionsEl.append(cancelBtn, confirmBtn);
+
+    const dialog = root.querySelector('.ui-modal-dialog');
+    const cleanup = _uiOpen(root, dialog, (r) => resolve(r && !r.cancelled));
+    cancelBtn.addEventListener('click', () => cleanup({ cancelled: true }));
+    confirmBtn.addEventListener('click', () => cleanup({ cancelled: false }));
+    confirmBtn.focus();
+  });
+};
+
+ui.prompt = function ({
+  title = 'Enter value',
+  message = '',
+  placeholder = '',
+  defaultValue = '',
+  confirmText = 'Save',
+  cancelText = 'Cancel',
+  type = 'text',
+  validate = null,
+  fields = null,
+} = {}) {
+  return new Promise((resolve) => {
+    const fieldList = fields || [
+      { name: 'value', label: message || '', placeholder, defaultValue, type, autofocus: true },
+    ];
+    const formHtml = fieldList
+      .map((f, i) => {
+        const id = `ui-prompt-field-${i}`;
+        const labelHtml = f.label
+          ? `<label class="ui-prompt-label" for="${id}">${escapeHtml(f.label)}</label>`
+          : '';
+        if (f.type === 'select') {
+          const opts = (f.options || [])
+            .map((o) =>
+              `<option value="${escapeHtml(o.value)}"${o.value === f.defaultValue ? ' selected' : ''}>${escapeHtml(o.label || o.value)}</option>`
+            )
+            .join('');
+          return `<div class="ui-prompt-row">${labelHtml}<select id="${id}" name="${escapeHtml(f.name)}" class="ui-prompt-input">${opts}</select></div>`;
+        }
+        if (f.type === 'color-swatches') {
+          const swatches = (f.options || [])
+            .map(
+              (o) =>
+                `<button type="button" class="ui-color-swatch${o.value === f.defaultValue ? ' selected' : ''}" data-value="${escapeHtml(o.value)}" style="background:${escapeHtml(o.value)}" title="${escapeHtml(o.label || '')}" aria-label="${escapeHtml(o.label || o.value)}"></button>`
+            )
+            .join('');
+          return `<div class="ui-prompt-row">${labelHtml}<div class="ui-color-swatches" data-name="${escapeHtml(f.name)}" data-value="${escapeHtml(f.defaultValue || '')}">${swatches}<button type="button" class="ui-color-swatch ui-color-swatch-clear${!f.defaultValue ? ' selected' : ''}" data-value="" title="No color" aria-label="No color"></button></div></div>`;
+        }
+        return `<div class="ui-prompt-row">${labelHtml}<input id="${id}" name="${escapeHtml(f.name)}" type="${f.type || 'text'}" class="ui-prompt-input" placeholder="${escapeHtml(f.placeholder || '')}" value="${escapeHtml(f.defaultValue || '')}"${f.autofocus ? ' autofocus' : ''}/></div>`;
+      })
+      .join('');
+    const errorHtml = `<p class="ui-prompt-error" style="display:none"></p>`;
+    const { root, actionsEl, bodyEl } = _uiBuildModal({
+      title,
+      body: `<form class="ui-prompt-form">${formHtml}${errorHtml}</form>`,
+    });
+
+    // Wire color swatches
+    bodyEl.querySelectorAll('.ui-color-swatches').forEach((group) => {
+      group.querySelectorAll('.ui-color-swatch').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          group.dataset.value = btn.dataset.value;
+          group.querySelectorAll('.ui-color-swatch').forEach((b) => b.classList.toggle('selected', b === btn));
+        });
+      });
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-ghost';
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = cancelText;
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-primary';
+    confirmBtn.type = 'submit';
+    confirmBtn.textContent = confirmText;
+    actionsEl.append(cancelBtn, confirmBtn);
+    bodyEl.querySelector('form').appendChild(actionsEl.cloneNode(false));
+    bodyEl.querySelector('.ui-modal-actions') &&
+      bodyEl.querySelector('.ui-modal-actions').remove();
+
+    const dialog = root.querySelector('.ui-modal-dialog');
+    const cleanup = _uiOpen(root, dialog, (r) => resolve(r));
+
+    cancelBtn.addEventListener('click', () => cleanup({ cancelled: true }));
+    bodyEl.querySelector('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const values = {};
+      fieldList.forEach((f) => {
+        if (f.type === 'color-swatches') {
+          values[f.name] = bodyEl.querySelector(`[data-name="${f.name}"]`).dataset.value;
+        } else {
+          const el = bodyEl.querySelector(`[name="${f.name}"]`);
+          values[f.name] = el ? el.value : '';
+        }
+      });
+      if (validate) {
+        const err = validate(values);
+        if (err) {
+          const errEl = bodyEl.querySelector('.ui-prompt-error');
+          errEl.textContent = err;
+          errEl.style.display = 'block';
+          return;
+        }
+      }
+      const result =
+        fieldList.length === 1 && fieldList[0].name === 'value'
+          ? values.value
+          : values;
+      cleanup({ cancelled: false, value: result });
+    });
+    setTimeout(() => {
+      const first = bodyEl.querySelector('.ui-prompt-input, [autofocus]');
+      first && first.focus();
+      first && first.select && first.select();
+    }, 80);
+  }).then((r) => (r && !r.cancelled ? r.value : null));
+};
+
+ui.alert = function ({ title = 'Notice', message = '', confirmText = 'OK' } = {}) {
+  return new Promise((resolve) => {
+    const { root, actionsEl } = _uiBuildModal({
+      title,
+      body: `<p class="ui-modal-message">${escapeHtml(message)}</p>`,
+    });
+    const okBtn = document.createElement('button');
+    okBtn.className = 'btn btn-primary';
+    okBtn.textContent = confirmText;
+    actionsEl.append(okBtn);
+
+    const dialog = root.querySelector('.ui-modal-dialog');
+    const cleanup = _uiOpen(root, dialog, () => resolve());
+    okBtn.addEventListener('click', () => cleanup());
+    okBtn.focus();
+  });
+};
+
 // Storage keys
 const STORAGE_KEY = 'mongodb_dashboard_connections';
 const ACTIVE_CONNECTION_KEY = 'mongodb_dashboard_active_connection';
@@ -983,14 +1198,32 @@ async function initConnectPage() {
       const uri = decodeURIComponent(labelBtn.dataset.label);
       const conns = getConnections();
       const existing = conns.find(c => c.uri === uri);
-      const name = prompt('Connection name:', existing?.name || '');
-      if (name === null) return;
-      // Show color picker
-      const color = prompt('Color (hex or pick from: blue, green, yellow, red, purple):', existing?.color || '');
-      const colorMap = { blue: '#388bfd', green: '#3fb950', yellow: '#d29922', red: '#f85149', purple: '#bc8cff' };
-      const resolvedColor = colorMap[color?.toLowerCase()] || color || '';
-      updateConnectionMeta(uri, name, resolvedColor);
-      renderBookmarks();
+      ui.prompt({
+        title: 'Edit connection',
+        confirmText: 'Save',
+        fields: [
+          { name: 'name', label: 'Label', placeholder: 'My production cluster', defaultValue: existing?.name || '', autofocus: true },
+          {
+            name: 'color',
+            label: 'Color',
+            type: 'color-swatches',
+            defaultValue: existing?.color || '',
+            options: [
+              { value: '#388bfd', label: 'Blue' },
+              { value: '#3fb950', label: 'Green' },
+              { value: '#d29922', label: 'Yellow' },
+              { value: '#f85149', label: 'Red' },
+              { value: '#bc8cff', label: 'Purple' },
+              { value: '#ff7b72', label: 'Coral' },
+              { value: '#79c0ff', label: 'Sky' },
+            ],
+          },
+        ],
+      }).then((result) => {
+        if (!result) return;
+        updateConnectionMeta(uri, result.name || '', result.color || '');
+        renderBookmarks();
+      });
       return;
     }
 
@@ -1401,7 +1634,7 @@ async function initBrowser(dbName, collectionName) {
   }
 
   if (saveQueryBtn) {
-    saveQueryBtn.addEventListener('click', () => {
+    saveQueryBtn.addEventListener('click', async () => {
       const filter = queryFilterEl?.value.trim() || '';
       const projection = queryProjectionEl?.value.trim() || '';
       const sort = querySortEl?.value.trim() || '';
@@ -1409,11 +1642,17 @@ async function initBrowser(dbName, collectionName) {
         showToast('Enter at least a filter, projection, or sort to save.', 'warning');
         return;
       }
-      const name = prompt('Name for this saved query:');
+      const name = await ui.prompt({
+        title: 'Save query',
+        message: 'Give this query a name so you can recall it later.',
+        placeholder: 'e.g. Active users last 7 days',
+        confirmText: 'Save query',
+      });
       if (!name) return;
       saveQuery(dbName, collectionName, { name, filter, projection, sort,
         limit: parseInt(queryLimitEl?.value) || 50,
         skip: parseInt(querySkipEl?.value) || 0 });
+      showToast(`Saved query "${name}"`, 'success');
     });
   }
 
@@ -2206,10 +2445,14 @@ function updateBulkBar() {
     <button class="btn btn-sm btn-ghost" id="bulkClearBtn">Clear Selection</button>
   `;
 
-  document.getElementById('bulkDeleteBtn')?.addEventListener('click', () => {
-    if (confirm(`Delete ${selectedDocIds.size} documents? This cannot be undone.`)) {
-      bulkDelete();
-    }
+  document.getElementById('bulkDeleteBtn')?.addEventListener('click', async () => {
+    const ok = await ui.confirm({
+      title: 'Delete selected documents?',
+      message: `This will permanently delete ${selectedDocIds.size} document${selectedDocIds.size !== 1 ? 's' : ''}. This action cannot be undone.`,
+      confirmText: 'Delete',
+      danger: true,
+    });
+    if (ok) bulkDelete();
   });
 
   document.getElementById('bulkClearBtn')?.addEventListener('click', () => {
@@ -4806,7 +5049,13 @@ function initPerformancePage() {
 }
 
 window.killOp = async function(opid) {
-  if (!confirm(`Kill operation ${opid}?`)) return;
+  const ok = await ui.confirm({
+    title: 'Kill running operation?',
+    message: `Operation ${opid} will be terminated. Anything it was doing in the database stops immediately.`,
+    confirmText: 'Kill operation',
+    danger: true,
+  });
+  if (!ok) return;
   try {
     const res = await fetch(`/api/server/currentop/${opid}`, { method: 'DELETE' });
     const data = await res.json();
@@ -5424,9 +5673,14 @@ function initAggregationPanel(dbName, collectionName) {
   });
 
   // Save pipeline
-  document.getElementById('aggSave')?.addEventListener('click', () => {
+  document.getElementById('aggSave')?.addEventListener('click', async () => {
     if (aggStages.length === 0) { showToast('Add at least one stage to save.', 'warning'); return; }
-    const name = prompt('Name for this pipeline:');
+    const name = await ui.prompt({
+      title: 'Save aggregation pipeline',
+      message: 'Pipelines are saved per collection so you can rerun them later.',
+      placeholder: 'e.g. Daily revenue rollup',
+      confirmText: 'Save pipeline',
+    });
     if (!name) return;
     const pipelines = getSavedPipelines(dbName, collectionName);
     pipelines.unshift({ name, stages: JSON.parse(JSON.stringify(aggStages)) });
