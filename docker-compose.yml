@@ -1,21 +1,43 @@
 services:
   dashboard:
     build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
+    image: mongodb-dashboard
+    container_name: mongodb-dashboard
     restart: unless-stopped
+    # Bind to localhost only by default — put a reverse proxy (Caddy/nginx)
+    # in front for HTTPS. Change to "3000:3000" only if you know what you're doing.
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    volumes:
+      - dashboard-logs:/app/logs
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
-  # Optional: local MongoDB replica set for development
-  # Uncomment the section below to spin up a local MongoDB instance
+  # Optional: local MongoDB instance for development.
   # mongo:
   #   image: mongo:7
+  #   restart: unless-stopped
   #   ports:
-  #     - "27017:27017"
+  #     - "127.0.0.1:27017:27017"
   #   volumes:
   #     - mongo-data:/data/db
-  #   command: ["--replSet", "rs0"]
 
-# volumes:
-#   mongo-data:
+volumes:
+  dashboard-logs:
+  # mongo-data:
