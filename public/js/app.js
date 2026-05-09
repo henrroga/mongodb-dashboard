@@ -1380,6 +1380,86 @@ function executePaletteSelection() {
 // Initialize shortcuts on page load
 document.addEventListener('DOMContentLoaded', initKeyboardShortcuts);
 
+// ─── Query input validation ───────────────────────────────────────────────────
+
+// Returns { message, line, column } or null when input is valid.
+function validateMqlInput(text) {
+  if (!text) return null;
+  const candidates = [text];
+  // MQL allows unquoted keys + single quotes — try a permissive transform
+  // that mirrors what the server's shellArg parser does.
+  const normalized = text
+    .replace(/'((?:\\.|[^'\\])*)'/g, (_m, body) => JSON.stringify(body))
+    .replace(/([{,\s])([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g, '$1"$2":');
+  if (normalized !== text) candidates.push(normalized);
+  let lastError = null;
+  for (const c of candidates) {
+    try {
+      JSON.parse(c);
+      return null; // any candidate parses → accept
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  // Extract a position from the standard V8 error message:
+  //   "Unexpected token X in JSON at position Y"
+  // Newer V8 emits "Unexpected token 'X', \"...{ a: 1...\" is not valid JSON" with no pos.
+  let pos = null;
+  const posMatch = /at position (\d+)/.exec(lastError.message);
+  if (posMatch) pos = parseInt(posMatch[1]);
+  let line = 1, column = 1;
+  if (pos !== null) {
+    const upTo = text.slice(0, pos);
+    const lines = upTo.split('\n');
+    line = lines.length;
+    column = lines[lines.length - 1].length + 1;
+  }
+  // Friendly message: trim noisy V8 prefixes and any appended (line N column M).
+  const friendly = lastError.message
+    .replace(/\s*\(line \d+ column \d+\)\s*$/, '')
+    .replace(/^.*JSON\s+at\s+position\s+\d+/, 'Could not parse JSON')
+    .replace(/SyntaxError:\s*/, '')
+    .replace(/in JSON\s*$/i, '');
+  return {
+    message: pos !== null ? `${friendly} (col ${column})` : friendly,
+    line,
+    column,
+    position: pos,
+  };
+}
+
+function setQueryFieldError(input, error, _label) {
+  // Clear or set inline error pill below the input.
+  const id = input.id || (input.id = 'q-input-' + Math.random().toString(36).slice(2));
+  let pill = document.getElementById(id + '-err');
+  if (!error) {
+    input.classList.remove('query-input-error');
+    if (pill) pill.remove();
+    return;
+  }
+  input.classList.add('query-input-error');
+  if (!pill) {
+    pill = document.createElement('div');
+    pill.id = id + '-err';
+    pill.className = 'query-input-error-pill';
+    input.insertAdjacentElement('afterend', pill);
+  }
+  pill.innerHTML = `
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <span>${escapeHtml(error.message)}</span>
+  `;
+  // Clear the error on next edit so it doesn't linger.
+  const onInput = () => {
+    setQueryFieldError(input, null);
+    input.removeEventListener('input', onInput);
+  };
+  input.addEventListener('input', onInput);
+}
+
 // ─── Scratchpad (per-collection markdown notes) ──────────────────────────────
 
 const SCRATCHPAD_KEY = 'mongodb_dashboard_scratchpad';
@@ -2927,6 +3007,29 @@ function runQuery(dbName, collectionName) {
   const querySortEl = document.getElementById('querySort');
   const queryLimitEl = document.getElementById('queryLimit');
   const querySkipEl = document.getElementById('querySkip');
+
+  // Validate JSON-ish inputs client-side BEFORE hitting the server.
+  const fieldsToCheck = [
+    { el: queryFilterEl, label: 'Filter' },
+    { el: queryProjectionEl, label: 'Project' },
+    { el: querySortEl, label: 'Sort' },
+  ];
+  let firstError = null;
+  for (const { el, label } of fieldsToCheck) {
+    if (!el) continue;
+    const err = validateMqlInput(el.value.trim());
+    setQueryFieldError(el, err, label);
+    if (err && !firstError) firstError = { el, err, label };
+  }
+  if (firstError) {
+    firstError.el.focus();
+    if (Number.isInteger(firstError.err.column)) {
+      const pos = firstError.err.column - 1;
+      try { firstError.el.setSelectionRange(pos, pos); } catch (_) {}
+    }
+    showToast(`${firstError.label}: ${firstError.err.message}`, 'error', 4500);
+    return;
+  }
 
   currentFilter = queryFilterEl?.value.trim() || '';
   currentProjection = queryProjectionEl?.value.trim() || '';

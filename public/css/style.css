@@ -4992,3 +4992,31 @@ textarea.inline-edit-input {
 .scratchpad-saved.scratchpad-saved-flash {
   opacity: 1;
 }
+
+/* ─── Query input inline errors ───────────────────────────────────────────── */
+
+.query-input.query-input-error,
+.query-input-error {
+  border-color: var(--danger, #f85149) !important;
+  box-shadow: 0 0 0 3px rgba(248, 81, 73, 0.15) !important;
+}
+
+.query-input-error-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(248, 81, 73, 0.1);
+  color: var(--danger, #f85149);
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  line-height: 1.3;
+  animation: query-err-in 140ms ease-out;
+}
+
+@keyframes query-err-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
