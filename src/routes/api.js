@@ -7,6 +7,11 @@ const { inferSchema } = require("../utils/schema");
 const config = require("../config");
 const audit = require("../utils/audit");
 
+function redactConnectionString(uri) {
+  if (!uri) return uri;
+  return String(uri).replace(/(\/\/)[^@/]+@/, "$1***@");
+}
+
 // Routes that use POST/PUT/DELETE but are NOT considered "writes" against the DB.
 // (Connection management, query helpers that don't mutate.)
 const NON_WRITE_PATHS = new Set([
@@ -192,6 +197,12 @@ function buildSearchQuery(searchTerm, sampleDoc = null) {
 // Test connection and get databases
 router.post("/connect", async (req, res) => {
   try {
+    if (config.presetMongoUri) {
+      return res.status(403).json({
+        error:
+          "This dashboard is locked to its server-side MONGODB_URI. The user-supplied connection form is disabled.",
+      });
+    }
     const { connectionString } = req.body;
     if (!connectionString) {
       return res.status(400).json({ error: "Connection string is required" });
@@ -1405,15 +1416,20 @@ router.get("/status", async (req, res) => {
         await client.db().admin().ping();
         res.json({
           connected: true,
-          connectionString: mongoService.getConnectionString(),
+          // Redact credentials before sending the connection string back.
+          connectionString: redactConnectionString(
+            mongoService.getConnectionString()
+          ),
+          presetLocked: !!config.presetMongoUri,
+          readOnly: !!config.readOnly,
         });
       } catch (err) {
         // Connection exists but is invalid
         await mongoService.disconnect();
-        res.json({ connected: false });
+        res.json({ connected: false, presetLocked: !!config.presetMongoUri });
       }
     } else {
-      res.json({ connected: false });
+      res.json({ connected: false, presetLocked: !!config.presetMongoUri });
     }
   } catch (err) {
     res.json({ connected: false });
@@ -1422,6 +1438,11 @@ router.get("/status", async (req, res) => {
 
 // Disconnect
 router.post("/disconnect", async (req, res) => {
+  if (config.presetMongoUri) {
+    return res
+      .status(403)
+      .json({ error: "Disconnect is disabled when MONGODB_URI is preset." });
+  }
   try {
     await mongoService.disconnect();
     res.json({ success: true });

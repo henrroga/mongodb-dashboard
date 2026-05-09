@@ -96,12 +96,14 @@ app.use((err, req, res, next) => {
 
 async function bootstrap() {
   if (config.presetMongoUri) {
-    try {
-      await mongoService.connect(config.presetMongoUri);
-      console.log("[bootstrap] Connected to MONGODB_URI preset");
-    } catch (err) {
-      console.error("[bootstrap] Preset connection failed:", err.message);
-    }
+    // Fire-and-forget so a slow/failing Mongo doesn't block HTTP startup.
+    // The /api/status endpoint reflects connection state; clients reconnect.
+    mongoService
+      .connect(config.presetMongoUri)
+      .then(() => console.log("[bootstrap] Connected to MONGODB_URI preset"))
+      .catch((err) =>
+        console.error("[bootstrap] Preset connection failed:", err.message)
+      );
   }
 
   app.listen(config.port, () => {
