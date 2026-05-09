@@ -4771,3 +4771,55 @@ textarea.inline-edit-input {
   padding-top: 16px;
   border-top: 1px solid var(--border-color);
 }
+
+/* ─── Pinned recents + pin button ─────────────────────────────────────────── */
+
+.recents-widget-item-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.recents-widget-item-row .recents-widget-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.recents-widget-pin-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.recents-widget-item-row:hover .recents-widget-pin-btn,
+.recents-widget-item-pinned + .recents-widget-pin-btn,
+.recents-widget-item-row:has(.recents-widget-item-pinned) .recents-widget-pin-btn {
+  opacity: 1;
+}
+
+.recents-widget-pin-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--accent, #388bfd);
+}
+
+.recents-widget-item-pinned {
+  background: linear-gradient(90deg, rgba(56, 139, 253, 0.07), transparent 60%);
+}
+.recents-widget-item-pinned .recents-widget-id {
+  color: var(--accent, #79c0ff);
+}
+
+.btn.btn-active {
+  background: var(--bg-tertiary);
+  color: var(--accent, #79c0ff);
+  border-color: var(--accent, #388bfd);
+}

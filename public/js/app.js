@@ -1442,39 +1442,91 @@ function timeAgo(ts) {
   return new Date(ts).toLocaleDateString();
 }
 
+function isDocumentPinned(dbName, collectionName, docId) {
+  return getRecentDocuments().some(
+    (r) => r.db === dbName && r.collection === collectionName && r.id === String(docId).replace(/^"|"$/g, '') && r.pinned
+  );
+}
+
+function toggleDocumentPin(dbName, collectionName, docId, doc) {
+  const cleanId = String(docId).replace(/^"|"$/g, '');
+  const all = getRecentDocuments();
+  const idx = all.findIndex((r) => r.db === dbName && r.collection === collectionName && r.id === cleanId);
+  let pinned;
+  if (idx === -1) {
+    // Pin a doc that isn't in recents yet — add it.
+    recordRecentDocument(dbName, collectionName, cleanId, doc);
+    return toggleDocumentPin(dbName, collectionName, docId, doc);
+  } else {
+    all[idx].pinned = !all[idx].pinned;
+    pinned = all[idx].pinned;
+    localStorage.setItem(RECENT_DOCS_KEY, JSON.stringify(all));
+  }
+  // Refresh widget if mounted.
+  const widget = document.getElementById('recentDocsWidget');
+  if (widget) renderRecentDocsWidget(widget, dbName, collectionName);
+  return pinned;
+}
+
 function renderRecentDocsWidget(container, dbName, collectionName) {
-  const recents = getRecentDocuments(dbName, collectionName).slice(0, 8);
-  if (!recents.length) {
+  const all = getRecentDocuments(dbName, collectionName);
+  const pinned = all.filter((r) => r.pinned);
+  const recent = all.filter((r) => !r.pinned).slice(0, 8);
+  if (!pinned.length && !recent.length) {
     container.innerHTML = '';
     return;
   }
+  const renderItem = (r) => `
+    <div class="recents-widget-item-row">
+      <a class="recents-widget-item ${r.pinned ? 'recents-widget-item-pinned' : ''}" href="/browse/${encodeURIComponent(r.db)}/${encodeURIComponent(r.collection)}/${encodeURIComponent(r.id)}" title="${escapeHtml(r.id)}">
+        <div class="recents-widget-id mono">${escapeHtml(r.id.slice(0, 18))}${r.id.length > 18 ? '…' : ''}</div>
+        ${r.preview ? `<div class="recents-widget-preview">${escapeHtml(r.preview)}</div>` : ''}
+        <div class="recents-widget-meta">${timeAgo(r.ts)}</div>
+      </a>
+      <button class="recents-widget-pin-btn" data-doc-id="${escapeHtml(r.id)}" title="${r.pinned ? 'Unpin' : 'Pin to top'}" aria-label="${r.pinned ? 'Unpin document' : 'Pin document'}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="${r.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+          <path d="M12 17v5M9 10.76V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v4.76a2 2 0 0 0 1.11 1.79l1.78.9A2 2 0 0 1 19 13.24V15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-1.76a2 2 0 0 1 1.11-1.79l1.78-.9A2 2 0 0 0 9 10.76z"/>
+        </svg>
+      </button>
+    </div>`;
+
   container.innerHTML = `
     <div class="recents-widget">
-      <div class="recents-widget-header">
-        <span>Recently viewed</span>
-        <button class="recents-widget-clear" title="Clear" type="button">Clear</button>
-      </div>
-      <div class="recents-widget-list">
-        ${recents
-          .map(
-            (r) => `
-            <a class="recents-widget-item" href="/browse/${encodeURIComponent(r.db)}/${encodeURIComponent(r.collection)}/${encodeURIComponent(r.id)}" title="${escapeHtml(r.id)}">
-              <div class="recents-widget-id mono">${escapeHtml(r.id.slice(0, 18))}${r.id.length > 18 ? '…' : ''}</div>
-              ${r.preview ? `<div class="recents-widget-preview">${escapeHtml(r.preview)}</div>` : ''}
-              <div class="recents-widget-meta">${timeAgo(r.ts)}</div>
-            </a>`
-          )
-          .join('')}
-      </div>
+      ${pinned.length ? `
+        <div class="recents-widget-header">
+          <span>Pinned</span>
+        </div>
+        <div class="recents-widget-list">
+          ${pinned.map(renderItem).join('')}
+        </div>
+      ` : ''}
+      ${recent.length ? `
+        <div class="recents-widget-header">
+          <span>Recently viewed</span>
+          <button class="recents-widget-clear" title="Clear" type="button">Clear</button>
+        </div>
+        <div class="recents-widget-list">
+          ${recent.map(renderItem).join('')}
+        </div>
+      ` : ''}
     </div>
   `;
   container.querySelector('.recents-widget-clear')?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const all = getRecentDocuments();
-    const remaining = all.filter((r) => !(r.db === dbName && r.collection === collectionName));
-    localStorage.setItem(RECENT_DOCS_KEY, JSON.stringify(remaining));
+    // Clear unpinned recents only — pinned docs survive.
+    const survivors = getRecentDocuments().filter(
+      (r) => !(r.db === dbName && r.collection === collectionName) || r.pinned
+    );
+    localStorage.setItem(RECENT_DOCS_KEY, JSON.stringify(survivors));
     renderRecentDocsWidget(container, dbName, collectionName);
+  });
+  container.querySelectorAll('.recents-widget-pin-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleDocumentPin(dbName, collectionName, btn.dataset.docId);
+    });
   });
 }
 
@@ -3945,6 +3997,33 @@ async function initDocumentPage(dbName, collectionName, docId) {
     if (!res.ok) throw new Error(data.error);
 
     recordRecentDocument(dbName, collectionName, docId, data.document);
+
+    // Pin button reflects current pinned state
+    const pinBtn = document.getElementById('pinDocBtn');
+    const pinIcon = document.getElementById('pinDocIcon');
+    const pinLabel = document.getElementById('pinDocLabel');
+    function refreshPinUi() {
+      const pinned = isDocumentPinned(dbName, collectionName, docId);
+      if (pinBtn) pinBtn.classList.toggle('btn-active', pinned);
+      if (pinIcon) pinIcon.setAttribute('fill', pinned ? 'currentColor' : 'none');
+      if (pinLabel) pinLabel.textContent = pinned ? 'Pinned' : 'Pin';
+    }
+    refreshPinUi();
+    pinBtn?.addEventListener('click', () => {
+      const nowPinned = toggleDocumentPin(dbName, collectionName, docId, data.document);
+      refreshPinUi();
+      showToast(nowPinned ? 'Pinned to top of recents' : 'Unpinned', 'success', 1600);
+    });
+
+    document.getElementById('shareDocBtn')?.addEventListener('click', async () => {
+      const url = window.location.origin + window.location.pathname;
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast('Document link copied to clipboard', 'success', 2200);
+      } catch {
+        showToast('Could not access clipboard', 'error');
+      }
+    });
 
     treeEl.innerHTML = '<div class="json-viewer">' + renderJsonTree(data.document) + '</div>';
 
