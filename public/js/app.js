@@ -1102,6 +1102,118 @@ function executePaletteSelection() {
 // Initialize shortcuts on page load
 document.addEventListener('DOMContentLoaded', initKeyboardShortcuts);
 
+// ─── Recently viewed documents ────────────────────────────────────────────────
+
+const RECENT_DOCS_KEY = 'mongodb_dashboard_recent_docs';
+const MAX_RECENT_DOCS = 30;
+
+function getRecentDocuments(dbName = null, collectionName = null) {
+  let all;
+  try { all = JSON.parse(localStorage.getItem(RECENT_DOCS_KEY) || '[]'); }
+  catch { all = []; }
+  if (dbName && collectionName) {
+    return all.filter((r) => r.db === dbName && r.collection === collectionName);
+  }
+  return all;
+}
+
+function recordRecentDocument(dbName, collectionName, docId, doc) {
+  let preview = '';
+  try {
+    if (doc) {
+      const keys = Object.keys(doc).filter((k) => k !== '_id').slice(0, 2);
+      preview = keys
+        .map((k) => {
+          const v = doc[k];
+          if (v == null) return `${k}:${v}`;
+          if (typeof v === 'object') return `${k}:{…}`;
+          const s = String(v);
+          return `${k}:${s.length > 24 ? s.slice(0, 24) + '…' : s}`;
+        })
+        .join(' · ');
+    }
+  } catch (_) {}
+
+  const cleanId = typeof docId === 'string' ? docId.replace(/^"|"$/g, '') : String(docId);
+  const all = getRecentDocuments();
+  const filtered = all.filter(
+    (r) => !(r.db === dbName && r.collection === collectionName && r.id === cleanId)
+  );
+  filtered.unshift({
+    db: dbName,
+    collection: collectionName,
+    id: cleanId,
+    preview,
+    ts: Date.now(),
+  });
+  localStorage.setItem(RECENT_DOCS_KEY, JSON.stringify(filtered.slice(0, MAX_RECENT_DOCS)));
+
+  // If a recents widget is mounted, refresh it.
+  const widget = document.getElementById('recentDocsWidget');
+  if (widget) renderRecentDocsWidget(widget, dbName, collectionName);
+}
+
+function timeAgo(ts) {
+  const sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function renderRecentDocsWidget(container, dbName, collectionName) {
+  const recents = getRecentDocuments(dbName, collectionName).slice(0, 8);
+  if (!recents.length) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = `
+    <div class="recents-widget">
+      <div class="recents-widget-header">
+        <span>Recently viewed</span>
+        <button class="recents-widget-clear" title="Clear" type="button">Clear</button>
+      </div>
+      <div class="recents-widget-list">
+        ${recents
+          .map(
+            (r) => `
+            <a class="recents-widget-item" href="/browse/${encodeURIComponent(r.db)}/${encodeURIComponent(r.collection)}/${encodeURIComponent(r.id)}" title="${escapeHtml(r.id)}">
+              <div class="recents-widget-id mono">${escapeHtml(r.id.slice(0, 18))}${r.id.length > 18 ? '…' : ''}</div>
+              ${r.preview ? `<div class="recents-widget-preview">${escapeHtml(r.preview)}</div>` : ''}
+              <div class="recents-widget-meta">${timeAgo(r.ts)}</div>
+            </a>`
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
+  container.querySelector('.recents-widget-clear')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const all = getRecentDocuments();
+    const remaining = all.filter((r) => !(r.db === dbName && r.collection === collectionName));
+    localStorage.setItem(RECENT_DOCS_KEY, JSON.stringify(remaining));
+    renderRecentDocsWidget(container, dbName, collectionName);
+  });
+}
+
+function mountRecentDocsWidget(dbName, collectionName) {
+  if (!dbName || !collectionName) return;
+  const sidebar = document.querySelector('.collections-sidebar') || document.querySelector('.sidebar');
+  if (!sidebar) return;
+  let widget = document.getElementById('recentDocsWidget');
+  if (!widget) {
+    widget = document.createElement('div');
+    widget.id = 'recentDocsWidget';
+    sidebar.appendChild(widget);
+  }
+  renderRecentDocsWidget(widget, dbName, collectionName);
+}
+
 // ─── Open Tabs Bar ───────────────────────────────────────────────────────────
 
 const OPEN_TABS_KEY = 'mongodb_dashboard_open_tabs';
@@ -1801,7 +1913,11 @@ async function initBrowser(dbName, collectionName) {
   allAvailableFields = [];
   currentDbName = dbName;
   currentCollectionName = collectionName;
-  
+
+  if (collectionName) {
+    mountRecentDocsWidget(dbName, collectionName);
+  }
+
   // Restore state from URL query parameters
   const urlParams = new URLSearchParams(window.location.search);
   currentSearchTerm = urlParams.get('search') || '';
@@ -3353,12 +3469,14 @@ async function confirmDelete() {
 // Document Detail Page
 async function initDocumentPage(dbName, collectionName, docId) {
   const treeEl = document.getElementById('documentTree');
-  
+
   try {
     const res = await fetch(`/api/${dbName}/${collectionName}/${docId}`);
     const data = await res.json();
 
     if (!res.ok) throw new Error(data.error);
+
+    recordRecentDocument(dbName, collectionName, docId, data.document);
 
     treeEl.innerHTML = '<div class="json-viewer">' + renderJsonTree(data.document) + '</div>';
 

@@ -4415,3 +4415,81 @@ textarea.inline-edit-input {
   color: var(--text-muted);
   flex: 1;
 }
+
+/* ─── Recently viewed documents widget ────────────────────────────────────── */
+
+.recents-widget {
+  margin-top: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.recents-widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.recents-widget-clear {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.recents-widget-clear:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.recents-widget-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.recents-widget-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  text-decoration: none;
+  color: inherit;
+  border-left: 2px solid transparent;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.recents-widget-item:hover {
+  background: var(--bg-tertiary);
+  border-left-color: var(--accent, #388bfd);
+}
+
+.recents-widget-id {
+  font-size: 11.5px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.recents-widget-preview {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recents-widget-meta {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
