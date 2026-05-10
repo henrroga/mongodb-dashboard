@@ -43,7 +43,14 @@ jobs:
           node --check public/js/app.js
 
       - name: CSS token lint
-        run: npm run lint:css
+        run: |
+          # Resolve every var(--…); fail if any reference is undefined.
+          npm run lint:css
+          # Hex baseline: the current style sheet has 98 direct hex colors
+          # outside token blocks. Drift up from there is gated; bring the
+          # number DOWN by tokenizing colors. Bump baseline only after
+          # exhausting tokenization.
+          MAX_HEX_OUTSIDE_TOKENS=100 node scripts/lint-css-tokens.js --strict-hex
 
       - name: Run unit tests
         run: npm test

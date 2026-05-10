@@ -58,7 +58,8 @@ function lint(file) {
   return { defined, refs, undefinedRefs };
 }
 
-const target = process.argv[2] || "public/css/style.css";
+const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const target = args[0] || "public/css/style.css";
 const abs = path.resolve(target);
 if (!fs.existsSync(abs)) {
   console.error(`✗ ${target} not found`);
@@ -69,6 +70,35 @@ const { defined, refs, undefinedRefs } = lint(abs);
 console.log(
   `Scanned ${target}: ${defined.size} tokens defined, ${refs.length} var() references.`
 );
+
+// Hex color audit: count direct #RGB / #RRGGBB outside the token-definition
+// blocks. These are values that should generally be tokens. We don't fail
+// on this — just report — so the existing baseline doesn't break CI. Run
+// with --strict-hex to flag new hexes added beyond the baseline.
+const css = loadCss(abs);
+const hexRefs = (css.match(/#[0-9a-fA-F]{3,8}\b/g) || []).filter((h) => h.length === 4 || h.length === 7 || h.length === 9);
+// Estimate definitions: hex values inside :root or [data-theme="..."] blocks
+// are baseline tokens, expected.
+const tokenBlockRe = /(:root|\[data-theme=[^\]]+\])\s*\{([\s\S]*?)\}/g;
+let inTokenBlocks = 0;
+let m2;
+while ((m2 = tokenBlockRe.exec(css)) !== null) {
+  inTokenBlocks += (m2[2].match(/#[0-9a-fA-F]{3,8}\b/g) || []).length;
+}
+const outsideTokenBlocks = hexRefs.length - inTokenBlocks;
+console.log(
+  `  Direct hex colors: ${hexRefs.length} total (${inTokenBlocks} in token blocks, ${outsideTokenBlocks} elsewhere).`
+);
+
+const STRICT_HEX = process.argv.includes("--strict-hex");
+const HEX_BASELINE = parseInt(process.env.MAX_HEX_OUTSIDE_TOKENS || "100", 10);
+if (STRICT_HEX && outsideTokenBlocks > HEX_BASELINE) {
+  console.error(
+    `\n✗ ${outsideTokenBlocks} hex color(s) outside token blocks exceeds the baseline of ${HEX_BASELINE}.`
+  );
+  console.error("Use a token: var(--accent), var(--bg-tertiary), etc.");
+  process.exit(1);
+}
 
 if (undefinedRefs.length === 0) {
   console.log("✓ All var() references resolve.");
