@@ -1141,6 +1141,22 @@ function initKeyboardShortcuts() {
       return;
     }
 
+    // Cmd/Ctrl + 1..9 — recall the Nth saved query for the current collection.
+    if (isMod && /^[1-9]$/.test(e.key) && currentDbName && currentCollectionName) {
+      e.preventDefault();
+      const queries = getSavedQueries(currentDbName, currentCollectionName);
+      const idx = parseInt(e.key) - 1;
+      const q = queries[idx];
+      if (q) {
+        applyQueryToBar(q);
+        runQuery(currentDbName, currentCollectionName);
+        showToast(`Recalled saved query "${q.name}"`, 'success', 1800);
+      } else {
+        showToast(`No saved query in slot ${e.key}`, 'info', 1500);
+      }
+      return;
+    }
+
     // Cmd/Ctrl + / — toggle shell panel
     if (isMod && e.key === '/') {
       e.preventDefault();
@@ -1214,6 +1230,7 @@ function toggleShortcutsModal() {
             <h4>Documents</h4>
             <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+⏎</kbd><span>Run query</span></div>
             <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+⇧+N</kbd><span>New document</span></div>
+            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+1</kbd>–<kbd>9</kbd><span>Recall saved query slot 1–9</span></div>
             <div class="shortcut-row"><kbd>F</kbd><span>Focus filter bar</span></div>
           </div>
           <div class="shortcut-group">
@@ -5801,12 +5818,16 @@ function renderSavedList(queries) {
     </div>`;
   if (queries.length === 0)
     return toolbar + '<div class="saved-queries-empty">No saved queries yet.</div>';
+  const modKey = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
   return (
     toolbar +
     queries.map((q, i) => `
       <div class="saved-query-item" data-index="${i}">
         <div class="saved-query-info">
-          <div class="saved-query-name">${escapeHtml(q.name)}</div>
+          <div class="saved-query-name">
+            ${escapeHtml(q.name)}
+            ${i < 9 ? `<span class="saved-query-slot" title="Press ${modKey}+${i + 1} to recall">${modKey}+${i + 1}</span>` : ''}
+          </div>
           <div class="saved-query-preview">${escapeHtml(q.filter || '{}')}</div>
         </div>
         <button class="saved-query-delete" data-index="${i}" title="Delete">
