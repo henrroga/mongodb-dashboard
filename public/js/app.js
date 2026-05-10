@@ -4358,6 +4358,7 @@ function updateBulkBar() {
   bar.style.display = 'flex';
   bar.innerHTML = `
     <span class="bulk-count">${selectedDocIds.size} document${selectedDocIds.size !== 1 ? 's' : ''} selected</span>
+    <button class="btn btn-sm" id="bulkUpdateBtn">Bulk Update</button>
     <button class="btn btn-sm btn-danger" id="bulkDeleteBtn">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -4366,6 +4367,10 @@ function updateBulkBar() {
     </button>
     <button class="btn btn-sm btn-ghost" id="bulkClearBtn">Clear Selection</button>
   `;
+
+  document.getElementById('bulkUpdateBtn')?.addEventListener('click', async () => {
+    await bulkUpdateFlow();
+  });
 
   document.getElementById('bulkDeleteBtn')?.addEventListener('click', async () => {
     const count = selectedDocIds.size;
@@ -4445,6 +4450,61 @@ async function bulkDelete() {
     loadDocuments(dbName, collectionName);
   } catch (err) {
     showToast(`Bulk delete failed: ${err.message}`, 'error');
+  }
+}
+
+async function bulkUpdateFlow() {
+  const ids = Array.from(selectedDocIds);
+  const dbName = currentDbName;
+  const collectionName = currentCollectionName;
+  if (!ids.length) return;
+
+  const updateRaw = await ui.prompt({
+    title: `Bulk update ${ids.length} selected docs`,
+    message: 'Enter a MongoDB update document (JSON), for example: { "$set": { "status": "archived" } }',
+    placeholder: '{ "$set": { "status": "archived" } }',
+    confirmText: 'Preview',
+  });
+  if (updateRaw === null) return;
+
+  let updateDoc;
+  try {
+    updateDoc = JSON.parse(String(updateRaw));
+  } catch (err) {
+    showToast('Invalid update JSON: ' + err.message, 'error');
+    return;
+  }
+
+  try {
+    const preview = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/bulk-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, update: updateDoc, dryRun: true }),
+    });
+
+    const ok = await ui.confirm({
+      title: 'Apply bulk update?',
+      message: `Matched ${preview.matchedCount} document${preview.matchedCount !== 1 ? 's' : ''}. Continue with update?`,
+      confirmText: 'Update',
+      danger: true,
+    });
+    if (!ok) return;
+
+    const result = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/bulk-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, update: updateDoc, dryRun: false }),
+    });
+
+    showToast(`Updated ${result.modifiedCount} of ${result.matchedCount} matched documents`, 'success');
+    selectedDocIds.clear();
+    updateBulkBar();
+    currentCursor = null;
+    currentNextSkip = null;
+    allDocuments = [];
+    loadDocuments(dbName, collectionName);
+  } catch (err) {
+    showToast(`Bulk update failed: ${err.message}`, 'error');
   }
 }
 
@@ -8070,6 +8130,37 @@ function initIndexesPanel(dbName, collectionName) {
 
   // Create index modal
   const createModal = document.getElementById('createIndexModal');
+  const indexKeyInput = document.getElementById('indexKey');
+  const indexNameInput = document.getElementById('indexName');
+
+  if (createModal && indexKeyInput && !document.getElementById('indexPresetSelect')) {
+    const presetWrap = document.createElement('div');
+    presetWrap.className = 'form-group';
+    presetWrap.innerHTML = `
+      <label for="indexPresetSelect">Preset</label>
+      <select id="indexPresetSelect" class="input">
+        <option value="">Custom</option>
+        <option value="text">Text index</option>
+        <option value="geo">2dsphere index</option>
+        <option value="compound">Compound index</option>
+      </select>
+    `;
+    indexKeyInput.parentNode.insertBefore(presetWrap, indexKeyInput.parentNode.firstChild);
+
+    const presetSelect = presetWrap.querySelector('#indexPresetSelect');
+    presetSelect?.addEventListener('change', () => {
+      if (presetSelect.value === 'text') {
+        indexKeyInput.value = '{ "title": "text", "description": "text" }';
+        if (indexNameInput && !indexNameInput.value.trim()) indexNameInput.value = 'text_search_idx';
+      } else if (presetSelect.value === 'geo') {
+        indexKeyInput.value = '{ "location": "2dsphere" }';
+        if (indexNameInput && !indexNameInput.value.trim()) indexNameInput.value = 'location_2dsphere_idx';
+      } else if (presetSelect.value === 'compound') {
+        indexKeyInput.value = '{ "status": 1, "createdAt": -1 }';
+        if (indexNameInput && !indexNameInput.value.trim()) indexNameInput.value = 'status_createdAt_idx';
+      }
+    });
+  }
   const closeCreate = () => {
     createModal.style.display = 'none';
     document.getElementById('createIndexError').style.display = 'none';

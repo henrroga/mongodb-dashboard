@@ -334,4 +334,62 @@ router.delete("/:db/:collection", async (req, res) => {
   }
 });
 
+router.post("/:db/:collection/bulk-update", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, collection: colName } = req.params;
+    const { ids, filter, update, dryRun = false } = req.body || {};
+
+    if (!update || typeof update !== "object" || Array.isArray(update)) {
+      return res.status(400).json({ error: "Update document is required" });
+    }
+
+    const collection = client.db(dbName).collection(colName);
+
+    let query = null;
+    if (Array.isArray(ids) && ids.length > 0) {
+      const objectIds = ids.map((id) => {
+        try {
+          return new ObjectId(id);
+        } catch (_) {
+          return id;
+        }
+      });
+      query = { _id: { $in: objectIds } };
+    } else if (filter && typeof filter === "object") {
+      query = filter;
+    }
+
+    if (!query) {
+      return res.status(400).json({ error: "Provide ids or filter" });
+    }
+
+    const sample = await collection
+      .find(query, { projection: { _id: 1 } })
+      .limit(5)
+      .toArray();
+    const matchedCount = await collection.countDocuments(query, { limit: 100000 });
+
+    if (dryRun) {
+      return res.json({
+        dryRun: true,
+        matchedCount,
+        sampleIds: sample.map((d) => String(d._id)),
+      });
+    }
+
+    const parsedUpdate = parseDocument(update);
+    const result = await collection.updateMany(query, parsedUpdate);
+    return res.json({
+      success: true,
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
