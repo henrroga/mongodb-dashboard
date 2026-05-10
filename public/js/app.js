@@ -4788,13 +4788,7 @@ function setupModalHandlers() {
     focusEditor('docEditor');
   });
 
-  // Delete modal handlers
-  const deleteModal = document.getElementById('deleteModal');
-  if (deleteModal) {
-    deleteModal.querySelector('.modal-backdrop').addEventListener('click', () => deleteModal.style.display = 'none');
-    document.getElementById('deleteModalClose')?.addEventListener('click', () => deleteModal.style.display = 'none');
-    document.getElementById('deleteCancel')?.addEventListener('click', () => deleteModal.style.display = 'none');
-  }
+  // Delete now uses ui.confirm — no static modal handlers.
 }
 
 function openTemplatePickerMenu(anchor, dbName, collectionName) {
@@ -4980,33 +4974,30 @@ let deleteDocId = null;
 let deleteDbName = null;
 let deleteColName = null;
 
-function openDeleteModal(dbName, collectionName, docId) {
+async function openDeleteModal(dbName, collectionName, docId) {
   deleteDocId = docId;
   deleteDbName = dbName;
   deleteColName = collectionName;
 
-  const modal = document.getElementById('deleteModal');
-  modal.style.display = 'flex';
-
-  document.getElementById('deleteConfirm').onclick = confirmDelete;
+  const ok = await ui.confirm({
+    title: 'Delete document?',
+    message: 'This will permanently remove the document. This action cannot be undone.',
+    confirmText: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
+  await confirmDelete();
 }
 
 async function confirmDelete() {
-  const confirmBtn = document.getElementById('deleteConfirm');
-  confirmBtn.disabled = true;
-  confirmBtn.textContent = 'Deleting...';
-
   try {
     const res = await fetch(`/api/${deleteDbName}/${deleteColName}/${deleteDocId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     });
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
-    // Close modal and refresh
-    document.getElementById('deleteModal').style.display = 'none';
-    
     // If on document page, go back to collection
     if (window.location.pathname.includes(`/${deleteDocId}`)) {
       window.location.href = `/browse/${deleteDbName}/${deleteColName}`;
@@ -5018,9 +5009,6 @@ async function confirmDelete() {
     }
   } catch (err) {
     showToast('Delete failed: ' + err.message, 'error');
-  } finally {
-    confirmBtn.disabled = false;
-    confirmBtn.textContent = 'Delete';
   }
 }
 
@@ -5289,38 +5277,31 @@ function setupEditModalHandlers(dbName, collectionName, docId) {
     }
   });
 
-  // Delete modal
-  const deleteModal = document.getElementById('deleteModal');
-  deleteModal.querySelector('.modal-backdrop').addEventListener('click', () => deleteModal.style.display = 'none');
-  document.getElementById('deleteModalClose').addEventListener('click', () => deleteModal.style.display = 'none');
-  document.getElementById('deleteCancel').addEventListener('click', () => deleteModal.style.display = 'none');
+  // Delete confirmation now uses ui.confirm — no static modal markup.
 }
 
-function openDeleteModalForPage(dbName, collectionName, docId) {
-  const modal = document.getElementById('deleteModal');
-  modal.style.display = 'flex';
+async function openDeleteModalForPage(dbName, collectionName, docId) {
+  const ok = await ui.confirm({
+    title: 'Delete document?',
+    message: 'This will permanently remove the document. This action cannot be undone.',
+    confirmText: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
 
-  document.getElementById('deleteConfirm').onclick = async () => {
-    const confirmBtn = document.getElementById('deleteConfirm');
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Deleting...';
+  try {
+    const res = await fetch(`/api/${dbName}/${collectionName}/${docId}`, {
+      method: 'DELETE',
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    window.location.href = `/browse/${dbName}/${collectionName}`;
+    return;
+  } catch (err) {
+    showToast('Delete failed: ' + err.message, 'error');
+    return;
+  }
 
-    try {
-      const res = await fetch(`/api/${dbName}/${collectionName}/${docId}`, {
-        method: 'DELETE'
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      // Go back to collection
-      window.location.href = `/browse/${dbName}/${collectionName}`;
-    } catch (err) {
-      showToast('Delete failed: ' + err.message, 'error');
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Delete';
-    }
-  };
 }
 
 // Schema-based form rendering
