@@ -5365,3 +5365,54 @@ textarea.inline-edit-input {
 .th-sortable.desc {
   background: rgba(56, 139, 253, 0.06);
 }
+
+/* ─── Query field autocomplete dropdown ───────────────────────────────────── */
+
+.q-autocomplete {
+  z-index: 9000;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+  padding: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  font-size: 12.5px;
+  animation: q-autocomplete-in 100ms ease-out;
+}
+
+@keyframes q-autocomplete-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.q-autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.q-autocomplete-item:hover,
+.q-autocomplete-item.selected {
+  background: var(--bg-tertiary);
+}
+
+.q-autocomplete-item.selected .q-autocomplete-name {
+  color: var(--accent);
+}
+
+.q-autocomplete-name {
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.q-autocomplete-types {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}

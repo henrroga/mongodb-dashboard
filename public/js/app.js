@@ -1620,6 +1620,163 @@ function decorateCollectionsWithSparklines(dbName) {
   });
 }
 
+// ─── Query field autocomplete ─────────────────────────────────────────────────
+// The Filter / Project / Sort inputs gain a "type a key, see the field
+// names" dropdown sourced from a cached sample-doc schema fetch. No new
+// dependencies — vanilla JS + a small floating list.
+
+const fieldCacheByCollection = new Map();
+
+async function getCachedFieldList(dbName, collectionName) {
+  const key = `${dbName}/${collectionName}`;
+  if (fieldCacheByCollection.has(key)) return fieldCacheByCollection.get(key);
+  // Defer the cache entry to a Promise so concurrent callers share one fetch.
+  const p = (async () => {
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/schema`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      const fields = (data.schema && data.schema.fields) || {};
+      // Sort by seen-count if available, else alphabetical.
+      const entries = Object.entries(fields)
+        .map(([name, meta]) => ({ name, count: meta && meta.count ? meta.count : 0, types: (meta && meta.types) || [] }))
+        .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name));
+      return entries;
+    } catch (_) {
+      return [];
+    }
+  })();
+  fieldCacheByCollection.set(key, p);
+  return p;
+}
+
+let activeAutocomplete = null;
+
+function closeAutocomplete() {
+  if (activeAutocomplete) {
+    activeAutocomplete.dropdown.remove();
+    document.removeEventListener('click', activeAutocomplete.onDocClick, true);
+    activeAutocomplete = null;
+  }
+}
+
+function attachFieldAutocomplete(input, dbName, collectionName) {
+  if (!input || input.dataset.autocompleteAttached) return;
+  input.dataset.autocompleteAttached = '1';
+
+  let cached = null;
+  let selectedIdx = 0;
+  let filtered = [];
+
+  // Find the "current word" — the run of [A-Za-z0-9_$.] up to the cursor.
+  function currentWord() {
+    const v = input.value;
+    const pos = input.selectionStart || 0;
+    let start = pos;
+    while (start > 0 && /[A-Za-z0-9_$.]/.test(v[start - 1])) start--;
+    return { word: v.slice(start, pos), start, end: pos };
+  }
+
+  function show(items, ctx) {
+    closeAutocomplete();
+    if (!items.length) return;
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'q-autocomplete';
+    dropdown.setAttribute('role', 'listbox');
+    dropdown.innerHTML = items.map((it, i) => `
+      <div class="q-autocomplete-item ${i === 0 ? 'selected' : ''}" data-idx="${i}" role="option">
+        <span class="q-autocomplete-name mono">${escapeHtml(it.name)}</span>
+        ${it.types.length ? `<span class="q-autocomplete-types">${escapeHtml(it.types.join('|'))}</span>` : ''}
+      </div>
+    `).join('');
+
+    const rect = input.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.top = (rect.bottom + 2) + 'px';
+    dropdown.style.minWidth = rect.width + 'px';
+    document.body.appendChild(dropdown);
+
+    selectedIdx = 0;
+    filtered = items;
+
+    function applyAt(idx) {
+      const choice = filtered[idx];
+      if (!choice) return;
+      const { start, end } = ctx;
+      const before = input.value.slice(0, start);
+      const after = input.value.slice(end);
+      const insertion = choice.name;
+      input.value = before + insertion + after;
+      const cursor = (before + insertion).length;
+      input.setSelectionRange(cursor, cursor);
+      closeAutocomplete();
+      input.focus();
+    }
+
+    dropdown.addEventListener('mousedown', (e) => {
+      const item = e.target.closest('.q-autocomplete-item');
+      if (!item) return;
+      e.preventDefault();
+      applyAt(parseInt(item.dataset.idx));
+    });
+
+    const onDocClick = (e) => {
+      if (e.target === input || dropdown.contains(e.target)) return;
+      closeAutocomplete();
+    };
+    document.addEventListener('click', onDocClick, true);
+
+    activeAutocomplete = {
+      dropdown,
+      input,
+      onDocClick,
+      move(delta) {
+        selectedIdx = Math.max(0, Math.min(filtered.length - 1, selectedIdx + delta));
+        dropdown.querySelectorAll('.q-autocomplete-item').forEach((el, i) =>
+          el.classList.toggle('selected', i === selectedIdx)
+        );
+        dropdown.querySelector('.q-autocomplete-item.selected')?.scrollIntoView({ block: 'nearest' });
+      },
+      apply: () => applyAt(selectedIdx),
+    };
+  }
+
+  input.addEventListener('input', async () => {
+    if (!cached) cached = await getCachedFieldList(dbName, collectionName);
+    if (!cached.length) return;
+    const ctx = currentWord();
+    if (!ctx.word) { closeAutocomplete(); return; }
+    // Don't autocomplete inside a string literal — quick-and-dirty: an odd
+    // number of unescaped quotes before the cursor implies we're inside one.
+    const before = input.value.slice(0, ctx.start);
+    const dq = (before.match(/"/g) || []).length;
+    if (dq % 2 === 1) { closeAutocomplete(); return; }
+    const lower = ctx.word.toLowerCase();
+    const matches = cached
+      .filter((f) => f.name.toLowerCase().includes(lower))
+      .slice(0, 12);
+    show(matches, ctx);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (!activeAutocomplete || activeAutocomplete.input !== input) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeAutocomplete.move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeAutocomplete.move(-1); }
+    else if (e.key === 'Tab' || (e.key === 'Enter' && activeAutocomplete)) {
+      e.preventDefault();
+      activeAutocomplete.apply();
+    } else if (e.key === 'Escape') {
+      closeAutocomplete();
+    }
+  });
+
+  input.addEventListener('blur', () => {
+    setTimeout(closeAutocomplete, 120);
+  });
+}
+
 // ─── Query input validation ───────────────────────────────────────────────────
 
 // Returns { message, line, column } or null when input is valid.
@@ -2920,6 +3077,13 @@ async function initBrowser(dbName, collectionName) {
   const querySkipEl = document.getElementById('querySkip');
 
   if (queryFilterEl && currentFilter) queryFilterEl.value = currentFilter;
+
+  // Field autocomplete on Filter / Project / Sort using cached schema sample.
+  if (collectionName) {
+    attachFieldAutocomplete(queryFilterEl, dbName, collectionName);
+    attachFieldAutocomplete(queryProjectionEl, dbName, collectionName);
+    attachFieldAutocomplete(querySortEl, dbName, collectionName);
+  }
   if (queryProjectionEl && currentProjection) queryProjectionEl.value = currentProjection;
   if (querySortEl && currentSort) querySortEl.value = currentSort;
 
