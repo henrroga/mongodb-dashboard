@@ -3,7 +3,14 @@ const router = express.Router();
 const mongoService = require("../../services/mongodb");
 const { serializeDocument } = require("../../utils/bson");
 const { inferSchema } = require("../../utils/schema");
+const {
+  normalizeOperationTypeFilter,
+  buildChangeStreamPipeline,
+} = require("../../utils/changeStream");
 const logger = require("../../utils/logger");
+
+const SSE_HEARTBEAT_MS = 20000;
+const SSE_MAX_CONNECTION_MS = 10 * 60 * 1000;
 
 // Get collection validation rules
 router.get("/:db/:collection/validation", async (req, res) => {
@@ -233,22 +240,54 @@ router.get("/:db/:collection/watch", async (req, res) => {
     const { db: dbName, collection: colName } = req.params;
     const collection = client.db(dbName).collection(colName);
 
-    const pipeline = [];
-    const opFilter = req.query.operationType;
-    if (opFilter && opFilter !== "all") {
-      pipeline.push({ $match: { operationType: opFilter } });
+    let opFilter = null;
+    try {
+      opFilter = normalizeOperationTypeFilter(req.query.operationType);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
     }
+    const pipeline = buildChangeStreamPipeline(opFilter);
 
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     });
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
     res.write("event: connected\ndata: {}\n\n");
 
     const changeStream = collection.watch(pipeline, { fullDocument: "updateLookup" });
+    let closed = false;
+
+    const heartbeat = setInterval(() => {
+      if (!closed) {
+        res.write(`: heartbeat ${Date.now()}\n\n`);
+      }
+    }, SSE_HEARTBEAT_MS);
+
+    const maxConnectionTimer = setTimeout(() => {
+      if (closed) return;
+      res.write("event: end\ndata: {\"reason\":\"max_connection_reached\"}\n\n");
+      cleanup();
+    }, SSE_MAX_CONNECTION_MS);
+
+    function cleanup() {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      clearTimeout(maxConnectionTimer);
+      changeStream.removeAllListeners();
+      changeStream.close().catch(() => {});
+      if (!res.writableEnded) {
+        try {
+          res.end();
+        } catch (_) {}
+      }
+    }
 
     changeStream.on("change", (change) => {
+      if (closed) return;
       const payload = {
         operationType: change.operationType,
         ns: change.ns,
@@ -263,13 +302,16 @@ router.get("/:db/:collection/watch", async (req, res) => {
 
     changeStream.on("error", (err) => {
       logger.error(err);
-      res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
-      changeStream.close();
+      if (!closed) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+      }
+      cleanup();
     });
 
-    req.on("close", () => {
-      changeStream.close();
-    });
+    req.on("close", cleanup);
+    req.on("aborted", cleanup);
+    res.on("close", cleanup);
+    res.on("finish", cleanup);
   } catch (err) {
     logger.error(err);
     if (!res.headersSent) {

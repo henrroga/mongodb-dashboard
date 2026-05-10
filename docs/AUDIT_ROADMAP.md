@@ -93,3 +93,9 @@ This document tracks the audit findings and the planned roadmap for improving th
 2. Added max skip clamp to reduce accidental deep-offset scans.
 3. Added sort/projection validation with field-count and value constraints.
 4. Added targeted regression tests for query guard behavior.
+
+### Focus Audit: Change Stream Lifecycle Stability (completed)
+1. Added operation-type filter normalization + allowlist for watch endpoint.
+2. Added SSE heartbeats and max connection duration rotation to avoid stale long-lived sockets.
+3. Added idempotent cleanup hooks for request/response close and abort events.
+4. Added targeted tests for operation filter normalization and pipeline building.
