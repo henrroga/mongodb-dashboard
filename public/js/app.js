@@ -3616,10 +3616,28 @@ function renderTableHeader() {
     const hasFilter = arrayFilters[field] !== undefined;
     const fieldId = sanitizeId(field);
     
+    // Determine sort state for this field from currentSort, e.g. {age:-1}.
+    let sortDir = 0;
+    try {
+      const parsed = currentSort ? JSON.parse(
+        currentSort.replace(/'((?:\\.|[^'\\])*)'/g, (_m, b) => JSON.stringify(b))
+                   .replace(/([{,\s])([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g, '$1"$2":')
+      ) : null;
+      if (parsed && parsed[field] === 1) sortDir = 1;
+      else if (parsed && parsed[field] === -1) sortDir = -1;
+    } catch (_) {}
+    const sortClass = sortDir === 1 ? 'asc' : sortDir === -1 ? 'desc' : '';
+    const sortIcon = sortDir === 1
+      ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 15 12 9 18 15"/></svg>'
+      : sortDir === -1
+      ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>'
+      : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
+
     return `
-      <th>
+      <th class="th-sortable ${sortClass}" data-sort-field="${escapeHtml(field)}">
         <div class="column-header-content">
-          <span>${escapeHtml(field)}</span>
+          <span class="th-sortable-label">${escapeHtml(field)}</span>
+          <span class="th-sort-icon">${sortIcon}</span>
           ${isArray ? `
             <button class="filter-icon ${hasFilter ? 'active' : ''}" data-field="${escapeHtml(field)}" data-field-id="${fieldId}" title="Filter array">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3672,6 +3690,42 @@ function renderTableHeader() {
     updateBulkBar();
   });
   
+  // Click on a sortable header → toggle asc / desc / none for that field.
+  tableHeader.addEventListener('click', (e) => {
+    if (e.target.closest('.filter-icon, .filter-dropdown')) return;
+    const th = e.target.closest('.th-sortable');
+    if (!th) return;
+    const field = th.dataset.sortField;
+    const querySortEl = document.getElementById('querySort');
+    if (!querySortEl) return;
+
+    let current = {};
+    try {
+      const raw = (querySortEl.value || '').trim();
+      if (raw) {
+        current = JSON.parse(
+          raw
+            .replace(/'((?:\\.|[^'\\])*)'/g, (_m, b) => JSON.stringify(b))
+            .replace(/([{,\s])([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g, '$1"$2":')
+        );
+      }
+    } catch (_) {}
+
+    const cur = current[field];
+    let next;
+    if (cur === 1) next = -1;
+    else if (cur === -1) next = 0;
+    else next = 1;
+
+    if (next === 0) delete current[field];
+    else current = { [field]: next };
+
+    querySortEl.value = Object.keys(current).length
+      ? JSON.stringify(current)
+      : '';
+    document.getElementById('queryRunBtn')?.click();
+  });
+
   // Attach click handlers for filter icons using event delegation
   tableHeader.addEventListener('click', (e) => {
     const filterIcon = e.target.closest('.filter-icon');

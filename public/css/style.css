@@ -5323,3 +5323,45 @@ textarea.inline-edit-input {
 .whatsnew-body strong {
   color: var(--accent-hover, var(--accent));
 }
+
+/* ─── Sortable column headers ─────────────────────────────────────────────── */
+
+.th-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease;
+}
+
+.th-sortable:hover {
+  background: var(--bg-tertiary);
+}
+
+.th-sortable .column-header-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.th-sort-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.th-sortable:hover .th-sort-icon {
+  opacity: 1;
+}
+
+.th-sortable.asc .th-sort-icon,
+.th-sortable.desc .th-sort-icon {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.th-sortable.asc,
+.th-sortable.desc {
+  background: rgba(56, 139, 253, 0.06);
+}
