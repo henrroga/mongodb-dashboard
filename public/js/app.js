@@ -5160,7 +5160,6 @@ function openEditModal(doc) {
   const modal = document.getElementById('editModal');
   const editorEl = document.getElementById('editDocEditor');
 
-  // Initialize CodeMirror if not yet created
   if (!cmEditors['editDocEditor'] && editorEl) {
     createJsonEditor('editDocEditor');
   }
@@ -5172,25 +5171,43 @@ function openEditModal(doc) {
   if (diffView) { diffView.style.display = 'none'; diffView.innerHTML = ''; }
   const diffToggle = document.getElementById('editDiffToggle');
   if (diffToggle) diffToggle.textContent = 'Preview Changes';
-  modal.style.display = 'flex';
+
+  // Open with the ui-modal animation contract.
+  // eslint-disable-next-line no-unused-expressions
+  modal.offsetWidth;
+  modal.classList.add('ui-modal-open');
   focusEditor('editDocEditor');
+}
+
+function closeEditModal() {
+  const modal = document.getElementById('editModal');
+  if (!modal) return;
+  modal.classList.remove('ui-modal-open');
 }
 
 function setupEditModalHandlers(dbName, collectionName, docId) {
   const modal = document.getElementById('editModal');
   if (!modal) return;
 
-  const backdrop = modal.querySelector('.modal-backdrop');
+  const backdrop = modal.querySelector('.ui-modal-backdrop');
   const closeBtn = document.getElementById('editModalClose');
   const cancelBtn = document.getElementById('editCancel');
   const saveBtn = document.getElementById('editSave');
 
   const diffToggle = document.getElementById('editDiffToggle');
 
-  const closeModal = () => modal.style.display = 'none';
+  const closeModal = () => closeEditModal();
 
   backdrop.addEventListener('click', closeModal);
   closeBtn.addEventListener('click', closeModal);
+
+  // Esc closes when this modal is the active one.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!modal.classList.contains('ui-modal-open')) return;
+    e.preventDefault();
+    closeModal();
+  });
   cancelBtn.addEventListener('click', closeModal);
 
   diffToggle?.addEventListener('click', () => {
