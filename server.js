@@ -11,6 +11,7 @@ const logger = require("./src/utils/logger");
 const pinoHttp = require("pino-http")({ logger });
 const mongoSanitize = require("express-mongo-sanitize");
 const { requireAuth } = require("./src/middleware/auth");
+const { csrfContext, csrfApiProtection } = require("./src/middleware/csrf");
 const apiRoutes = require("./src/routes/api");
 const pageRoutes = require("./src/routes/pages");
 const { loginRouter, logoutRouter } = require("./src/routes/auth");
@@ -63,6 +64,7 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(mongoSanitize());
+app.use(csrfContext);
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1d" }));
 
 app.set("view engine", "ejs");
@@ -74,6 +76,7 @@ app.use((req, res, next) => {
     readOnly: config.readOnly,
     presetLocked: !!config.presetMongoUri,
     version: pkg.version,
+    csrfToken: req.session?.csrfToken || null,
   };
   next();
 });
@@ -119,6 +122,7 @@ app.use("/logout", logoutRouter);
 const errorHandler = require("./src/middleware/error");
 
 app.use(generalLimiter);
+app.use("/api", csrfApiProtection);
 app.use("/api", requireAuth, apiRoutes);
 app.use("/", requireAuth, pageRoutes);
 
