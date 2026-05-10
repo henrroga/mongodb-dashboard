@@ -10,6 +10,7 @@ const config = require("./src/config");
 const logger = require("./src/utils/logger");
 const pinoHttp = require("pino-http")({ logger });
 const mongoSanitize = require("express-mongo-sanitize");
+const requestIdMiddleware = require("./src/middleware/request-id");
 const { requireAuth } = require("./src/middleware/auth");
 const { csrfContext, csrfApiProtection } = require("./src/middleware/csrf");
 const apiRoutes = require("./src/routes/api");
@@ -20,6 +21,7 @@ const mongoService = require("./src/services/mongodb");
 const app = express();
 
 app.use(pinoHttp);
+app.use(requestIdMiddleware);
 app.set("trust proxy", config.trustProxy);
 app.disable("x-powered-by");
 
@@ -99,7 +101,38 @@ const loginLimiter = rateLimit({
   message: { error: "Too many login attempts, slow down." },
 });
 
-app.get("/healthz", (req, res) => res.json({ ok: true }));
+app.get("/healthz", async (req, res) => {
+  const deep = req.query.deep === "1" || req.query.deep === "true";
+  if (!deep) {
+    return res.json({ ok: true, requestId: req.requestId });
+  }
+
+  const health = {
+    ok: true,
+    requestId: req.requestId,
+    uptimeSec: Math.round(process.uptime()),
+    mongodb: {
+      connected: false,
+    },
+  };
+
+  try {
+    const client = mongoService.getClient();
+    if (client && mongoService.isConnected()) {
+      const start = Date.now();
+      await client.db().admin().ping();
+      health.mongodb.connected = true;
+      health.mongodb.pingMs = Date.now() - start;
+    }
+  } catch (err) {
+    health.ok = false;
+    health.mongodb.connected = false;
+    health.mongodb.error = err.message;
+  }
+
+  const status = health.ok ? 200 : 503;
+  return res.status(status).json(health);
+});
 
 // Public app metadata + changelog (auth-gated below by default).
 let cachedChangelog = null;

@@ -8,6 +8,7 @@ function errorHandler(err, req, res, next) {
       ...err,
     },
     req: {
+      requestId: req.requestId,
       method: req.method,
       url: req.url,
       path: req.path,
@@ -25,6 +26,7 @@ function errorHandler(err, req, res, next) {
   if (err.name === "MongoServerError") {
     return res.status(400).json({
       error: err.message,
+      requestId: req.requestId,
       code: err.code,
       codeName: err.codeName,
     });
@@ -33,6 +35,7 @@ function errorHandler(err, req, res, next) {
   if (req.path && req.path.startsWith("/api/")) {
     return res.status(500).json({
       error: err.message || "Internal Server Error",
+      requestId: req.requestId,
     });
   }
 
