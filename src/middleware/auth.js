@@ -3,6 +3,21 @@ const config = require("../config");
 
 const failedAttempts = new Map();
 
+function shouldInvalidateSession(session, now = Date.now()) {
+  if (!session || !session.authenticated) return false;
+  const loginAt = Number(session.loginAt || 0);
+  const lastSeenAt = Number(session.lastSeenAt || loginAt || 0);
+
+  if (!loginAt || !lastSeenAt) return true;
+
+  const absoluteAge = now - loginAt;
+  const idleAge = now - lastSeenAt;
+
+  if (absoluteAge > config.auth.sessionAbsoluteTimeoutMs) return true;
+  if (idleAge > config.auth.sessionIdleTimeoutMs) return true;
+  return false;
+}
+
 function recordFailure(ip) {
   const now = Date.now();
   const entry = failedAttempts.get(ip) || { count: 0, lockedUntil: 0 };
@@ -34,7 +49,25 @@ async function verifyPassword(plain) {
 
 function requireAuth(req, res, next) {
   if (!config.auth.enabled) return next();
-  if (req.session && req.session.authenticated) return next();
+  if (req.session && req.session.authenticated) {
+    if (shouldInvalidateSession(req.session)) {
+      req.session.destroy(() => {
+        res.clearCookie("mdb.sid", {
+          httpOnly: true,
+          sameSite: "strict",
+          secure: config.cookieSecure,
+        });
+        if (req.originalUrl.startsWith("/api/") || req.baseUrl === "/api") {
+          return res.status(401).json({ error: "Session expired. Please sign in again." });
+        }
+        const next_ = encodeURIComponent(req.originalUrl || "/");
+        return res.redirect(`/login?next=${next_}`);
+      });
+      return;
+    }
+    req.session.lastSeenAt = Date.now();
+    return next();
+  }
   if (req.originalUrl.startsWith("/api/") || req.baseUrl === "/api") {
     return res.status(401).json({ error: "Authentication required" });
   }
@@ -56,4 +89,5 @@ module.exports = {
   isLocked,
   requireAuth,
   requireWritable,
+  shouldInvalidateSession,
 };

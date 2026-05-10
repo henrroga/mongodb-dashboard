@@ -99,3 +99,10 @@ This document tracks the audit findings and the planned roadmap for improving th
 2. Added SSE heartbeats and max connection duration rotation to avoid stale long-lived sockets.
 3. Added idempotent cleanup hooks for request/response close and abort events.
 4. Added targeted tests for operation filter normalization and pipeline building.
+
+### Focus Audit: Auth & Session Lifecycle (completed)
+1. Added absolute + idle session timeout controls in config.
+2. Hardened `requireAuth` to invalidate expired sessions and clear cookies consistently.
+3. Added sliding last-seen refresh for active authenticated sessions.
+4. Hardened logout cookie clearing options for strict session teardown behavior.
+5. Added dedicated tests for session invalidation logic.

@@ -60,6 +60,7 @@ router.post(
       }
       req.session.authenticated = true;
       req.session.loginAt = Date.now();
+      req.session.lastSeenAt = req.session.loginAt;
       const safeNext =
         nextUrl.startsWith("/") && !nextUrl.startsWith("//") ? nextUrl : "/";
       res.redirect(safeNext);
@@ -71,7 +72,11 @@ const logoutRouter = express.Router();
 logoutRouter.post("/", (req, res) => {
   if (req.session) {
     req.session.destroy(() => {
-      res.clearCookie("mdb.sid");
+      res.clearCookie("mdb.sid", {
+        httpOnly: true,
+        sameSite: "strict",
+        secure: config.cookieSecure,
+      });
       if (req.accepts("html")) return res.redirect("/login");
       res.json({ success: true });
     });

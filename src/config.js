@@ -57,6 +57,14 @@ const config = {
       process.env.SESSION_MAX_AGE_MS || String(1000 * 60 * 60 * 24 * 7),
       10
     ),
+    sessionIdleTimeoutMs: parseInt(
+      process.env.SESSION_IDLE_TIMEOUT_MS || String(1000 * 60 * 60 * 8),
+      10
+    ),
+    sessionAbsoluteTimeoutMs: parseInt(
+      process.env.SESSION_ABSOLUTE_TIMEOUT_MS || String(1000 * 60 * 60 * 24),
+      10
+    ),
     maxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS || "5", 10),
     lockoutMs: parseInt(process.env.LOGIN_LOCKOUT_MS || "900000", 10),
   },
