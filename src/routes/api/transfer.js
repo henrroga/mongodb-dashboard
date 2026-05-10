@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const mongoService = require("../../services/mongodb");
 const { serializeDocument, parseDocument } = require("../../utils/bson");
+const { parseCsv, toCsvRow } = require("../../utils/csv");
 const audit = require("../../utils/audit");
 const logger = require("../../utils/logger");
 const { GridFSBucket, ObjectId } = require("mongodb");
@@ -13,67 +14,7 @@ const {
 const SUPPORTED_IMPORT_FORMATS = new Set(["json", "jsonl", "csv"]);
 const SUPPORTED_EXPORT_FORMATS = new Set(["json", "jsonl", "csv"]);
 
-/**
- * Simple CSV parser that handles quoted fields and commas inside quotes.
- * Returns an array of row arrays.
- */
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-
-    if (inQuotes) {
-      if (ch === '"' && next === '"') {
-        field += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuotes = false;
-      } else {
-        field += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ",") {
-        row.push(field);
-        field = "";
-      } else if (ch === "\n" || (ch === "\r" && next === "\n")) {
-        if (ch === "\r") i++;
-        row.push(field);
-        field = "";
-        if (row.some((f) => f !== "")) rows.push(row);
-        row = [];
-      } else {
-        field += ch;
-      }
-    }
-  }
-  row.push(field);
-  if (row.some((f) => f !== "")) rows.push(row);
-  return rows;
-}
-
-/**
- * Convert a flat object to a CSV row string (values quoted if needed).
- */
-function toCsvRow(headers, doc) {
-  return headers
-    .map((h) => {
-      const val = doc[h];
-      if (val === null || val === undefined) return "";
-      const str =
-        typeof val === "object" ? JSON.stringify(val) : String(val);
-      return str.includes(",") || str.includes('"') || str.includes("\n")
-        ? `"${str.replace(/"/g, '""')}"`
-        : str;
-    })
-    .join(",");
-}
+const MAX_IMPORT_DOCS = 50000;
 
 // Import documents (JSON array, NDJSON, or CSV)
 router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (req, res) => {
@@ -94,9 +35,16 @@ router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (r
 
     let docs = [];
     if (format === "csv") {
-      const rows = parseCsv(content.trim());
+      const normalized = String(content).replace(/^\uFEFF/, "").trim();
+      const rows = parseCsv(normalized);
       if (rows.length < 2) return res.status(400).json({ error: "CSV must have a header row and at least one data row" });
-      const headers = rows[0];
+      const headers = rows[0].map((h) => String(h || "").trim());
+      if (headers.some((h) => !h)) {
+        return res.status(400).json({ error: "CSV header contains an empty column name" });
+      }
+      if (new Set(headers).size !== headers.length) {
+        return res.status(400).json({ error: "CSV header contains duplicate column names" });
+      }
       docs = rows.slice(1).map((row) => {
         const doc = {};
         headers.forEach((h, i) => {
@@ -114,17 +62,27 @@ router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (r
         docs = JSON.parse(trimmed);
       } else {
         docs = trimmed
-          .split("\n")
+          .split(/\r?\n/)
           .filter((l) => l.trim())
           .map((l) => JSON.parse(l));
       }
       docs = docs.map(parseDocument);
     }
 
+    if (!Array.isArray(docs)) {
+      return res.status(400).json({ error: "Import payload must resolve to an array of documents" });
+    }
+    if (docs.length > MAX_IMPORT_DOCS) {
+      return res.status(413).json({ error: `Import too large: max ${MAX_IMPORT_DOCS} documents per request` });
+    }
+
     let inserted = 0;
     let errors = [];
     for (const doc of docs) {
       try {
+        if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+          throw new Error("Each imported row must be a JSON object/document");
+        }
         await collection.insertOne(doc);
         inserted++;
       } catch (err) {

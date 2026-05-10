@@ -80,3 +80,10 @@ This document tracks the audit findings and the planned roadmap for improving th
 2. Restricted `db.runCommand(...)` to a read-only allowlist to prevent dangerous admin ops from dashboard shell.
 3. Added guardrails for aggregation shell command shape and capped shell aggregate output.
 4. Added regression tests for nested argument splitting and parser behavior.
+
+### Focus Audit: Import/Export Data Integrity (completed)
+1. Extracted CSV parsing/serialization into `src/utils/csv.js` and added direct unit tests.
+2. Added CSV parser validation for unclosed quoted fields.
+3. Hardened CSV import headers (reject empty or duplicate column names) and BOM handling.
+4. Added import size guardrails and document-shape validation.
+5. Added CSV formula-injection mitigation for exported cells that start with `=`, `+`, `-`, or `@`.
