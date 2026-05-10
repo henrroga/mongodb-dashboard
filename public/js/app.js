@@ -1306,7 +1306,68 @@ const KEYBINDINGS = [
       if (!tab) return false;
       tab.click();
     } },
+
+  // ↑ / ↓ — walk the document table rows (when the table is the active view
+  // and the user isn't focused inside an input). Enter on a highlighted row
+  // navigates to the document detail page.
+  { name: 'row-arrow-down',
+    matcher: ({ e, isMod }) => e.key === 'ArrowDown' && !isMod,
+    handler: () => moveTableRowSelection(1),
+  },
+  { name: 'row-arrow-up',
+    matcher: ({ e, isMod }) => e.key === 'ArrowUp' && !isMod,
+    handler: () => moveTableRowSelection(-1),
+  },
+  { name: 'row-enter-open',
+    matcher: ({ e, isMod }) => e.key === 'Enter' && !isMod,
+    handler: () => openHighlightedRow(),
+  },
 ];
+
+let _highlightedRow = null;
+
+function listVisibleTableRows() {
+  const tbody = document.getElementById('tableBody');
+  if (!tbody) return [];
+  return [...tbody.querySelectorAll('tr')].filter((tr) => {
+    if (tr.classList.contains('loading-row')) return false;
+    if (tr.classList.contains('skeleton-row')) return false;
+    if (!tr.dataset.docId) return false;
+    if (tr.style.display === 'none') return false;
+    return true;
+  });
+}
+
+function moveTableRowSelection(delta) {
+  const rows = listVisibleTableRows();
+  if (!rows.length) return false;
+  let idx = _highlightedRow ? rows.indexOf(_highlightedRow) : -1;
+  idx = Math.max(0, Math.min(rows.length - 1, idx + delta));
+  if (_highlightedRow) _highlightedRow.classList.remove('row-highlighted');
+  _highlightedRow = rows[idx];
+  _highlightedRow.classList.add('row-highlighted');
+  _highlightedRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  return true;
+}
+
+function openHighlightedRow() {
+  if (!_highlightedRow || !currentDbName || !currentCollectionName) return false;
+  const id = _highlightedRow.dataset.docId;
+  if (!id) return false;
+  const cleanId = String(id).replace(/^"|"$/g, '');
+  window.location.href = `/browse/${encodeURIComponent(currentDbName)}/${encodeURIComponent(currentCollectionName)}/${encodeURIComponent(cleanId)}`;
+}
+
+// Click on a row also moves the highlight (mouse and keyboard play together).
+document.addEventListener('click', (e) => {
+  const tr = e.target.closest('tbody tr[data-doc-id]');
+  if (!tr) return;
+  if (_highlightedRow && _highlightedRow !== tr) {
+    _highlightedRow.classList.remove('row-highlighted');
+  }
+  _highlightedRow = tr;
+  _highlightedRow.classList.add('row-highlighted');
+});
 
 function initKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
@@ -1354,6 +1415,8 @@ function shortcutsModalBody() {
         <h4>Navigation</h4>
         <div class="shortcut-row"><kbd>1</kbd>–<kbd>5</kbd><span>Switch tabs</span></div>
         <div class="shortcut-row"><kbd>${mod}+/</kbd><span>Toggle shell</span></div>
+        <div class="shortcut-row"><kbd>↑</kbd>/<kbd>↓</kbd><span>Move row highlight in the table</span></div>
+        <div class="shortcut-row"><kbd>⏎</kbd><span>Open highlighted document</span></div>
         <div class="shortcut-row"><kbd>J</kbd><span>Next recent document (on doc page)</span></div>
         <div class="shortcut-row"><kbd>K</kbd><span>Previous recent document</span></div>
       </div>
