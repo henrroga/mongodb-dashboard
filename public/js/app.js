@@ -5146,6 +5146,11 @@ function setupEditModalHandlers(dbName, collectionName, docId) {
       const originalText = JSON.stringify(editOriginalDoc, null, 2);
       const newText = JSON.stringify(currentDoc, null, 2);
 
+      // Mark the host so the global diff-mode toggle delegate can re-render
+      // it using the cached old/new text.
+      diffView.setAttribute('data-diff-host', '');
+      diffView.dataset.diffOld = originalText;
+      diffView.dataset.diffNew = newText;
       diffView.innerHTML = renderDiff(originalText, newText);
       diffView.style.display = 'block';
       diffToggle.textContent = 'Hide Diff';
@@ -6703,17 +6708,19 @@ function appendChangeEvent(container, data) {
 
 // ─── Diff Viewer ──────────────────────────────────────────────────────────────
 
-function renderDiff(oldText, newText) {
+// Compute a unified diff array of { type: 'same'|'add'|'remove', line }.
+function computeDiffOps(oldText, newText) {
   const oldLines = oldText.split('\n');
   const newLines = newText.split('\n');
-
-  // Simple line-by-line diff using LCS
   const lcs = computeLcs(oldLines, newLines);
   const result = [];
   let oi = 0, ni = 0, li = 0;
-
   while (oi < oldLines.length || ni < newLines.length) {
-    if (li < lcs.length && oi < oldLines.length && ni < newLines.length && oldLines[oi] === lcs[li] && newLines[ni] === lcs[li]) {
+    if (
+      li < lcs.length &&
+      oi < oldLines.length && ni < newLines.length &&
+      oldLines[oi] === lcs[li] && newLines[ni] === lcs[li]
+    ) {
       result.push({ type: 'same', line: oldLines[oi] });
       oi++; ni++; li++;
     } else if (ni < newLines.length && (li >= lcs.length || newLines[ni] !== lcs[li])) {
@@ -6724,21 +6731,130 @@ function renderDiff(oldText, newText) {
       oi++;
     }
   }
+  return result;
+}
 
-  if (result.every(r => r.type === 'same')) {
-    return '<div class="diff-no-changes">No changes detected</div>';
+let diffViewMode = localStorage.getItem('mongodb_diff_mode') || 'inline';
+
+function renderDiff(oldText, newText) {
+  const ops = computeDiffOps(oldText, newText);
+  if (ops.every((o) => o.type === 'same')) {
+    return wrapDiff('<div class="diff-no-changes">No changes detected</div>');
   }
+  const body =
+    diffViewMode === 'split'
+      ? renderDiffSplit(ops)
+      : renderDiffInline(ops);
+  return wrapDiff(body);
+}
 
-  let lineNum = 0;
-  const html = result.map(r => {
+function wrapDiff(body) {
+  const inlineActive = diffViewMode === 'inline' ? 'active' : '';
+  const splitActive = diffViewMode === 'split' ? 'active' : '';
+  return `
+    <div class="diff-toolbar">
+      <span class="diff-header">Changes Preview</span>
+      <div class="diff-mode-toggle" role="tablist" aria-label="Diff layout">
+        <button class="diff-mode-btn ${inlineActive}" data-diff-mode="inline" role="tab" aria-selected="${inlineActive ? 'true' : 'false'}">Inline</button>
+        <button class="diff-mode-btn ${splitActive}" data-diff-mode="split" role="tab" aria-selected="${splitActive ? 'true' : 'false'}">Side-by-side</button>
+      </div>
+    </div>
+    ${body}
+  `;
+}
+
+function renderDiffInline(ops) {
+  return ops.map((r) => {
     const prefix = r.type === 'add' ? '+' : r.type === 'remove' ? '-' : ' ';
-    const cls = r.type === 'add' ? 'diff-line-add' : r.type === 'remove' ? 'diff-line-remove' : 'diff-line-same';
-    if (r.type !== 'remove') lineNum++;
+    const cls =
+      r.type === 'add' ? 'diff-line-add' :
+      r.type === 'remove' ? 'diff-line-remove' :
+      'diff-line-same';
     return `<div class="${cls}"><span class="diff-prefix">${prefix}</span><span class="diff-text">${escapeHtml(r.line)}</span></div>`;
   }).join('');
-
-  return `<div class="diff-header">Changes Preview</div>${html}`;
 }
+
+function renderDiffSplit(ops) {
+  // Pair remove/add ops on the same row when adjacent; otherwise pad with
+  // empty lines so the columns stay aligned.
+  const rows = [];
+  let i = 0;
+  let oldNo = 0, newNo = 0;
+  while (i < ops.length) {
+    const op = ops[i];
+    if (op.type === 'same') {
+      oldNo++; newNo++;
+      rows.push({
+        leftNo: oldNo, leftType: 'same', leftText: op.line,
+        rightNo: newNo, rightType: 'same', rightText: op.line,
+      });
+      i++;
+    } else if (op.type === 'remove') {
+      // Scan the contiguous remove/add block starting here.
+      const removes = [];
+      const adds = [];
+      while (i < ops.length && ops[i].type === 'remove') { removes.push(ops[i].line); i++; }
+      while (i < ops.length && ops[i].type === 'add')    { adds.push(ops[i].line); i++; }
+      const max = Math.max(removes.length, adds.length);
+      for (let k = 0; k < max; k++) {
+        const left = removes[k];
+        const right = adds[k];
+        if (left !== undefined) oldNo++;
+        if (right !== undefined) newNo++;
+        rows.push({
+          leftNo: left !== undefined ? oldNo : '',
+          leftType: left !== undefined ? 'remove' : 'empty',
+          leftText: left !== undefined ? left : '',
+          rightNo: right !== undefined ? newNo : '',
+          rightType: right !== undefined ? 'add' : 'empty',
+          rightText: right !== undefined ? right : '',
+        });
+      }
+    } else if (op.type === 'add') {
+      newNo++;
+      rows.push({
+        leftNo: '', leftType: 'empty', leftText: '',
+        rightNo: newNo, rightType: 'add', rightText: op.line,
+      });
+      i++;
+    } else {
+      i++;
+    }
+  }
+
+  const cell = (no, type, text) =>
+    `<td class="diff-no diff-no-${type}">${no}</td>` +
+    `<td class="diff-cell diff-cell-${type}"><pre>${escapeHtml(text)}</pre></td>`;
+
+  return `
+    <table class="diff-split">
+      <thead>
+        <tr><th colspan="2">Before</th><th colspan="2">After</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) =>
+          `<tr>${cell(r.leftNo, r.leftType, r.leftText)}${cell(r.rightNo, r.rightType, r.rightText)}</tr>`
+        ).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// Delegated click handler — toggles between inline and split for any open
+// diff view. Works regardless of which modal hosts the diff.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.diff-mode-btn');
+  if (!btn) return;
+  diffViewMode = btn.dataset.diffMode === 'split' ? 'split' : 'inline';
+  localStorage.setItem('mongodb_diff_mode', diffViewMode);
+  // Re-render the closest diff host using its cached payload (we stash it
+  // on the element when the user toggles diff on).
+  const host = btn.closest('[data-diff-host]');
+  if (!host) return;
+  const oldText = host.dataset.diffOld || '';
+  const newText = host.dataset.diffNew || '';
+  host.innerHTML = renderDiff(oldText, newText);
+});
 
 function computeLcs(a, b) {
   const m = a.length, n = b.length;
