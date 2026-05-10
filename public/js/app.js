@@ -7559,6 +7559,42 @@ function initAggregationPanel(dbName, collectionName) {
     runAggregation(dbName, collectionName);
   });
 
+  // Copy-as-code for the current pipeline (uses the polished modal that
+  // backs the find-query bar — 5 languages, persisted preference).
+  document.getElementById('aggCopyCodeBtn')?.addEventListener('click', () => {
+    if (aggStages.length === 0) {
+      showToast('Add at least one stage first.', 'warning');
+      return;
+    }
+    openCopyAsCodeModal({
+      dbName,
+      collectionName,
+      kind: 'aggregate',
+      getInputs: () => {
+        // Build the runtime pipeline array from the editor state. Disabled
+        // stages are skipped, body parsed via the same MQL-permissive
+        // logic used elsewhere.
+        const pipeline = aggStages
+          .filter((s) => s.enabled !== false)
+          .map((s) => {
+            const editor = cmEditors[`agg-stage-${s.id}`];
+            const raw = editor ? editor.getValue() : s.body || '{}';
+            let parsed;
+            try { parsed = JSON.parse(raw); }
+            catch (_) {
+              parsed = JSON.parse(
+                raw
+                  .replace(/'((?:\\.|[^'\\])*)'/g, (_m, b) => JSON.stringify(b))
+                  .replace(/([{,\s])([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g, '$1"$2":')
+              );
+            }
+            return { [s.type]: parsed };
+          });
+        return { pipeline };
+      },
+    });
+  });
+
   // Save pipeline
   document.getElementById('aggSave')?.addEventListener('click', async () => {
     if (aggStages.length === 0) { showToast('Add at least one stage to save.', 'warning'); return; }
