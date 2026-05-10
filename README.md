@@ -1,20 +1,72 @@
 # MongoDB Dashboard
 
-A fast, self-hosted, open-source MongoDB browser. Built to replace MongoDB
-Compass for day-to-day work and to run safely on a domain you control.
+A fast, self-hosted MongoDB browser built for production-safe operations.
 
-- **No telemetry, no cloud.** Your connection string never leaves your server.
-- **Designed to be exposed on the internet.** Password auth, brute-force
-  lockout, helmet-set CSP/security headers, rate limiting, and a `READ_ONLY`
-  switch are built in.
-- **Drop-in self-host.** One Dockerfile, one compose file, one `.env`.
+This project is designed as a practical, open-source alternative to MongoDB Compass for teams that want full control over hosting, auth, and data boundaries.
 
-## Features
+## Why this exists
 
-Browser, document viewer + JSON editor, schema/index/validation tools,
-aggregation/explain runner, server stats, change-stream tab, import/export,
-saved connections, dark/light/system theme, and a guarded `db.collection.foo()`
-shell — all over plain HTTP/JSON, no heavy framework.
+- No telemetry, no cloud lock-in; your data and connection strings stay on your infrastructure.
+- Internet-safe baseline by default: auth, rate limiting, hardened headers, CSRF, input validation, and audit logging.
+- Lightweight stack: Node.js, Express, EJS, vanilla JS; no frontend build pipeline required.
+
+## What you get
+
+### Data exploration and editing
+
+- Database and collection browser (including view awareness)
+- Document listing with pagination, filters, projections, and sorting
+- JSON document create/edit/duplicate/delete
+- Bulk delete and bulk update with dry-run preview
+- Field-level schema analysis and inferred distributions
+
+### Query and performance tooling
+
+- Aggregation builder with stage templates, previews, and result runner
+- Explain plan runner
+- Index management (create/drop/hide/unhide; size and metadata display)
+- Collection validation rule viewer/editor
+- Collection and server stats panels
+
+### Data movement
+
+- Import: JSON array, JSONL/NDJSON, CSV
+- Export: JSON, JSONL, CSV (streamed)
+- Backup endpoint with metadata header line and streamed document body
+- GridFS download support for `.files` collections
+
+### Operational features
+
+- Change stream live viewer (SSE) with operation filters
+- Basic shell (`db.collection.method(...)`) with guarded parsing and command boundaries
+- Saved queries and saved pipelines
+- Light/dark/system theme
+
+## Security and hardening summary
+
+This repository has gone through multiple audit/hardening phases. Current protections include:
+
+- Structured request logging with request IDs
+- Centralized error handling with API-safe JSON responses
+- Input validation and JSON query parsing guards on API routes
+- Query guardrails for expensive/unsafe patterns (`$where` and similar blocked)
+- CSRF protection on unsafe API methods
+- Session lifecycle controls: idle + absolute session expiry
+- Login brute-force lockout and route-level rate limits
+- Read-only mode to block all mutating DB actions
+- Shell execution boundaries:
+  - safer argument parser (no `eval`)
+  - restricted `runCommand` allowlist
+- Change stream lifecycle safety:
+  - SSE heartbeat
+  - max connection rotation
+  - robust cleanup on close/abort
+- CSV integrity protections:
+  - malformed CSV detection
+  - duplicate/empty header rejection
+  - CSV formula-injection neutralization on export
+
+For details, see `docs/AUDIT_ROADMAP.md` and `SECURITY.md`.
 
 ## Quick start (local)
 
@@ -23,79 +75,106 @@ git clone https://github.com/henrroga/mongodb-dashboard
 cd mongodb-dashboard
 npm install
 cp .env.example .env
-# Edit .env and either set AUTH_PASSWORD or generate a hash:
 npm run hash-password
 npm start
 ```
 
-Open <http://localhost:3000>.
+Then open <http://localhost:3000>.
 
-## Self-host (Docker, recommended)
+## Docker deployment (recommended)
 
 ```bash
 cp .env.example .env
-# Set at minimum:
-#   AUTH_PASSWORD_HASH    (run: npm run hash-password)
-#   SESSION_SECRET=$(openssl rand -hex 32)
-#   MONGODB_URI=mongodb://...
+# set at minimum:
+# AUTH_PASSWORD_HASH=<bcrypt hash>
+# SESSION_SECRET=<openssl rand -hex 32>
+# MONGODB_URI=mongodb://...
 docker compose up -d --build
 ```
 
-The compose file binds the dashboard to `127.0.0.1:3000` only. Put a reverse
-proxy in front to terminate TLS and expose it on a domain you own. See
-[`docs/reverse-proxy/`](./docs/reverse-proxy) for ready-to-paste configs.
+By default, compose binds to `127.0.0.1:3000`. Expose through TLS reverse proxy only. Ready examples: `docs/reverse-proxy/README.md`.
 
-## Configuration
+## Configuration reference (high-impact)
 
-All config is via environment variables (see `.env.example`). The most
-important knobs:
+All options are env-driven (`.env.example` is the source of truth).
 
-| Variable             | Default    | Notes                                                                                |
-| -------------------- | ---------- | ------------------------------------------------------------------------------------ |
-| `AUTH_ENABLED`       | auto       | `true` if password set. **Always `true` for internet-exposed deployments.**          |
-| `AUTH_PASSWORD_HASH` | —          | bcrypt hash. Generate with `npm run hash-password`.                                  |
-| `AUTH_PASSWORD`      | —          | Plain password (dev only — hashed in memory at boot, never persisted).               |
-| `SESSION_SECRET`     | —          | 32+ random bytes. **Required in production.** `openssl rand -hex 32`.                |
-| `COOKIE_SECURE`      | prod=true  | Only send the session cookie over HTTPS. Leave on for any public deployment.         |
-| `TRUST_PROXY`        | `loopback` | `1` for one proxy, or a CIDR. Required for correct client IPs / secure cookies.      |
-| `MONGODB_URI`        | —          | Preset connection. When set, the connect form is disabled and disconnect is blocked. |
-| `READ_ONLY`          | `false`    | Reject all DB writes (insert/update/delete/drop/index/validation/import).            |
-| `LOGIN_MAX_ATTEMPTS` | 5          | Lock the IP after N failed attempts.                                                 |
-| `LOGIN_LOCKOUT_MS`   | 900000     | Lockout duration (15 min).                                                           |
-| `RATE_LIMIT_MAX`     | 300        | Requests per minute per IP.                                                          |
-| `AUDIT_LOG_DIR`      | `./logs`   | Where write-op audit log is written.                                                 |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AUTH_ENABLED` | auto | Enables auth (auto-true if password/hash exists) |
+| `AUTH_PASSWORD_HASH` | — | bcrypt hash used for login |
+| `AUTH_PASSWORD` | — | dev convenience plaintext password |
+| `SESSION_SECRET` | random in non-prod | session signing secret (required in production auth setups) |
+| `SESSION_MAX_AGE_MS` | 7d | cookie/session max age |
+| `SESSION_IDLE_TIMEOUT_MS` | 8h | idle session invalidation threshold |
+| `SESSION_ABSOLUTE_TIMEOUT_MS` | 24h | max lifetime from login time |
+| `COOKIE_SECURE` | prod=true | secure cookie flag |
+| `TRUST_PROXY` | `loopback` | correct client IP/cookie handling behind proxy |
+| `MONGODB_URI` | — | preset cluster URI; locks connect/disconnect UI |
+| `READ_ONLY` | `false` | blocks mutating DB operations |
+| `LOGIN_MAX_ATTEMPTS` | 5 | brute-force lockout threshold |
+| `LOGIN_LOCKOUT_MS` | 900000 | lockout window |
+| `RATE_LIMIT_MAX` | 300 | default requests/window per IP |
+| `RATE_LIMIT_LOGIN_MAX` | 10 | tighter login route limit |
+| `AUDIT_LOG_DIR` | `./logs` | JSONL audit log directory |
 
-## Security
+## API surface (high level)
 
-See [`SECURITY.md`](./SECURITY.md) for the threat model and a deployment
-checklist. **Do not expose the dashboard on a public domain without
-`AUTH_ENABLED=true`, `SESSION_SECRET`, HTTPS, and a reverse proxy.**
+The API is mounted under `/api` and split by concern:
+
+- `connection`: connect/disconnect/status/server info/current operations
+- `databases`: database + collection lifecycle
+- `documents`: CRUD, list pagination, bulk delete, bulk update
+- `query`: explain and aggregate execution
+- `collection`: schema, validation, stats, watch stream
+- `indexes`: list/create/drop/toggle hidden
+- `transfer`: import/export/backup/GridFS download
+- `shell`: guarded shell command execution
+
+All major write paths are audited and pass through read-only and auth controls.
+
+## Development workflow
+
+```bash
+# run app
+npm start
+
+# run tests
+npm test
+
+# generate auth hash
+npm run hash-password
+```
+
+The test suite is Node's built-in runner and includes focused regression tests for security-hardening areas.
+
+## Reverse proxy and production checklist
+
+- Use HTTPS termination at proxy layer
+- Set `AUTH_ENABLED=true`
+- Set strong `SESSION_SECRET`
+- Keep `COOKIE_SECURE=true` in public deployments
+- Set `TRUST_PROXY` correctly for your topology
+- Prefer `MONGODB_URI` preset mode for fixed deployment targets
+- Consider `READ_ONLY=true` for investigation-only environments
+
+Start with `docs/reverse-proxy/README.md` and `SECURITY.md`.
 
 ## Project structure
 
-```
+```text
 .
-├── server.js              # Express entry — auth, helmet, rate limit, sessions
+├── server.js
 ├── src/
-│   ├── config.js          # env → typed config
-│   ├── middleware/auth.js # session gate, brute-force lockout
-│   ├── routes/
-│   │   ├── api.js         # JSON API (read-only enforcement, audit, write guards)
-│   │   ├── auth.js        # /login, /logout
-│   │   └── pages.js       # SSR pages
-│   ├── services/mongodb.js
-│   └── utils/
-│       ├── audit.js       # JSONL audit log of writes
-│       ├── bson.js
-│       ├── schema.js
-│       └── shellArg.js    # MQL arg parser (no eval)
-├── views/                 # EJS
-├── public/                # CSS + vanilla JS
-├── docs/reverse-proxy/    # Caddy + nginx + systemd examples
-├── scripts/hash-password.js
-├── Dockerfile
-├── docker-compose.yml
-└── .env.example
+│   ├── config.js
+│   ├── middleware/        # auth, csrf, validation, errors, request-id
+│   ├── routes/            # modular API + auth + pages
+│   ├── services/          # MongoDB client lifecycle
+│   └── utils/             # bson/audit/query-guards/shell/csv/change-stream
+├── public/                # frontend JS/CSS (no build system)
+├── views/                 # EJS templates
+├── tests/                 # security and behavior regression tests
+├── docs/                  # roadmap + reverse proxy docs
+└── scripts/               # tooling (password hash generation)
 ```
 
 ## License
