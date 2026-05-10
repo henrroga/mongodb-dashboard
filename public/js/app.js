@@ -4684,6 +4684,68 @@ function highlightTerm(escaped, term) {
   return escaped.replace(new RegExp(safeTerm, "gi"), (m) => `<mark class="cell-match">${m}</mark>`);
 }
 
+// Heuristic: turn `userId` / `user_id` / `authorIds` into the candidate
+// collection name (`users`, `authors`, …). Returns null when the field
+// doesn't look like a relationship reference.
+function inferRelationshipCollection(field) {
+  if (!field || field === '_id') return null;
+  let stem = field;
+  // Strip the most common suffixes.
+  const suffixes = ['_ids', '_id', 'Ids', 'Id'];
+  let stripped = false;
+  for (const s of suffixes) {
+    if (stem.endsWith(s) && stem.length > s.length) {
+      stem = stem.slice(0, -s.length);
+      stripped = true;
+      break;
+    }
+  }
+  if (!stripped) return null;
+
+  // Pluralize the stem, lowercased. Handles a small set of irregulars
+  // and the standard rules.
+  const irregulars = {
+    person: 'people', child: 'children', man: 'men', woman: 'women',
+    foot: 'feet', tooth: 'teeth', mouse: 'mice', goose: 'geese',
+  };
+  const lc = stem.toLowerCase();
+  if (irregulars[lc]) return irregulars[lc];
+  if (/(s|x|z|ch|sh)$/i.test(lc)) return lc + 'es';
+  if (/[^aeiou]y$/i.test(lc)) return lc.slice(0, -1) + 'ies';
+  if (/(?:fe|f)$/i.test(lc) && !/^(roof|chief|belief|chef)$/i.test(lc)) {
+    return lc.replace(/fe?$/, 'ves');
+  }
+  return lc + 's';
+}
+
+function loadedCollectionNames() {
+  return [...document.querySelectorAll('#collectionList .collection-item-wrapper')]
+    .map((el) => el.dataset.collection)
+    .filter(Boolean);
+}
+
+// Render an ObjectId-shaped value (`{ $oid }` or a 24-char hex string) as
+// a relationship chip linking to the inferred collection's detail page,
+// when (a) the field name looks like a FK reference and (b) the inferred
+// collection actually exists in the current sidebar.
+function renderRelationship(field, oid) {
+  const candidate = inferRelationshipCollection(field);
+  if (!candidate || !currentDbName) return null;
+  const collections = loadedCollectionNames();
+  // Tolerate exact match plus simple casing variants.
+  const target = collections.find((c) => c.toLowerCase() === candidate.toLowerCase());
+  if (!target) return null;
+  const safeOid = escapeHtml(oid);
+  const url = `/browse/${encodeURIComponent(currentDbName)}/${encodeURIComponent(target)}/${encodeURIComponent(oid)}`;
+  return `<a class="cell-rel" href="${url}" title="${escapeHtml(field)} → ${escapeHtml(target)}.${oid}" data-rel-collection="${escapeHtml(target)}">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+      </svg>
+      <span class="mono">${highlightTerm(safeOid, currentSearchTerm)}</span>
+    </a>`;
+}
+
 function formatCellValue(value, field) {
   if (value === null || value === undefined) {
     return '<span class="cell-null">null</span>';
@@ -4695,7 +4757,11 @@ function formatCellValue(value, field) {
   }
 
   if (typeof value === 'object') {
-    if (value.$oid) return `<span class="cell-id">${highlightTerm(escapeHtml(value.$oid), currentSearchTerm)}</span>`;
+    if (value.$oid) {
+      const rel = renderRelationship(field, value.$oid);
+      if (rel) return rel;
+      return `<span class="cell-id">${highlightTerm(escapeHtml(value.$oid), currentSearchTerm)}</span>`;
+    }
     if (value.$date) return `<span class="cell-value">${escapeHtml(new Date(value.$date).toLocaleString())}</span>`;
     const jsonStr = JSON.stringify(value, null, 2);
     const escapedJson = highlightTerm(escapeHtml(jsonStr), currentSearchTerm);
@@ -4706,6 +4772,11 @@ function formatCellValue(value, field) {
   }
 
   if (typeof value === 'string') {
+    // Stringly-typed ObjectId references (some apps store FKs as strings).
+    if (/^[a-f0-9]{24}$/i.test(value)) {
+      const rel = renderRelationship(field, value);
+      if (rel) return rel;
+    }
     const maxLen = 50;
     const display = value.length > maxLen ? value.substring(0, maxLen) + '...' : value;
     return `<span class="cell-value">${highlightTerm(escapeHtml(display), currentSearchTerm)}</span>`;
