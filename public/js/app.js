@@ -3157,6 +3157,11 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
       tableBody.appendChild(row);
     });
 
+    // Apply any active quick filters to newly appended rows.
+    if (Object.values(quickFilters).some((v) => v && v.trim())) {
+      applyQuickFilters();
+    }
+
     // Render alternative views
     renderCurrentView(dbName, collectionName);
 
@@ -3286,6 +3291,84 @@ function saveColumnVisibility(dbName, collectionName, visibleFields) {
   }
 }
 
+// ─── Quick filter row (per-column type-to-filter, client side) ────────────────
+
+const quickFilters = {}; // { field: 'substring' }
+
+function renderQuickFilterRow() {
+  const row = document.getElementById('tableQuickFilterRow');
+  if (!row) return;
+  if (!tableFields.length) { row.innerHTML = ''; return; }
+  const blank = '<th class="th-select"></th>';
+  const cells = tableFields
+    .map((f) => {
+      const id = `qf-${sanitizeId(f)}`;
+      const v = quickFilters[f] || '';
+      return `<th class="quick-filter-cell">
+        <input type="search" class="quick-filter-input" id="${id}" data-field="${escapeHtml(f)}" placeholder="filter…" value="${escapeHtml(v)}" autocomplete="off" spellcheck="false">
+      </th>`;
+    })
+    .join('');
+  row.innerHTML = blank + cells + '<th></th><th class="quick-filter-clear-cell">' +
+    (Object.keys(quickFilters).some((k) => quickFilters[k])
+      ? `<button class="btn btn-sm btn-ghost quick-filter-clear-all" title="Clear all column filters">Clear</button>`
+      : '') +
+    '</th>';
+
+  row.querySelectorAll('.quick-filter-input').forEach((input) => {
+    let timer = null;
+    input.addEventListener('input', () => {
+      const field = input.dataset.field;
+      quickFilters[field] = input.value;
+      if (!input.value) delete quickFilters[field];
+      clearTimeout(timer);
+      timer = setTimeout(applyQuickFilters, 120);
+    });
+  });
+  row.querySelector('.quick-filter-clear-all')?.addEventListener('click', () => {
+    Object.keys(quickFilters).forEach((k) => delete quickFilters[k]);
+    applyQuickFilters();
+    renderQuickFilterRow();
+  });
+}
+
+function quickFilterMatches(value, needle) {
+  if (!needle) return true;
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'object') {
+    try { return JSON.stringify(value).toLowerCase().includes(needle.toLowerCase()); }
+    catch { return false; }
+  }
+  return String(value).toLowerCase().includes(needle.toLowerCase());
+}
+
+function applyQuickFilters() {
+  const tbody = document.getElementById('tableBody');
+  if (!tbody) return;
+  const activeFilters = Object.entries(quickFilters).filter(([, v]) => v && v.trim());
+  let visible = 0;
+  let hidden = 0;
+  tbody.querySelectorAll('tr').forEach((tr) => {
+    if (tr.classList.contains('loading-row') || tr.classList.contains('skeleton-row')) return;
+    const docId = tr.dataset.docId;
+    if (!docId) return;
+    const doc = allDocuments.find((d) => String(d._id?.$oid || d._id) === docId);
+    if (!doc) return;
+    const passes = activeFilters.every(([f, v]) => quickFilterMatches(doc[f], v));
+    tr.style.display = passes ? '' : 'none';
+    if (passes) visible++; else hidden++;
+  });
+  // Reflect filtered count in pagination info if present.
+  const info = document.getElementById('paginationInfo');
+  if (info && hidden > 0) {
+    info.dataset.originalText = info.dataset.originalText || info.textContent;
+    info.textContent = `${visible} of ${allDocuments.length} match (${hidden} hidden by column filters)`;
+  } else if (info && info.dataset.originalText) {
+    info.textContent = info.dataset.originalText;
+    delete info.dataset.originalText;
+  }
+}
+
 function renderTableHeader() {
   const tableHeader = document.getElementById('tableHeader');
   if (!tableHeader) return;
@@ -3334,6 +3417,8 @@ function renderTableHeader() {
   
   const selectAll = `<th class="th-select"><input type="checkbox" id="selectAllDocs" title="Select all"></th>`;
   tableHeader.innerHTML = selectAll + headerCells + '<th>Extra Fields</th><th>Actions</th>';
+
+  renderQuickFilterRow();
 
   document.getElementById('selectAllDocs')?.addEventListener('change', (e) => {
     const checked = e.target.checked;

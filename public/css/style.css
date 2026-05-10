@@ -5133,3 +5133,48 @@ textarea.inline-edit-input {
 .theme-dropdown {
   min-width: 180px;
 }
+
+/* ─── Quick filter row ───────────────────────────────────────────────────── */
+
+.quick-filter-row th {
+  padding: 4px 6px !important;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+}
+
+.quick-filter-input {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.quick-filter-input::placeholder {
+  color: var(--text-muted);
+  font-family: inherit;
+}
+
+.quick-filter-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(56, 139, 253, 0.18);
+}
+
+.quick-filter-input::-webkit-search-cancel-button {
+  filter: opacity(0.5);
+  cursor: pointer;
+}
+
+.quick-filter-clear-cell {
+  text-align: right;
+}
+.quick-filter-clear-all {
+  font-size: 10.5px !important;
+  padding: 2px 8px !important;
+}
