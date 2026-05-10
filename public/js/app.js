@@ -4027,13 +4027,37 @@ function updateBulkBar() {
   `;
 
   document.getElementById('bulkDeleteBtn')?.addEventListener('click', async () => {
-    const ok = await ui.confirm({
-      title: 'Delete selected documents?',
-      message: `This will permanently delete ${selectedDocIds.size} document${selectedDocIds.size !== 1 ? 's' : ''}. This action cannot be undone.`,
+    const count = selectedDocIds.size;
+    // Quick path for small selections — single confirm.
+    if (count <= 10) {
+      const ok = await ui.confirm({
+        title: 'Delete selected documents?',
+        message: `This will permanently delete ${count} document${count !== 1 ? 's' : ''}. This action cannot be undone.`,
+        confirmText: 'Delete',
+        danger: true,
+      });
+      if (ok) bulkDelete();
+      return;
+    }
+    // Guardrail for larger selections: type the exact count to unlock.
+    const expected = String(count);
+    const typed = await ui.prompt({
+      title: `Delete ${count} documents?`,
+      message: `This is a large bulk delete and cannot be undone. Type "${expected}" to confirm — anything else cancels.`,
+      placeholder: expected,
       confirmText: 'Delete',
-      danger: true,
+      validate: (v) => {
+        const value = (v && (v.value !== undefined ? v.value : v)) || '';
+        if (String(value).trim() !== expected) {
+          return `Type the exact number (${expected}) to confirm.`;
+        }
+        return null;
+      },
     });
-    if (ok) bulkDelete();
+    if (typed === null) return;
+    if (String(typed).trim() === expected) {
+      bulkDelete();
+    }
   });
 
   document.getElementById('bulkClearBtn')?.addEventListener('click', () => {
