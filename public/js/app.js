@@ -595,6 +595,13 @@ function openRowContextMenu(e, doc, dbName, collectionName) {
       },
     },
     {
+      id: 'use-as-template',
+      label: 'New from this as template',
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>',
+      disabled: isReadOnly(),
+      action: () => openDocModalFromTemplate(dbName, collectionName, doc),
+    },
+    {
       id: 'delete',
       label: 'Delete document…',
       danger: true,
@@ -2917,10 +2924,27 @@ async function initBrowser(dbName, collectionName) {
     loadDocuments(dbName, collectionName);
   });
 
-  // Add document button
-  document.getElementById('addDocBtn')?.addEventListener('click', () => {
-    openDocModal(dbName, collectionName, null);
-  });
+  // Add document button (split: main action + templates dropdown)
+  const addDocBtn = document.getElementById('addDocBtn');
+  if (addDocBtn) {
+    addDocBtn.addEventListener('click', () => {
+      openDocModal(dbName, collectionName, null);
+    });
+    // Inject a small caret button next to it for "from template" picker.
+    if (!document.getElementById('addDocFromTemplateBtn')) {
+      const caret = document.createElement('button');
+      caret.id = 'addDocFromTemplateBtn';
+      caret.className = 'btn btn-primary btn-caret';
+      caret.title = 'New document from template…';
+      caret.setAttribute('aria-label', 'Pick a template');
+      caret.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>';
+      addDocBtn.insertAdjacentElement('afterend', caret);
+      caret.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openTemplatePickerMenu(caret, dbName, collectionName);
+      });
+    }
+  }
 
   // Columns button
   document.getElementById('columnsBtn')?.addEventListener('click', () => {
@@ -4193,6 +4217,56 @@ function setupModalHandlers() {
     document.getElementById('deleteModalClose')?.addEventListener('click', () => deleteModal.style.display = 'none');
     document.getElementById('deleteCancel')?.addEventListener('click', () => deleteModal.style.display = 'none');
   }
+}
+
+function openTemplatePickerMenu(anchor, dbName, collectionName) {
+  if (!allDocuments.length) {
+    showToast('Load some documents first to use them as templates', 'info', 2400);
+    return;
+  }
+  const rect = anchor.getBoundingClientRect();
+  const x = rect.right;
+  const y = rect.bottom + 4;
+  const items = allDocuments.slice(0, 12).map((doc) => {
+    const id = String(doc._id?.$oid || doc._id || '').slice(0, 16);
+    const fields = Object.keys(doc).filter((k) => k !== '_id').slice(0, 2).join(', ');
+    return {
+      id: 'tpl-' + id,
+      label: id || '(unknown)',
+      shortcut: fields,
+      action: () => openDocModalFromTemplate(dbName, collectionName, doc),
+      icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+    };
+  });
+  showContextMenu(x - 280, y, [
+    { id: 'header', label: 'Use a loaded document as a template', disabled: true },
+    { divider: true },
+    ...items,
+  ]);
+}
+
+// Open the new-document modal pre-filled with another doc's contents
+// (as a template). _id is stripped so the server assigns a fresh one.
+function openDocModalFromTemplate(dbName, collectionName, sourceDoc) {
+  if (isReadOnly()) {
+    showToast('Read-only mode — toggle off to insert.', 'warning');
+    return;
+  }
+  const clone = JSON.parse(JSON.stringify(sourceDoc));
+  delete clone._id;
+  // Open the regular new-doc modal then overwrite the editor body so the
+  // schema-derived form is bypassed in favor of the template JSON.
+  openDocModal(dbName, collectionName, null).then(() => {
+    const formContainer = document.getElementById('docFormContainer');
+    const formToggle = document.getElementById('formToggle');
+    if (formContainer) formContainer.style.display = 'none';
+    if (formToggle) formToggle.style.display = 'none';
+    const wrap = cmEditors['docEditor']?.getWrapperElement();
+    if (wrap) wrap.style.display = '';
+    setEditorValue('docEditor', JSON.stringify(clone, null, 2));
+    useFormMode = false;
+    showToast('Pre-filled from template — edit and save', 'info', 2200);
+  });
 }
 
 async function openDocModal(dbName, collectionName, doc) {

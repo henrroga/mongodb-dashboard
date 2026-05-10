@@ -5178,3 +5178,23 @@ textarea.inline-edit-input {
   font-size: 10.5px !important;
   padding: 2px 8px !important;
 }
+
+/* ─── Add-doc split caret button ───────────────────────────────────────────── */
+
+#addDocBtn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.btn-caret {
+  padding: 8px 8px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: 0;
+}
+
+[data-theme="light"] #addDocBtn,
+[data-theme="solarized-light"] #addDocBtn {
+  border-right-color: rgba(0, 0, 0, 0.18);
+}
