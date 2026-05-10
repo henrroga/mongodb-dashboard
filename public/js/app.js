@@ -1330,47 +1330,77 @@ function initKeyboardShortcuts() {
   });
 }
 
+// Build the shortcuts modal body once. Pure HTML — the ui-modal system
+// handles open/close, Esc, focus, and backdrop click.
+function shortcutsModalBody() {
+  const mod = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
+  return `
+    <div class="shortcuts-body">
+      <div class="shortcut-group">
+        <h4>General</h4>
+        <div class="shortcut-row"><kbd>?</kbd><span>Show shortcuts</span></div>
+        <div class="shortcut-row"><kbd>Esc</kbd><span>Close modal / panel</span></div>
+        <div class="shortcut-row"><kbd>${mod}+K</kbd><span>Command palette</span></div>
+        <div class="shortcut-row"><kbd>R</kbd><span>Refresh documents</span></div>
+      </div>
+      <div class="shortcut-group">
+        <h4>Documents</h4>
+        <div class="shortcut-row"><kbd>${mod}+⏎</kbd><span>Run query</span></div>
+        <div class="shortcut-row"><kbd>${mod}+⇧+N</kbd><span>New document</span></div>
+        <div class="shortcut-row"><kbd>${mod}+1</kbd>–<kbd>9</kbd><span>Recall saved query slot 1–9</span></div>
+        <div class="shortcut-row"><kbd>F</kbd><span>Focus filter bar</span></div>
+      </div>
+      <div class="shortcut-group">
+        <h4>Navigation</h4>
+        <div class="shortcut-row"><kbd>1</kbd>–<kbd>5</kbd><span>Switch tabs</span></div>
+        <div class="shortcut-row"><kbd>${mod}+/</kbd><span>Toggle shell</span></div>
+        <div class="shortcut-row"><kbd>J</kbd><span>Next recent document (on doc page)</span></div>
+        <div class="shortcut-row"><kbd>K</kbd><span>Previous recent document</span></div>
+      </div>
+    </div>
+  `;
+}
+
 function toggleShortcutsModal() {
-  let modal = document.getElementById('shortcutsModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'shortcutsModal';
-    modal.className = 'modal';
-    modal.style.display = 'none';
-    modal.innerHTML = `
-      <div class="modal-backdrop" onclick="document.getElementById('shortcutsModal').style.display='none'"></div>
-      <div class="modal-content modal-sm">
-        <div class="modal-header">
-          <h3>Keyboard Shortcuts</h3>
-          <button class="modal-close" onclick="document.getElementById('shortcutsModal').style.display='none'">&times;</button>
-        </div>
-        <div class="modal-body shortcuts-body">
-          <div class="shortcut-group">
-            <h4>General</h4>
-            <div class="shortcut-row"><kbd>?</kbd><span>Show shortcuts</span></div>
-            <div class="shortcut-row"><kbd>Esc</kbd><span>Close modal / panel</span></div>
-            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+K</kbd><span>Command palette</span></div>
-            <div class="shortcut-row"><kbd>R</kbd><span>Refresh documents</span></div>
-          </div>
-          <div class="shortcut-group">
-            <h4>Documents</h4>
-            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+⏎</kbd><span>Run query</span></div>
-            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+⇧+N</kbd><span>New document</span></div>
-            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+1</kbd>–<kbd>9</kbd><span>Recall saved query slot 1–9</span></div>
-            <div class="shortcut-row"><kbd>F</kbd><span>Focus filter bar</span></div>
-          </div>
-          <div class="shortcut-group">
-            <h4>Navigation</h4>
-            <div class="shortcut-row"><kbd>1</kbd>–<kbd>5</kbd><span>Switch tabs</span></div>
-            <div class="shortcut-row"><kbd>${navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+/</kbd><span>Toggle shell</span></div>
-            <div class="shortcut-row"><kbd>J</kbd><span>Next recent document (on doc page)</span></div>
-            <div class="shortcut-row"><kbd>K</kbd><span>Previous recent document</span></div>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
+  const existing = document.querySelector('.ui-modal-shortcuts');
+  if (existing) {
+    existing.classList.remove('ui-modal-open');
+    setTimeout(() => existing.remove(), 150);
+    return;
   }
-  modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+
+  // Build a ui-modal in the same shape as the rest of the modal system —
+  // backdrop, dialog, header, body, close. No actions footer needed.
+  const root = document.createElement('div');
+  root.className = 'ui-modal ui-modal-shortcuts';
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  root.setAttribute('aria-label', 'Keyboard shortcuts');
+  root.innerHTML = `
+    <div class="ui-modal-backdrop"></div>
+    <div class="ui-modal-dialog" tabindex="-1">
+      <header class="ui-modal-header">
+        <h3 class="ui-modal-title">Keyboard Shortcuts</h3>
+        <button class="ui-modal-close" aria-label="Close">&times;</button>
+      </header>
+      <div class="ui-modal-body">${shortcutsModalBody()}</div>
+    </div>
+  `;
+  document.body.appendChild(root);
+  // Force reflow so the open transition runs.
+  // eslint-disable-next-line no-unused-expressions
+  root.offsetWidth;
+  root.classList.add('ui-modal-open');
+
+  const close = () => {
+    root.classList.remove('ui-modal-open');
+    setTimeout(() => root.remove(), 150);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  root.querySelector('.ui-modal-backdrop').addEventListener('click', close);
+  root.querySelector('.ui-modal-close').addEventListener('click', close);
 }
 
 // ─── Command Palette ─────────────────────────────────────────────────────────
