@@ -5213,3 +5213,21 @@ textarea.inline-edit-input {
   vertical-align: middle;
   font-weight: 500;
 }
+
+/* ─── Sidebar sparklines ──────────────────────────────────────────────────── */
+
+.sidebar-sparkline-wrap {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  opacity: 0.85;
+  transition: opacity 120ms ease;
+}
+
+.collection-item:hover .sidebar-sparkline-wrap {
+  opacity: 1;
+}
+
+.sidebar-sparkline {
+  display: block;
+}

@@ -1411,6 +1411,76 @@ function executePaletteSelection() {
 // Initialize shortcuts on page load
 document.addEventListener('DOMContentLoaded', initKeyboardShortcuts);
 
+// ─── Doc-count history sparklines ────────────────────────────────────────────
+
+const COUNT_HISTORY_KEY = 'mongodb_dashboard_count_history';
+const MAX_HISTORY_PER_COLLECTION = 30;
+// Don't record more than once per 5 minutes per collection — avoids the noise
+// of polling/refresh inflating the series.
+const COUNT_HISTORY_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+function recordCollectionCount(dbName, collectionName, count) {
+  if (typeof count !== 'number') return;
+  let all;
+  try { all = JSON.parse(localStorage.getItem(COUNT_HISTORY_KEY) || '{}'); }
+  catch { all = {}; }
+  const key = `${dbName}/${collectionName}`;
+  const series = all[key] || [];
+  const last = series[series.length - 1];
+  const now = Date.now();
+  if (last && now - last.ts < COUNT_HISTORY_MIN_INTERVAL_MS) return;
+  series.push({ ts: now, count });
+  if (series.length > MAX_HISTORY_PER_COLLECTION) series.shift();
+  all[key] = series;
+  try { localStorage.setItem(COUNT_HISTORY_KEY, JSON.stringify(all)); } catch (_) {}
+}
+
+function getCollectionCountSeries(dbName, collectionName) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COUNT_HISTORY_KEY) || '{}');
+    return all[`${dbName}/${collectionName}`] || [];
+  } catch { return []; }
+}
+
+function renderSparkline(series, w = 56, h = 16) {
+  if (!series || series.length < 2) return '';
+  const counts = series.map((p) => p.count);
+  const min = Math.min(...counts);
+  const max = Math.max(...counts);
+  const range = max - min || 1;
+  const stepX = w / (series.length - 1);
+  const points = counts.map((c, i) => {
+    const x = +(i * stepX).toFixed(1);
+    const y = +(h - 1 - ((c - min) / range) * (h - 2)).toFixed(1);
+    return `${x},${y}`;
+  });
+  const trend = counts[counts.length - 1] - counts[0];
+  const stroke = trend > 0 ? 'var(--success, #3fb950)' : trend < 0 ? 'var(--danger, #f85149)' : 'var(--text-muted, #888)';
+  return `
+    <svg class="sidebar-sparkline" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+      <polyline fill="none" stroke="${stroke}" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" points="${points.join(' ')}"/>
+    </svg>`;
+}
+
+function decorateCollectionsWithSparklines(dbName) {
+  if (!dbName) return;
+  document.querySelectorAll('#collectionList .collection-item-wrapper').forEach((wrap) => {
+    const name = wrap.dataset.collection;
+    if (!name) return;
+    const link = wrap.querySelector('.collection-item');
+    if (!link || link.querySelector('.sidebar-sparkline')) return;
+    const series = getCollectionCountSeries(dbName, name);
+    if (series.length < 2) return;
+    const span = document.createElement('span');
+    span.className = 'sidebar-sparkline-wrap';
+    span.innerHTML = renderSparkline(series);
+    span.title = `${series[0].count.toLocaleString()} → ${series[series.length - 1].count.toLocaleString()} docs over last ${series.length} visits`;
+    const countEl = link.querySelector('.collection-doc-count');
+    if (countEl) countEl.before(span);
+    else link.appendChild(span);
+  });
+}
+
 // ─── Query input validation ───────────────────────────────────────────────────
 
 // Returns { message, line, column } or null when input is valid.
@@ -2687,6 +2757,8 @@ async function initBrowser(dbName, collectionName) {
     mountScratchpad(dbName, collectionName);
   }
 
+  decorateCollectionsWithSparklines(dbName);
+
   // Restore state from URL query parameters
   const urlParams = new URLSearchParams(window.location.search);
   currentSearchTerm = urlParams.get('search') || '';
@@ -3156,6 +3228,8 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
       docCount.textContent = `${formatCount(allDocuments.length)}${hasMore ? '+' : ''} of ${formatCount(totalCount)} documents`;
     } else {
       docCount.textContent = `${formatCount(totalCount)} documents`;
+      // Record only the unfiltered total so the sparkline reflects real growth.
+      recordCollectionCount(dbName, collectionName, totalCount);
     }
 
     // Determine table fields from documents
