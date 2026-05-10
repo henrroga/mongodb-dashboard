@@ -1284,6 +1284,90 @@ router.get("/:db/:collection/export", async (req, res) => {
   }
 });
 
+// Stream the entire collection as JSONL with a metadata header line.
+// Uses cursor.stream() so memory use stays bounded regardless of collection
+// size. The caller (browser) gets a download.
+router.get("/:db/:collection/backup", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, collection: colName } = req.params;
+    const { filter: filterParam, sort: sortParam } = req.query;
+
+    const db = client.db(dbName);
+    const collection = db.collection(colName);
+
+    let query = {};
+    if (filterParam) {
+      try { query = JSON.parse(filterParam); } catch (_) {}
+    }
+    let sort = {};
+    if (sortParam) {
+      try { sort = JSON.parse(sortParam); } catch (_) {}
+    }
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `${dbName}.${colName}.${stamp}.jsonl`;
+
+    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    // Best-effort metadata for the header line. Failures here don't block.
+    const meta = {
+      _meta: {
+        kind: "mongodb-dashboard-backup",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        db: dbName,
+        collection: colName,
+        filter: query,
+        sort,
+      },
+    };
+    try {
+      meta._meta.estimatedCount = await collection.estimatedDocumentCount();
+    } catch (_) {}
+    try {
+      meta._meta.indexes = await collection.indexes();
+    } catch (_) {}
+    try {
+      const cols = await db.listCollections({ name: colName }).toArray();
+      if (cols[0] && cols[0].options) {
+        meta._meta.collectionOptions = cols[0].options;
+      }
+    } catch (_) {}
+
+    res.write(JSON.stringify(meta) + "\n");
+
+    const cursor = collection.find(query).sort(sort);
+    let count = 0;
+    for await (const doc of cursor) {
+      try {
+        res.write(JSON.stringify(serializeDocument(doc)) + "\n");
+        count += 1;
+      } catch (e) {
+        // Skip un-serializable docs but keep streaming.
+        continue;
+      }
+    }
+    audit.log({
+      event: "backup",
+      db: dbName,
+      collection: colName,
+      count,
+      ip: req.ip,
+    });
+    res.end();
+  } catch (err) {
+    if (!res.headersSent) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.end();
+  }
+});
+
 // Collection stats
 router.get("/:db/:collection/stats", async (req, res) => {
   try {

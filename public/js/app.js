@@ -1423,6 +1423,18 @@ function getCommandActions() {
     { label: 'Run Query', category: 'Actions', action: () => document.getElementById('queryRunBtn')?.click() },
     { label: 'Import Documents', category: 'Actions', action: () => document.getElementById('importBtn')?.click() },
     { label: 'Export Documents', category: 'Actions', action: () => document.getElementById('exportBtn')?.click() },
+    {
+      label: 'Backup Collection (full JSONL)',
+      category: 'Actions',
+      action: () => {
+        if (!currentDbName || !currentCollectionName) {
+          showToast('Open a collection first', 'info');
+          return;
+        }
+        document.getElementById('exportBtn')?.click();
+        setTimeout(() => document.getElementById('exportFullBackup')?.focus(), 100);
+      },
+    },
     { label: 'Toggle Shell', category: 'Actions', action: () => {
       const panel = document.getElementById('shellPanel');
       if (panel?.classList.contains('shell-panel-closed')) document.getElementById('shellOpenBtn')?.click();
@@ -8101,6 +8113,17 @@ function initImportExport(dbName, collectionName) {
       if (currentFilter) params.set('filter', currentFilter);
       if (currentSort) params.set('sort', currentSort);
       window.location.href = `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/export?${params}`;
+      closeExport();
+    });
+
+    document.getElementById('exportFullBackup')?.addEventListener('click', () => {
+      const params = new URLSearchParams();
+      if (currentFilter) params.set('filter', currentFilter);
+      if (currentSort) params.set('sort', currentSort);
+      const qs = params.toString();
+      const url = `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/backup${qs ? '?' + qs : ''}`;
+      showToast('Backup streaming — your browser will download as soon as data flows in.', 'info', 3500);
+      window.location.href = url;
       closeExport();
     });
   }
