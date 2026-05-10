@@ -87,3 +87,9 @@ This document tracks the audit findings and the planned roadmap for improving th
 3. Hardened CSV import headers (reject empty or duplicate column names) and BOM handling.
 4. Added import size guardrails and document-shape validation.
 5. Added CSV formula-injection mitigation for exported cells that start with `=`, `+`, `-`, or `@`.
+
+### Focus Audit: Pagination & Query Performance Boundaries (completed)
+1. Added query-shape guardrails to block dangerous operators (`$where`, `$function`, `$accumulator`).
+2. Added max skip clamp to reduce accidental deep-offset scans.
+3. Added sort/projection validation with field-count and value constraints.
+4. Added targeted regression tests for query guard behavior.

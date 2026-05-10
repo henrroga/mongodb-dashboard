@@ -23,6 +23,12 @@ const {
   readJsonQueryParam,
   normalizePositiveInt,
 } = require("../../middleware/validate");
+const {
+  assertSafeMongoQueryShape,
+  normalizeSkip,
+  validateSortObject,
+  validateProjectionObject,
+} = require("../../utils/queryGuard");
 
 // List documents (paginated, with filter / search / sort / projection /
 // array-filters and either cursor- or offset-based pagination).
@@ -54,6 +60,7 @@ router.get("/:db/:collection", async (req, res) => {
     if (sortParam) {
       const parsedSort = readJsonQueryParam(req, res, "sort", null);
       if (parsedSort === null) return;
+      validateSortObject(parsedSort);
       sort = parsedSort;
     }
 
@@ -61,16 +68,18 @@ router.get("/:db/:collection", async (req, res) => {
     if (projectionParam) {
       const parsedProjection = readJsonQueryParam(req, res, "projection", null);
       if (parsedProjection === null) return;
+      validateProjectionObject(parsedProjection);
       projection = parsedProjection;
     }
 
-    const skipOffset = Math.max(0, parseInt(skipParam, 10) || 0);
+    const skipOffset = normalizeSkip(skipParam);
     const useOffsetPagination = hasCustomSort || skipOffset > 0;
 
     let query = {};
     if (filter) {
       const parsedFilter = readJsonQueryParam(req, res, "filter", null);
       if (parsedFilter === null) return;
+      assertSafeMongoQueryShape(parsedFilter);
       query = parsedFilter;
     }
 
@@ -216,6 +225,11 @@ router.get("/:db/:collection", async (req, res) => {
       paginationMode: useOffsetPagination ? "offset" : "cursor",
     });
   } catch (err) {
+    if (
+      /not allowed|must be|too deeply nested|exceeds/.test(err.message || "")
+    ) {
+      return res.status(400).json({ error: err.message });
+    }
     res.status(500).json({ error: err.message });
   }
 });
