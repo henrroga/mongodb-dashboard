@@ -1,4 +1,36 @@
-/* MongoDB Dashboard - Fast, minimal dark theme */
+/* MongoDB Dashboard — stylesheet
+ *
+ * Token system (defined in :root and overridden per [data-theme="…"]):
+ *   --bg-primary / --bg-secondary / --bg-tertiary / --bg-hover
+ *   --text-primary / --text-secondary / --text-muted
+ *   --accent / --accent-hover (aliased: --accent-color)
+ *   --border (aliased: --border-color)
+ *   --success / --warning / --danger
+ *   --shadow / --radius / --radius-lg / --transition
+ *
+ * Layout sections (search this file with /^\/\* ─/ for the full list):
+ *   :root, [data-theme=…]   → token tables (light/dark/system + dracula,
+ *                              nord, solarized-light/dark)
+ *   buttons, header, nav, dropdowns
+ *   sidebar (collections, favorites, search, sparklines)
+ *   table view (header, rows, cells, quick-filter row, skeletons)
+ *   tabs (collection tabs, open-tabs bar, drag indicators)
+ *   query bar (filter/projection/sort + inline errors)
+ *   modals (legacy .modal + new .ui-modal)
+ *   feature panels: scratchpad, change stream, schema, indexes,
+ *                   aggregation, stats, diff, SQL-to-MQL
+ *   global widgets: toast, context menu, onboarding, what's-new,
+ *                   command palette
+ *
+ * Conventions:
+ *   - Always use the design tokens above; never hardcode hex unless
+ *     the value is intentionally invariant across themes (e.g. white
+ *     on .btn-primary).
+ *   - --border-color and --accent-color are aliases — either spelling
+ *     is acceptable.
+ *   - One pattern, one home: don't introduce parallel close-button
+ *     selectors. Reuse .ui-modal-close where possible.
+ */
 
 :root {
   --bg-primary: #0d1117;

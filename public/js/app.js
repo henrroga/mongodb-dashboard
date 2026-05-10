@@ -1,4 +1,49 @@
-// MongoDB Dashboard - Client-side JavaScript
+// MongoDB Dashboard — client-side JavaScript
+//
+// This file is loaded once on every authenticated page. It is a single
+// concatenated bundle by design — no build step, no module loader. To find
+// a feature, search for its section marker (// ─── …).
+//
+// Section index (run: `grep -nE "^// ─" public/js/app.js`):
+//
+//   Editors / formatting
+//     CodeMirror Editor Manager, Toast Notifications, UI Modals
+//     Skeleton loaders + polished empty states, Context menu
+//     Copy-as-code (mongosh / Node / Python / Java / Go)
+//
+//   Page-level controllers (called from EJS view scripts)
+//     initConnectPage, initBrowser, initDocumentPage, initDatabasesPage
+//     initPerformancePage, initThemeToggle
+//
+//   Feature modules
+//     Keyboard Shortcuts, Command Palette, Onboarding, What's New
+//     Recently viewed documents (with pin support), Open Tabs Bar
+//     Shell Panel, Connection Builder, Saved Queries / History
+//     Sparklines (sidebar count history), Scratchpad, Quick filter row
+//     Query input validation, Inline Field Editing, Bulk Operations
+//     Duplicate Document, View Mode Switching (table/list/json)
+//     Diff Viewer, SQL→MQL, Schema Validation, Explain Plan
+//     Schema Analysis, Indexes, Aggregation Pipeline Builder
+//     Import / Export, Database & Collection Management
+//
+// Globals shared across modules (kept lean on purpose):
+//   currentDbName, currentCollectionName, allDocuments, tableFields
+//   currentFilter, currentProjection, currentSort, currentLimit
+//   currentCursor, currentNextSkip, selectedDocIds, cmEditors
+//
+// LocalStorage keys (all prefixed `mongodb_dashboard_`):
+//   _connections, _active_connection, _theme, _readonly, _wrap_cells
+//   _open_tabs, _recent_docs, _scratchpad, _count_history
+//   _onboarded_v1, _seen_version, mdb_code_lang
+//   _queries_<db>_<coll>, _queryhistory_<db>_<coll>, _pipelines_<db>_<coll>
+//
+// Conventions:
+//   - showToast(message, type, duration) for non-blocking notices.
+//   - ui.confirm/prompt/alert (Promise-returning) for blocking dialogs;
+//     never use native confirm/prompt/alert.
+//   - escapeHtml() before any raw user-controlled string into innerHTML.
+//   - All write operations check isReadOnly() client-side and the server
+//     enforces it independently via READ_ONLY env.
 
 // ─── CodeMirror Editor Manager ──────────────────────────────────────────────
 
