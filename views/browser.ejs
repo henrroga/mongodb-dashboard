@@ -53,7 +53,7 @@
       <div class="header-actions">
         <span id="serverVersionBadge" class="server-version-badge" style="display:none"></span>
         <div class="theme-toggle">
-          <button class="theme-toggle-btn" title="Theme">
+          <button class="theme-toggle-btn" title="Theme" aria-label="Theme">
             <svg
               width="16"
               height="16"
@@ -61,7 +61,7 @@
               fill="none"
               stroke="currentColor"
               stroke-width="2"
-            >
+             aria-hidden="true">
               <path
                 d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
               />
@@ -147,8 +147,8 @@
             <h2>Collections</h2>
             <div style="display:flex;align-items:center;gap:6px;">
               <span class="collection-count"><%= collections.length %></span>
-              <button id="createCollectionBtn" class="btn btn-sm btn-ghost sidebar-create-btn" title="Create Collection">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <button id="createCollectionBtn" class="btn btn-sm btn-ghost sidebar-create-btn" title="Create Collection" aria-label="Create Collection">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path d="M12 5v14M5 12h14"/>
                 </svg>
               </button>
@@ -304,7 +304,7 @@
                   class="search-clear"
                   style="display: none"
                   title="Clear search"
-                >
+                 aria-label="Clear search">
                   <svg
                     width="14"
                     height="14"
@@ -312,7 +312,7 @@
                     fill="none"
                     stroke="currentColor"
                     stroke-width="2"
-                  >
+                   aria-hidden="true">
                     <path d="M18 6L6 18M6 6l12 12" />
                   </svg>
                 </button>
@@ -320,32 +320,32 @@
             </div>
             <div class="content-actions">
               <div class="view-mode-toggle" id="viewModeToggle">
-                <button class="view-mode-btn active" data-view="table" title="Table View">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="view-mode-btn active" data-view="table" title="Table View" aria-label="Table View">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/>
                   </svg>
                 </button>
-                <button class="view-mode-btn" data-view="list" title="List View">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="view-mode-btn" data-view="list" title="List View" aria-label="List View">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
                     <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
                   </svg>
                 </button>
-                <button class="view-mode-btn" data-view="json" title="JSON View">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="view-mode-btn" data-view="json" title="JSON View" aria-label="JSON View">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
                   </svg>
                 </button>
               </div>
-              <button id="importBtn" class="btn btn-ghost" title="Import Documents">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <button id="importBtn" class="btn btn-ghost" title="Import Documents" aria-label="Import Documents">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                   <polyline points="17 8 12 3 7 8"/>
                   <line x1="12" y1="3" x2="12" y2="15"/>
                 </svg>
                 Import
               </button>
-              <button id="exportBtn" class="btn btn-ghost" title="Export Documents">
+              <button id="exportBtn" class="btn btn-ghost" title="Export Documents" aria-label="Export">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/>
@@ -370,13 +370,13 @@
                 </svg>
                 Columns
               </button>
-              <button id="wrapToggle" class="btn btn-ghost btn-sm" title="Toggle text wrapping">
+              <button id="wrapToggle" class="btn btn-ghost btn-sm" title="Toggle text wrapping" aria-label="Toggle text wrapping">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M3 12h15a3 3 0 010 6h-4l2-2m-2 2l2 2M3 18h7"/>
                 </svg>
               </button>
               <button id="scratchpadBtn" class="btn btn-ghost btn-sm" title="Scratchpad notes for this collection" aria-label="Open scratchpad">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>
                   <line x1="9" y1="13" x2="15" y2="13"/>
@@ -384,8 +384,8 @@
                 </svg>
               </button>
               <div class="auto-refresh-wrap">
-                <button id="autoRefreshToggle" class="btn btn-ghost btn-sm" title="Auto-refresh">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button id="autoRefreshToggle" class="btn btn-ghost btn-sm" title="Auto-refresh" aria-label="Auto-refresh">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
                   </svg>
                 </button>
@@ -397,7 +397,7 @@
                   <button class="auto-refresh-option" data-interval="60">60s</button>
                 </div>
               </div>
-              <button id="refreshBtn" class="btn btn-ghost" title="Refresh">
+              <button id="refreshBtn" class="btn btn-ghost" title="Refresh" aria-label="Refresh">
                 <svg
                   width="16"
                   height="16"
@@ -405,14 +405,14 @@
                   fill="none"
                   stroke="currentColor"
                   stroke-width="2"
-                >
+                 aria-hidden="true">
                   <path d="M23 4v6h-6M1 20v-6h6" />
                   <path
                     d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
                   />
                 </svg>
               </button>
-              <button id="addDocBtn" class="btn btn-primary">
+              <button id="addDocBtn" class="btn btn-primary" aria-label="Add document">
                 <svg
                   width="16"
                   height="16"
@@ -443,14 +443,14 @@
                 />
               </div>
               <div class="query-bar-actions">
-                <button id="queryOptionsToggle" class="btn btn-ghost btn-sm query-options-btn">
+                <button id="queryOptionsToggle" class="btn btn-ghost btn-sm query-options-btn" aria-label="Toggle query options">
                   Options
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M6 9l6 6 6-6"/>
                   </svg>
                 </button>
                 <div style="position:relative;">
-                  <button id="savedQueriesBtn" class="btn btn-ghost btn-sm">
+                  <button id="savedQueriesBtn" class="btn btn-ghost btn-sm" aria-label="Saved queries">
                     Saved
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M6 9l6 6 6-6"/>
@@ -458,22 +458,22 @@
                   </button>
                   <div id="savedQueriesDropdown" class="saved-queries-dropdown" style="display:none;"></div>
                 </div>
-                <button id="queryResetBtn" class="btn btn-ghost btn-sm">Reset</button>
-                <button id="queryCopyCodeBtn" class="btn btn-ghost btn-sm" title="Copy this query as driver code">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button id="queryResetBtn" class="btn btn-ghost btn-sm" aria-label="Reset query">Reset</button>
+                <button id="queryCopyCodeBtn" class="btn btn-ghost btn-sm" title="Copy this query as driver code" aria-label="Copy this query as driver code">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <polyline points="16 18 22 12 16 6"/>
                     <polyline points="8 6 2 12 8 18"/>
                   </svg>
                   Copy as code
                 </button>
-                <button id="queryExplainBtn" class="btn btn-ghost btn-sm" title="Explain query plan">
+                <button id="queryExplainBtn" class="btn btn-ghost btn-sm" title="Explain query plan" aria-label="Explain query">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M12 16v-4M12 8h.01"/>
                   </svg>
                   Explain
                 </button>
-                <button id="queryRunBtn" class="btn btn-primary btn-sm">
+                <button id="queryRunBtn" class="btn btn-primary btn-sm" aria-label="Run query">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                   </svg>
@@ -512,7 +512,7 @@
                 <span class="query-label">Skip</span>
                 <input type="number" id="querySkip" class="query-input" value="0" min="0" />
               </div>
-              <button id="saveQueryBtn" class="btn btn-ghost btn-sm" title="Save current query">
+              <button id="saveQueryBtn" class="btn btn-ghost btn-sm" title="Save current query" aria-label="Save query">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
                   <polyline points="17 21 17 13 7 13 7 21"/>
@@ -548,7 +548,7 @@
           </div>
 
           <div class="pagination" id="pagination" style="display: none">
-            <button id="loadMoreBtn" class="btn btn-ghost">Load More</button>
+            <button id="loadMoreBtn" class="btn btn-ghost" aria-label="Load more">Load More</button>
             <span id="paginationInfo" class="pagination-info"></span>
             <div class="pagination-jump" id="paginationJump" style="display:none">
               <label>Skip to:</label>
