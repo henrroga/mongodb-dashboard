@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Syntax-check server-side JS
+        run: |
+          set -euo pipefail
+          # node --check ignores the file's runtime — perfect for parse-only
+          # validation. We sweep src/ + scripts/ + the entry point and the
+          # giant client bundle.
+          find src scripts -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check server.js
+          node --check public/js/app.js
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Verify no `console.error` regressions on cold boot
+        run: |
+          set -euo pipefail
+          # Boot with fake env, hit /healthz, ensure no startup errors.
+          PORT=4123 AUTH_ENABLED=false node server.js > /tmp/server.log 2>&1 &
+          PID=$!
+          sleep 3
+          curl -fsS http://localhost:4123/healthz
+          kill $PID || true
+          if grep -E '^(Error|TypeError|ReferenceError):' /tmp/server.log; then
+            echo '✗ Unexpected boot errors:'
+            cat /tmp/server.log
+            exit 1
+          fi
+
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: High/critical advisories only
+        run: npm audit --audit-level=high
