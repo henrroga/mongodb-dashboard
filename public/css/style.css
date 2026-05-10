@@ -18,6 +18,15 @@
   --radius-lg: 8px;
   --shadow: 0 8px 24px rgba(0,0,0,0.4);
   --transition: 0.15s ease;
+
+  /* ── Aliases ─────────────────────────────────────────────────────────────
+   * Throughout the codebase, components have been written referring to
+   * --border-color and --accent-color instead of the canonical --border /
+   * --accent. Aliasing here means new code can use either name, and the
+   * theme blocks below only need to redefine the canonical tokens.
+   */
+  --border-color: var(--border);
+  --accent-color: var(--accent);
 }
 
 /* Light mode theme */
