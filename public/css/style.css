@@ -1126,7 +1126,7 @@ a:hover {
 }
 
 .shell-cmd-prompt {
-  color: #3fb950;
+  color: var(--success);
   flex-shrink: 0;
 }
 
@@ -1145,7 +1145,7 @@ a:hover {
 }
 
 .shell-result-error {
-  color: #f85149;
+  color: var(--danger);
 }
 
 .shell-input-row {
@@ -1159,7 +1159,7 @@ a:hover {
 }
 
 .shell-prompt {
-  color: #3fb950;
+  color: var(--success);
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 13px;
   flex-shrink: 0;
@@ -1173,7 +1173,7 @@ a:hover {
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 12px;
   color: #e6edf3;
-  caret-color: #3fb950;
+  caret-color: var(--success);
 }
 
 .shell-input::placeholder {
@@ -2931,7 +2931,7 @@ a:hover {
 
 /* Read-Only Mode */
 .readonly-badge {
-  background: #d29922;
+  background: var(--warning);
   color: #000;
   font-size: 10px;
   font-weight: 700;
@@ -3159,8 +3159,8 @@ kbd {
 .toast-error { border-left: 3px solid var(--danger); }
 .toast-error .toast-icon { color: var(--danger); }
 
-.toast-warning { border-left: 3px solid #d29922; }
-.toast-warning .toast-icon { color: #d29922; }
+.toast-warning { border-left: 3px solid var(--warning); }
+.toast-warning .toast-icon { color: var(--warning); }
 
 .toast-info { border-left: 3px solid var(--accent); }
 .toast-info .toast-icon { color: var(--accent); }
@@ -3382,7 +3382,7 @@ textarea.inline-edit-input {
 }
 
 .list-view-field-value .cell-string { color: #a5d6ff; }
-.list-view-field-value .cell-number { color: #79c0ff; }
+.list-view-field-value .cell-number { color: var(--accent-hover); }
 .list-view-field-value .cell-boolean { color: #ff7b72; }
 .list-view-field-value .cell-id { color: var(--text-muted); font-size: 11px; }
 
@@ -3490,8 +3490,8 @@ textarea.inline-edit-input {
 
 /* Syntax colors */
 .cm-s-default .cm-keyword { color: #ff7b72; }
-.cm-s-default .cm-atom { color: #79c0ff; }
-.cm-s-default .cm-number { color: #79c0ff; }
+.cm-s-default .cm-atom { color: var(--accent-hover); }
+.cm-s-default .cm-number { color: var(--accent-hover); }
 .cm-s-default .cm-def { color: #d2a8ff; }
 .cm-s-default .cm-variable { color: var(--text-primary); }
 .cm-s-default .cm-property { color: #7ee787; }
@@ -4302,7 +4302,7 @@ textarea.inline-edit-input {
 }
 
 .ui-modal-danger .ui-modal-title {
-  color: var(--danger, #f85149);
+  color: var(--danger, var(--danger));
 }
 
 .ui-prompt-form {
@@ -4343,14 +4343,14 @@ textarea.inline-edit-input {
 
 .ui-prompt-input:focus {
   outline: none;
-  border-color: var(--accent, #388bfd);
+  border-color: var(--accent, var(--accent));
   box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.18);
 }
 
 .ui-prompt-error {
   margin: 0;
   font-size: 12px;
-  color: var(--danger, #f85149);
+  color: var(--danger, var(--danger));
 }
 
 .ui-color-swatches {
@@ -4445,7 +4445,7 @@ textarea.inline-edit-input {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent, #388bfd);
+  color: var(--accent, var(--accent));
   margin-bottom: 4px;
 }
 
@@ -4585,7 +4585,7 @@ textarea.inline-edit-input {
 
 .recents-widget-item:hover {
   background: var(--bg-tertiary);
-  border-left-color: var(--accent, #388bfd);
+  border-left-color: var(--accent, var(--accent));
 }
 
 .recents-widget-id {
@@ -4649,7 +4649,7 @@ textarea.inline-edit-input {
 .saved-queries-action:hover {
   background: var(--bg-secondary);
   color: var(--text-primary);
-  border-color: var(--accent, #388bfd);
+  border-color: var(--accent, var(--accent));
 }
 
 /* ─── Context menu ────────────────────────────────────────────────────────── */
@@ -4714,7 +4714,7 @@ textarea.inline-edit-input {
 }
 
 .ctx-menu-item-danger {
-  color: var(--danger, #f85149);
+  color: var(--danger, var(--danger));
 }
 .ctx-menu-item-danger:hover {
   background: rgba(248, 81, 73, 0.1);
@@ -4740,12 +4740,12 @@ textarea.inline-edit-input {
 
 .json-key[data-path]:hover {
   background: rgba(56, 139, 253, 0.18);
-  color: var(--accent, #79c0ff);
+  color: var(--accent, var(--accent-hover));
 }
 
 .json-key-copied {
   background: rgba(63, 185, 80, 0.25) !important;
-  color: var(--success, #3fb950) !important;
+  color: var(--success, var(--success)) !important;
 }
 
 /* ─── Drag-to-reorder open tabs ───────────────────────────────────────────── */
@@ -4767,7 +4767,7 @@ textarea.inline-edit-input {
   top: 6px;
   bottom: 6px;
   width: 2px;
-  background: var(--accent, #388bfd);
+  background: var(--accent, var(--accent));
   border-radius: 2px;
 }
 
@@ -4831,7 +4831,7 @@ textarea.inline-edit-input {
 }
 
 .onboarding-dot.active {
-  background: var(--accent, #388bfd);
+  background: var(--accent, var(--accent));
 }
 
 .onboarding-body h2 {
@@ -4921,20 +4921,20 @@ textarea.inline-edit-input {
 
 .recents-widget-pin-btn:hover {
   background: var(--bg-secondary);
-  color: var(--accent, #388bfd);
+  color: var(--accent, var(--accent));
 }
 
 .recents-widget-item-pinned {
   background: linear-gradient(90deg, rgba(56, 139, 253, 0.07), transparent 60%);
 }
 .recents-widget-item-pinned .recents-widget-id {
-  color: var(--accent, #79c0ff);
+  color: var(--accent, var(--accent-hover));
 }
 
 .btn.btn-active {
   background: var(--bg-tertiary);
-  color: var(--accent, #79c0ff);
-  border-color: var(--accent, #388bfd);
+  color: var(--accent, var(--accent-hover));
+  border-color: var(--accent, var(--accent));
 }
 
 /* ─── Scratchpad panel ────────────────────────────────────────────────────── */
@@ -5083,7 +5083,7 @@ textarea.inline-edit-input {
   padding: 0;
 }
 .scratchpad-preview a {
-  color: var(--accent, #79c0ff);
+  color: var(--accent, var(--accent-hover));
 }
 
 .scratchpad-footer {
@@ -5099,7 +5099,7 @@ textarea.inline-edit-input {
 .scratchpad-saved {
   opacity: 0;
   transition: opacity 120ms ease;
-  color: var(--success, #3fb950);
+  color: var(--success, var(--success));
 }
 
 .scratchpad-saved.scratchpad-saved-flash {
@@ -5110,7 +5110,7 @@ textarea.inline-edit-input {
 
 .query-input.query-input-error,
 .query-input-error {
-  border-color: var(--danger, #f85149) !important;
+  border-color: var(--danger, var(--danger)) !important;
   box-shadow: 0 0 0 3px rgba(248, 81, 73, 0.15) !important;
 }
 
@@ -5121,7 +5121,7 @@ textarea.inline-edit-input {
   margin-top: 4px;
   padding: 4px 8px;
   background: rgba(248, 81, 73, 0.1);
-  color: var(--danger, #f85149);
+  color: var(--danger, var(--danger));
   border-radius: 5px;
   font-size: 11.5px;
   font-family: 'SF Mono', 'Fira Code', monospace;
