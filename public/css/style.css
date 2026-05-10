@@ -5542,3 +5542,35 @@ tbody tr.row-highlighted td {
 [data-theme="solarized-light"] .cell-match {
   background: rgba(210, 153, 34, 0.55);
 }
+
+/* ─── Schema boolean split bar ───────────────────────────────────────────── */
+
+.bool-bar {
+  display: flex;
+  width: 100%;
+  height: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.bool-bar-true {
+  background: var(--success);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.bool-bar-false {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
+}

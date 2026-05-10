@@ -416,7 +416,7 @@ router.get("/:db/:collection/schema-analysis", async (req, res) => {
       const serialized = serializeDocument(doc);
       for (const [key, value] of Object.entries(serialized)) {
         if (!fields[key]) {
-          fields[key] = { types: {}, values: [], numbers: [] };
+          fields[key] = { types: {}, values: [], numbers: [], dates: [], booleans: { true: 0, false: 0 } };
         }
         const f = fields[key];
         const type = getType(value);
@@ -424,6 +424,15 @@ router.get("/:db/:collection/schema-analysis", async (req, res) => {
 
         if (type === "string" && f.values.length < 2000) f.values.push(value);
         if (type === "number" && f.numbers.length < 2000) f.numbers.push(value);
+        if (type === "date" && f.dates.length < 2000) {
+          // Normalize: serialized dates are { $date: <ISO string> }.
+          const d = value && value.$date ? new Date(value.$date) : new Date(value);
+          if (!isNaN(d.getTime())) f.dates.push(d.getTime());
+        }
+        if (type === "boolean") {
+          if (value === true) f.booleans.true++;
+          else f.booleans.false++;
+        }
       }
     }
 
@@ -446,6 +455,35 @@ router.get("/:db/:collection/schema-analysis", async (req, res) => {
           .slice(0, 10)
           .map(([value, count]) => ({ value, count }));
         entry.uniqueCount = Object.keys(counts).length;
+      }
+
+      // Boolean true/false split.
+      if ((f.booleans.true + f.booleans.false) > 0) {
+        entry.booleans = f.booleans;
+      }
+
+      // Date histogram — 12 equal-width buckets across observed range.
+      if (f.dates.length > 1) {
+        const sorted = f.dates.slice().sort((a, b) => a - b);
+        const minTs = sorted[0];
+        const maxTs = sorted[sorted.length - 1];
+        entry.dateMin = new Date(minTs).toISOString();
+        entry.dateMax = new Date(maxTs).toISOString();
+        const span = maxTs - minTs;
+        const bucketCount = 12;
+        if (span > 0) {
+          const size = span / bucketCount;
+          const buckets = Array.from({ length: bucketCount }, (_, i) => ({
+            min: new Date(minTs + i * size).toISOString(),
+            max: new Date(minTs + (i + 1) * size).toISOString(),
+            count: 0,
+          }));
+          for (const ts of sorted) {
+            const idx = Math.min(Math.floor((ts - minTs) / size), bucketCount - 1);
+            buckets[idx].count++;
+          }
+          entry.dateHistogram = buckets;
+        }
       }
 
       // Histogram for numbers

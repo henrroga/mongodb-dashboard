@@ -7820,6 +7820,44 @@ async function runSchemaAnalysis(dbName, collectionName, sampleSize) {
               </div>`;
           }
 
+          // Boolean split.
+          if (info.booleans) {
+            const total = info.booleans.true + info.booleans.false;
+            const truePct = total > 0 ? Math.round((info.booleans.true / total) * 100) : 0;
+            const falsePct = 100 - truePct;
+            extra += `
+              <div class="schema-section">
+                <div class="schema-section-label">true / false split</div>
+                <div class="bool-bar">
+                  <div class="bool-bar-true" style="width:${truePct}%" title="true: ${info.booleans.true} (${truePct}%)">true ${truePct}%</div>
+                  <div class="bool-bar-false" style="width:${falsePct}%" title="false: ${info.booleans.false} (${falsePct}%)">false ${falsePct}%</div>
+                </div>
+              </div>`;
+          }
+
+          // Date histogram (12 equal-width buckets across observed range).
+          if (info.dateHistogram && info.dateHistogram.length > 0) {
+            const maxBucketCount = Math.max(...info.dateHistogram.map((b) => b.count));
+            const fmtShort = (iso) => {
+              const d = new Date(iso);
+              return isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+            };
+            extra += `
+              <div class="schema-section">
+                <div class="schema-section-label">Distribution &nbsp;<small>${fmtShort(info.dateMin)} → ${fmtShort(info.dateMax)}</small></div>
+                <div class="histogram">
+                  ${info.dateHistogram.map((bucket, i) => {
+                    const pct = maxBucketCount > 0 ? (bucket.count / maxBucketCount * 100).toFixed(0) : 0;
+                    const labelEvery = i === 0 || i === info.dateHistogram.length - 1 || i === Math.floor(info.dateHistogram.length / 2);
+                    return `<div class="histogram-bar" title="${bucket.min} → ${bucket.max}: ${bucket.count}">
+                      <div class="histogram-fill" style="height:${pct}%"></div>
+                      <div class="histogram-label">${labelEvery ? fmtShort(bucket.min) : ''}</div>
+                    </div>`;
+                  }).join('')}
+                </div>
+              </div>`;
+          }
+
           // Histogram for numbers
           if (info.histogram && info.histogram.length > 0) {
             const maxBucketCount = Math.max(...info.histogram.map(b => b.count));
