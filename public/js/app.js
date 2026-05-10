@@ -162,6 +162,36 @@ function showToast(message, type = 'info', duration = 4000) {
   return toast;
 }
 
+async function apiFetchJson(url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  const csrfToken = window.__APP_CONFIG__?.csrfToken;
+  if (csrfToken) {
+    headers['x-csrf-token'] = csrfToken;
+  }
+
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers,
+  });
+
+  const contentType = res.headers.get('content-type') || '';
+  let payload = null;
+  if (contentType.includes('application/json')) {
+    payload = await res.json();
+  } else {
+    const text = await res.text();
+    payload = { error: text || `Request failed with status ${res.status}` };
+  }
+
+  if (!res.ok) {
+    const message = payload?.error || `Request failed with status ${res.status}`;
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
 // ─── Copy-as-code: generate driver code for queries / aggregations ────────────
 
 const CODE_LANGUAGES = [
@@ -6675,9 +6705,7 @@ async function loadFieldTypeDistribution(dbName, collectionName) {
   container.innerHTML = '<div class="loading-spinner"></div>';
 
   try {
-    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/schema-analysis?sampleSize=200`);
-    const schema = await res.json();
-    if (!res.ok) throw new Error(schema.error);
+    const schema = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/schema-analysis?sampleSize=200`);
 
     const typeCounts = {};
     const fields = schema.fields || {};
@@ -7849,9 +7877,7 @@ async function runSchemaAnalysis(dbName, collectionName, sampleSize) {
   contentEl.innerHTML = '<div style="display:flex;justify-content:center;padding:60px"><div class="loading-spinner"></div></div>';
 
   try {
-    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/schema-analysis?sampleSize=${sampleSize}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/schema-analysis?sampleSize=${sampleSize}`);
 
     if (sampleInfo) sampleInfo.textContent = `${data.totalDocs} documents sampled`;
 
@@ -7993,9 +8019,7 @@ async function loadIndexes(dbName, collectionName) {
   tbody.innerHTML = renderTableSkeleton(4, 5);
 
   try {
-    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes`);
 
     const indexes = data.indexes;
     if (countEl) countEl.textContent = `${indexes.length} index${indexes.length !== 1 ? 'es' : ''}`;
@@ -8074,13 +8098,11 @@ function initIndexesPanel(dbName, collectionName) {
     const btn = document.getElementById('createIndexConfirm');
     btn.disabled = true; btn.textContent = 'Creating...';
     try {
-      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes`, {
+      await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, options }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
       closeCreate();
       loadIndexes(dbName, collectionName);
     } catch (err) {
@@ -8108,9 +8130,7 @@ window.openDropIndexModal = function(dbName, collectionName, indexName) {
     const errEl = document.getElementById('dropIndexError');
     btn.disabled = true; btn.textContent = 'Dropping...';
     try {
-      const res = await fetch(`/api/${decodeURIComponent(dbName)}/${decodeURIComponent(collectionName)}/indexes/${decodeURIComponent(indexName)}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      await apiFetchJson(`/api/${decodeURIComponent(dbName)}/${decodeURIComponent(collectionName)}/indexes/${decodeURIComponent(indexName)}`, { method: 'DELETE' });
       document.getElementById('dropIndexModal').style.display = 'none';
       loadIndexes(decodeURIComponent(dbName), decodeURIComponent(collectionName));
     } catch (err) {
@@ -8123,13 +8143,11 @@ window.openDropIndexModal = function(dbName, collectionName, indexName) {
 
 window.toggleIndexHidden = async function(dbName, collectionName, indexName, hidden) {
   try {
-    const res = await fetch(`/api/${decodeURIComponent(dbName)}/${decodeURIComponent(collectionName)}/indexes/${decodeURIComponent(indexName)}`, {
+    await apiFetchJson(`/api/${decodeURIComponent(dbName)}/${decodeURIComponent(collectionName)}/indexes/${decodeURIComponent(indexName)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hidden }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
     loadIndexes(decodeURIComponent(dbName), decodeURIComponent(collectionName));
   } catch (err) {
     showToast('Error: ' + err.message, 'error');
@@ -8450,13 +8468,11 @@ async function runAggregation(dbName, collectionName) {
   if (countEl) countEl.textContent = 'Running...';
 
   try {
-    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/aggregate`, {
+    const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/aggregate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pipeline, options: { limit } }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
 
     if (countEl) countEl.textContent = `${data.count} document${data.count !== 1 ? 's' : ''}`;
 
@@ -8507,13 +8523,11 @@ async function previewStage(stageId, dbName, collectionName) {
   previewEl.style.display = 'block';
 
   try {
-    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/aggregate`, {
+    const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/aggregate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pipeline, options: { limit: 5 } }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
 
     if (countEl) countEl.textContent = `${data.count} doc${data.count !== 1 ? 's' : ''}`;
 
