@@ -7,6 +7,8 @@ const rateLimit = require("express-rate-limit");
 const pkg = require("./package.json");
 
 const config = require("./src/config");
+const logger = require("./src/utils/logger");
+const pinoHttp = require("pino-http")({ logger });
 const { requireAuth } = require("./src/middleware/auth");
 const apiRoutes = require("./src/routes/api");
 const pageRoutes = require("./src/routes/pages");
@@ -15,6 +17,7 @@ const mongoService = require("./src/services/mongodb");
 
 const app = express();
 
+app.use(pinoHttp);
 app.set("trust proxy", config.trustProxy);
 app.disable("x-powered-by");
 
@@ -111,20 +114,13 @@ function loadChangelog() {
 app.use("/login", loginLimiter, loginRouter);
 app.use("/logout", logoutRouter);
 
+const errorHandler = require("./src/middleware/error");
+
 app.use(generalLimiter);
 app.use("/api", requireAuth, apiRoutes);
 app.use("/", requireAuth, pageRoutes);
 
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  if (res.headersSent) return next(err);
-  if (req.path && req.path.startsWith("/api/")) {
-    return res
-      .status(500)
-      .json({ error: err.message || "Internal Server Error" });
-  }
-  res.status(500).send("Internal Server Error");
-});
+app.use(errorHandler);
 
 async function bootstrap() {
   if (config.presetMongoUri) {
@@ -132,14 +128,14 @@ async function bootstrap() {
     // The /api/status endpoint reflects connection state; clients reconnect.
     mongoService
       .connect(config.presetMongoUri)
-      .then(() => console.log("[bootstrap] Connected to MONGODB_URI preset"))
+      .then(() => logger.info("[bootstrap] Connected to MONGODB_URI preset"))
       .catch((err) =>
-        console.error("[bootstrap] Preset connection failed:", err.message)
+        logger.error({ err }, "[bootstrap] Preset connection failed")
       );
   }
 
   app.listen(config.port, () => {
-    console.log(
+    logger.info(
       `MongoDB Dashboard running at http://localhost:${config.port}` +
         (config.auth.enabled ? " (auth enabled)" : " (auth DISABLED)") +
         (config.readOnly ? " [READ-ONLY]" : "")
@@ -148,12 +144,12 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-  console.error("Fatal startup error:", err);
+  logger.fatal(err, "Fatal startup error");
   process.exit(1);
 });
 
 function shutdown() {
-  console.log("Shutting down...");
+  logger.info("Shutting down...");
   mongoService.disconnect().finally(() => process.exit(0));
 }
 process.on("SIGINT", shutdown);

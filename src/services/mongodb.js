@@ -1,4 +1,5 @@
 const { MongoClient } = require("mongodb");
+const logger = require("../utils/logger");
 
 class MongoDBService {
   constructor() {
@@ -29,7 +30,7 @@ class MongoDBService {
     await this.client.connect();
     this.connectionString = connectionString;
 
-    console.log("Connected to MongoDB");
+    logger.info("Connected to MongoDB");
     return this.client;
   }
 
@@ -50,7 +51,7 @@ class MongoDBService {
       await this.client.close();
       this.client = null;
       this.connectionString = null;
-      console.log("Disconnected from MongoDB");
+      logger.info("Disconnected from MongoDB");
     }
   }
 }

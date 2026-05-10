@@ -29,5 +29,8 @@
     "mongodb": "^6.3.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0"
+  },
+  "devDependencies": {
+    "pino-pretty": "^13.1.3"
   }
 }

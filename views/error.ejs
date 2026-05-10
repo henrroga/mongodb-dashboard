@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> | MongoDB Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-primary text-primary">
+    <div class="container mx-auto px-4 py-20 text-center">
+        <h1 class="text-4xl font-bold mb-4">Something went wrong</h1>
+        <p class="text-secondary mb-8"><%= message %></p>
+        <a href="/" class="btn btn-primary">Go Home</a>
+        
+        <% if (process.env.NODE_ENV !== 'production' && error && error.stack) { %>
+            <div class="mt-12 text-left">
+                <pre class="bg-secondary p-4 rounded overflow-auto text-sm"><%= error.stack %></pre>
+            </div>
+        <% } %>
+    </div>
+</body>
+</html>

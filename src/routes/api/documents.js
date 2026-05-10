@@ -12,6 +12,8 @@
 // /connect) — otherwise GET /:db/:collection would shadow them.
 
 const express = require("express");
+const logger = require("../../utils/logger");
+
 const router = express.Router();
 const mongoService = require("../../services/mongodb");
 const { ObjectId } = require("mongodb");
@@ -99,7 +101,7 @@ router.get("/:db/:collection", async (req, res) => {
           }
         }
       } catch (e) {
-        console.error("Error parsing arrayFilters:", e);
+        logger.error({ err: e }, "Error parsing arrayFilters");
       }
     }
 
