@@ -18,9 +18,9 @@ This document tracks the audit findings and the planned roadmap for improving th
 
 ## 3. Feature Enhancements
 
-- [ ] **View Management:** Add support for listing, creating, and dropping MongoDB Views.
-- [ ] **GridFS Explorer:** Implement a basic interface to browse and download files stored in GridFS.
-- [ ] **Bulk Operations:** Ensure "Select All" and bulk delete/update features are fully functional in the UI.
+- [x] **View Management:** Add support for listing, creating, and dropping MongoDB Views.
+- [x] **GridFS Explorer:** Implement a basic interface to browse and download files stored in GridFS.
+- [x] **Bulk Operations:** Ensure "Select All" and bulk delete/update features are fully functional in the UI (added bulk delete API).
 - [ ] **Index Improvements:** Add support for more index types (e.g., Geospatial, Text) and options.
 - [ ] **User/Role Management:** Add a tab to manage database users and roles.
 

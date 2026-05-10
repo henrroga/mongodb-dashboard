@@ -690,6 +690,23 @@ function openRowContextMenu(e, doc, dbName, collectionName) {
         }
       },
     },
+    ...(collectionName.endsWith('.files')
+      ? [
+          {
+            id: 'download',
+            label: 'Download file',
+            icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+            action: () => {
+              window.open(
+                `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(
+                  collectionName
+                )}/gridfs/${encodeURIComponent(cleanId)}`,
+                '_blank'
+              );
+            },
+          },
+        ]
+      : []),
     {
       id: 'copy-filter',
       label: 'Copy as { _id: … } filter',
@@ -4175,7 +4192,28 @@ function createDocumentRow(doc, dbName, collectionName) {
   const actionsTd = document.createElement('td');
   const actionsDiv = document.createElement('div');
   actionsDiv.className = 'cell-actions';
-  
+
+  // GridFS download button
+  if (collectionName.endsWith('.files') && docId) {
+    const dlBtn = document.createElement('button');
+    dlBtn.className = 'action-btn';
+    dlBtn.title = 'Download File';
+    dlBtn.onclick = () => {
+      window.open(
+        `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(
+          collectionName
+        )}/gridfs/${encodeURIComponent(docId)}`,
+        '_blank'
+      );
+    };
+    dlBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    `;
+    actionsDiv.appendChild(dlBtn);
+  }
+
   // View button
   const viewBtn = document.createElement('button');
   viewBtn.className = 'action-btn view';
@@ -4346,39 +4384,38 @@ async function bulkDelete() {
   const ids = Array.from(selectedDocIds);
   const dbName = currentDbName;
   const collectionName = currentCollectionName;
-  let deleted = 0;
-  let errors = 0;
 
   showToast(`Deleting ${ids.length} documents...`, 'info', 2000);
 
-  for (const id of ids) {
-    try {
-      const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(id)}`, {
+  try {
+    const res = await fetch(
+      `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(
+        collectionName
+      )}`,
+      {
         method: 'DELETE',
-      });
-      if (res.ok) deleted++;
-      else errors++;
-    } catch {
-      errors++;
-    }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    selectedDocIds.clear();
+    const selectAll = document.getElementById('selectAllDocs');
+    if (selectAll) selectAll.checked = false;
+    updateBulkBar();
+
+    showToast(`Deleted ${data.deletedCount} documents`, 'success');
+
+    // Reload
+    currentCursor = null;
+    currentNextSkip = null;
+    allDocuments = [];
+    loadDocuments(dbName, collectionName);
+  } catch (err) {
+    showToast(`Bulk delete failed: ${err.message}`, 'error');
   }
-
-  selectedDocIds.clear();
-  const selectAll = document.getElementById('selectAllDocs');
-  if (selectAll) selectAll.checked = false;
-  updateBulkBar();
-
-  if (errors > 0) {
-    showToast(`Deleted ${deleted} documents, ${errors} failed`, 'warning');
-  } else {
-    showToast(`Deleted ${deleted} documents`, 'success');
-  }
-
-  // Reload
-  currentCursor = null;
-  currentNextSkip = null;
-  allDocuments = [];
-  loadDocuments(dbName, collectionName);
 }
 
 // ─── View Mode Switching ─────────────────────────────────────────────────────
@@ -8809,40 +8846,88 @@ function initCollectionManagement(dbName) {
 
   if (!createColModal) return;
 
+  const newColType = document.getElementById('newColType');
+  const viewOptions = document.getElementById('viewOptions');
+  newColType?.addEventListener('change', (e) => {
+    viewOptions.style.display = e.target.value === 'view' ? 'block' : 'none';
+  });
+
   // Create collection
   const closeCreate = () => {
     createColModal.style.display = 'none';
     document.getElementById('createColError').style.display = 'none';
     document.getElementById('newColName').value = '';
+    if (newColType) newColType.value = 'collection';
+    if (viewOptions) viewOptions.style.display = 'none';
   };
 
-  createColBtn?.addEventListener('click', () => { createColModal.style.display = 'flex'; document.getElementById('newColName').focus(); });
-  document.getElementById('createColModalClose')?.addEventListener('click', closeCreate);
-  document.getElementById('createColCancel')?.addEventListener('click', closeCreate);
-  createColModal.querySelector('.modal-backdrop')?.addEventListener('click', closeCreate);
-
-  document.getElementById('createColConfirm')?.addEventListener('click', async () => {
-    const name = document.getElementById('newColName').value.trim();
-    const errEl = document.getElementById('createColError');
-    if (!name) { errEl.textContent = 'Collection name is required'; errEl.style.display = 'block'; return; }
-
-    const btn = document.getElementById('createColConfirm');
-    btn.disabled = true; btn.textContent = 'Creating...';
-    try {
-      const res = await fetch(`/api/${encodeURIComponent(dbName)}/collections`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      window.location.href = `/browse/${encodeURIComponent(dbName)}/${encodeURIComponent(name)}`;
-    } catch (err) {
-      errEl.textContent = err.message; errEl.style.display = 'block';
-    } finally {
-      btn.disabled = false; btn.textContent = 'Create';
-    }
+  createColBtn?.addEventListener('click', () => {
+    createColModal.style.display = 'flex';
+    document.getElementById('newColName').focus();
   });
+  document
+    .getElementById('createColModalClose')
+    ?.addEventListener('click', closeCreate);
+  document
+    .getElementById('createColCancel')
+    ?.addEventListener('click', closeCreate);
+  createColModal
+    .querySelector('.modal-backdrop')
+    ?.addEventListener('click', closeCreate);
+
+  document
+    .getElementById('createColConfirm')
+    ?.addEventListener('click', async () => {
+      const name = document.getElementById('newColName').value.trim();
+      const errEl = document.getElementById('createColError');
+      if (!name) {
+        errEl.textContent = 'Name is required';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const type = newColType?.value || 'collection';
+      const body = { name };
+      if (type === 'view') {
+        body.isView = true;
+        body.viewOn = document.getElementById('viewOn').value;
+        const pipelineRaw = document.getElementById('viewPipeline').value.trim();
+        if (pipelineRaw) {
+          try {
+            body.pipeline = JSON.parse(pipelineRaw);
+          } catch (e) {
+            errEl.textContent = 'Invalid pipeline JSON: ' + e.message;
+            errEl.style.display = 'block';
+            return;
+          }
+        }
+      }
+
+      const btn = document.getElementById('createColConfirm');
+      btn.disabled = true;
+      btn.textContent = 'Creating...';
+      try {
+        const res = await fetch(
+          `/api/${encodeURIComponent(dbName)}/collections`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        window.location.href = `/browse/${encodeURIComponent(
+          dbName
+        )}/${encodeURIComponent(name)}`;
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create';
+      }
+    });
 
   // Drop collection
   let dropColTarget = null;

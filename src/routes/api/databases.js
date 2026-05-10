@@ -72,8 +72,18 @@ router.get("/:db/collections", async (req, res) => {
     const collections = await db.listCollections().toArray();
     const collectionsWithCounts = await Promise.all(
       collections.map(async (col) => {
-        const count = await db.collection(col.name).estimatedDocumentCount();
-        return { name: col.name, count };
+        let count = 0;
+        if (col.type === "collection") {
+          try {
+            count = await db.collection(col.name).estimatedDocumentCount();
+          } catch (_) {}
+        }
+        return {
+          name: col.name,
+          type: col.type || "collection",
+          count,
+          options: col.options || {},
+        };
       })
     );
     res.json({ collections: collectionsWithCounts });
@@ -87,10 +97,20 @@ router.post("/:db/collections", async (req, res) => {
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 
-    const { name, options = {} } = req.body;
-    if (!name) return res.status(400).json({ error: "Collection name is required" });
+    const { name, options = {}, isView, viewOn, pipeline } = req.body;
+    if (!name)
+      return res.status(400).json({ error: "Collection name is required" });
 
-    await client.db(req.params.db).createCollection(name, options);
+    if (isView) {
+      if (!viewOn)
+        return res.status(400).json({ error: "Source collection is required for views" });
+      await client.db(req.params.db).createCollection(name, {
+        viewOn,
+        pipeline: pipeline || [],
+      });
+    } else {
+      await client.db(req.params.db).createCollection(name, options);
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

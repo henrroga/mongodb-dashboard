@@ -159,7 +159,7 @@
           </div>
           <nav class="collection-list" id="collectionList">
             <% collections.forEach(function(col) { %>
-            <div class="collection-item-wrapper <%= activeCollection === col.name ? 'active' : '' %>" data-collection="<%= col.name %>">
+            <div class="collection-item-wrapper <%= activeCollection === col.name ? 'active' : '' %>" data-collection="<%= col.name %>" data-type="<%= col.type %>">
               <a
                 href="/browse/<%= dbName %>/<%= col.name %>"
                 class="collection-item <%= activeCollection === col.name ? 'active' : '' %>"
@@ -169,8 +169,15 @@
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                   </svg>
                 </button>
+                <% if (col.type === 'view') { %>
+                  <svg class="col-type-icon" title="View" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;color:var(--text-muted)">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                <% } %>
                 <span class="collection-name"><%= col.name %></span>
-                <span class="collection-doc-count" data-count="<%= col.count %>"><%= col.count %></span>
+                <% if (col.type !== 'view') { %>
+                  <span class="collection-doc-count" data-count="<%= col.count %>"><%= col.count %></span>
+                <% } %>
               </a>
               <div class="collection-actions">
                 <button class="col-action-btn col-rename-btn" data-col="<%= col.name %>" title="Rename">
@@ -194,13 +201,34 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-sm">
               <div class="modal-header">
-                <h3>Create Collection</h3>
+                <h3>Create Collection / View</h3>
                 <button class="modal-close" id="createColModalClose">&times;</button>
               </div>
               <div class="modal-body">
                 <div class="form-field">
-                  <label>Collection Name</label>
+                  <label>Name</label>
                   <input type="text" id="newColName" class="query-input" placeholder="my_collection" autocomplete="off"/>
+                </div>
+                <div class="form-field" style="margin-top:12px">
+                  <label>Type</label>
+                  <select id="newColType" class="query-input">
+                    <option value="collection">Collection</option>
+                    <option value="view">View</option>
+                  </select>
+                </div>
+                <div id="viewOptions" style="display:none;margin-top:12px">
+                    <div class="form-field">
+                        <label>Source Collection</label>
+                        <select id="viewOn" class="query-input">
+                            <% collections.filter(c => c.type === 'collection').forEach(c => { %>
+                                <option value="<%= c.name %>"><%= c.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="form-field" style="margin-top:12px">
+                        <label>Pipeline (JSON array)</label>
+                        <textarea id="viewPipeline" class="doc-editor" style="min-height:100px;font-size:12px" placeholder='[ { "$match": { "status": "active" } } ]'></textarea>
+                    </div>
                 </div>
                 <p id="createColError" class="error-message" style="display:none;margin-top:10px"></p>
               </div>

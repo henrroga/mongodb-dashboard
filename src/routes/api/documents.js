@@ -295,4 +295,33 @@ router.delete("/:db/:collection/:id", async (req, res) => {
   }
 });
 
+router.delete("/:db/:collection", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, collection: colName } = req.params;
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "No IDs provided" });
+    }
+
+    const collection = client.db(dbName).collection(colName);
+
+    const objectIds = ids.map((id) => {
+      try {
+        return new ObjectId(id);
+      } catch (_) {
+        return id;
+      }
+    });
+
+    const result = await collection.deleteMany({ _id: { $in: objectIds } });
+    res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

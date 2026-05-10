@@ -4,6 +4,7 @@ const mongoService = require("../../services/mongodb");
 const { serializeDocument, parseDocument } = require("../../utils/bson");
 const audit = require("../../utils/audit");
 const logger = require("../../utils/logger");
+const { GridFSBucket, ObjectId } = require("mongodb");
 
 /**
  * Simple CSV parser that handles quoted fields and commas inside quotes.
@@ -274,6 +275,41 @@ router.get("/:db/:collection/backup", async (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     res.end();
+  }
+});
+
+// Download file from GridFS
+router.get("/:db/:bucket/gridfs/:id", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, bucket, id } = req.params;
+    const db = client.db(dbName);
+    
+    // Bucket name is the prefix (e.g. 'fs' if collection is 'fs.files')
+    const bucketName = bucket.replace(".files", "");
+    const gfs = new GridFSBucket(db, { bucketName });
+
+    const fileId = new ObjectId(id);
+    const files = await db.collection(`${bucketName}.files`).find({ _id: fileId }).toArray();
+    if (files.length === 0) return res.status(404).json({ error: "File not found" });
+
+    const file = files[0];
+    res.setHeader("Content-Type", file.contentType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+    res.setHeader("Content-Length", file.length);
+
+    const downloadStream = gfs.openDownloadStream(fileId);
+    downloadStream.pipe(res);
+
+    downloadStream.on("error", (err) => {
+      logger.error(err);
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+    });
+  } catch (err) {
+    logger.error(err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 

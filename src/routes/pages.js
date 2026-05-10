@@ -70,8 +70,13 @@ router.get("/browse/:db", async (req, res) => {
     // Get counts for all collections
     const collectionsWithCounts = await Promise.all(
       collections.map(async (col) => {
-        const count = await db.collection(col.name).estimatedDocumentCount();
-        return { name: col.name, count };
+        let count = 0;
+        if (col.type === "collection") {
+          try {
+            count = await db.collection(col.name).estimatedDocumentCount();
+          } catch (_) {}
+        }
+        return { name: col.name, type: col.type || "collection", count };
       })
     );
 
@@ -117,8 +122,13 @@ router.get("/browse/:db/:collection", async (req, res) => {
     // Get counts for all collections
     const collectionsWithCounts = await Promise.all(
       collections.map(async (col) => {
-        const count = await db.collection(col.name).estimatedDocumentCount();
-        return { name: col.name, count };
+        let count = 0;
+        if (col.type === "collection") {
+          try {
+            count = await db.collection(col.name).estimatedDocumentCount();
+          } catch (_) {}
+        }
+        return { name: col.name, type: col.type || "collection", count };
       })
     );
 
