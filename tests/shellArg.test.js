@@ -1,7 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { ObjectId } = require("mongodb");
-const { evalArg } = require("../src/utils/shellArg");
+const { evalArg, splitTopLevelArgs } = require("../src/utils/shellArg");
 
 test("parses plain JSON", () => {
   assert.deepEqual(evalArg('{"a":1}'), { a: 1 });
@@ -64,4 +64,14 @@ test("returns undefined for empty input", () => {
 
 test("rejects malformed JSON with a meaningful error", () => {
   assert.throws(() => evalArg("{a: 1,, b: 2}"), /Invalid argument syntax/);
+});
+
+test("splitTopLevelArgs handles nested objects and constructor calls", () => {
+  const args = splitTopLevelArgs(
+    '{a: 1, b: "x,y"}, ObjectId("507f1f77bcf86cd799439011"), [1, {z: 2}]'
+  );
+  assert.equal(args.length, 3);
+  assert.match(args[0], /^\{a:/);
+  assert.match(args[1], /^ObjectId\(/);
+  assert.match(args[2], /^\[/);
 });

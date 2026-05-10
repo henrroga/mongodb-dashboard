@@ -74,3 +74,9 @@ This document tracks the audit findings and the planned roadmap for improving th
 1. Add optional projection presets and server-side sampling for large documents.
 2. Improve index management with richer options (text/geospatial/TTL helpers).
 3. Add safer bulk update flow (preview + dry-run mode).
+
+### Focus Audit: Shell Execution Boundary (completed)
+1. Replaced regex-based shell arg splitting with bracket/string-aware top-level parser.
+2. Restricted `db.runCommand(...)` to a read-only allowlist to prevent dangerous admin ops from dashboard shell.
+3. Added guardrails for aggregation shell command shape and capped shell aggregate output.
+4. Added regression tests for nested argument splitting and parser behavior.

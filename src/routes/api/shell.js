@@ -4,8 +4,19 @@ const mongoService = require("../../services/mongodb");
 const config = require("../../config");
 const audit = require("../../utils/audit");
 const { serializeDocument } = require("../../utils/bson");
-const { evalArg } = require("../../utils/shellArg");
+const { evalArg, splitTopLevelArgs } = require("../../utils/shellArg");
 const logger = require("../../utils/logger");
+
+const ALLOWED_RUN_COMMANDS = new Set([
+  "ping",
+  "buildInfo",
+  "serverStatus",
+  "dbStats",
+  "collStats",
+  "listCollections",
+  "listIndexes",
+  "connectionStatus",
+]);
 
 router.post("/shell/exec", async (req, res) => {
   try {
@@ -40,6 +51,15 @@ router.post("/shell/exec", async (req, res) => {
     const runCmdMatch = cmd.match(/^db\.runCommand\(([\s\S]+)\)$/);
     if (runCmdMatch) {
       const arg = evalArg(runCmdMatch[1]);
+      if (!arg || typeof arg !== "object" || Array.isArray(arg)) {
+        return res.status(400).json({ error: "runCommand argument must be an object" });
+      }
+      const commandName = Object.keys(arg)[0];
+      if (!commandName || !ALLOWED_RUN_COMMANDS.has(commandName)) {
+        return res.status(403).json({
+          error: `runCommand '${commandName || "unknown"}' is not allowed from dashboard shell`,
+        });
+      }
       const result = await db.command(arg);
       return res.json({ result, type: "json" });
     }
@@ -84,11 +104,7 @@ router.post("/shell/exec", async (req, res) => {
       }
 
       // Parse args: split by top-level commas
-      const args = argsStr.trim()
-        ? argsStr.split(/,(?![^{[]*[}\]])/).map((a) => {
-            try { return evalArg(a.trim()); } catch { return a.trim(); }
-          })
-        : [];
+      const args = argsStr.trim() ? splitTopLevelArgs(argsStr).map((a) => evalArg(a)) : [];
 
       let result;
       switch (method) {
@@ -100,7 +116,14 @@ router.post("/shell/exec", async (req, res) => {
         case "findOne": result = await col.findOne(args[0] || {}); break;
         case "countDocuments": result = await col.countDocuments(args[0] || {}); break;
         case "estimatedDocumentCount": result = await col.estimatedDocumentCount(); break;
-        case "aggregate": result = await col.aggregate(args[0] || []).toArray(); break;
+        case "aggregate": {
+          const pipeline = args[0] || [];
+          if (!Array.isArray(pipeline)) {
+            return res.status(400).json({ error: "aggregate pipeline must be an array" });
+          }
+          result = await col.aggregate(pipeline).limit(200).toArray();
+          break;
+        }
         case "insertOne": result = await col.insertOne(args[0] || {}); break;
         case "insertMany": result = await col.insertMany(args[0] || []); break;
         case "updateOne": result = await col.updateOne(args[0] || {}, args[1] || {}); break;

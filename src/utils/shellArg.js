@@ -67,6 +67,80 @@ function evalArg(str) {
   return revive(parsed, bsonPlaceholders);
 }
 
+function splitTopLevelArgs(input) {
+  const src = String(input || "").trim();
+  if (!src) return [];
+
+  const out = [];
+  let current = "";
+  let depthCurly = 0;
+  let depthSquare = 0;
+  let depthParen = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+
+    if (escaped) {
+      current += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      current += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (inSingle) {
+      current += ch;
+      if (ch === "'") inSingle = false;
+      continue;
+    }
+
+    if (inDouble) {
+      current += ch;
+      if (ch === '"') inDouble = false;
+      continue;
+    }
+
+    if (ch === "'") {
+      inSingle = true;
+      current += ch;
+      continue;
+    }
+
+    if (ch === '"') {
+      inDouble = true;
+      current += ch;
+      continue;
+    }
+
+    if (ch === "{") depthCurly++;
+    else if (ch === "}") depthCurly = Math.max(0, depthCurly - 1);
+    else if (ch === "[") depthSquare++;
+    else if (ch === "]") depthSquare = Math.max(0, depthSquare - 1);
+    else if (ch === "(") depthParen++;
+    else if (ch === ")") depthParen = Math.max(0, depthParen - 1);
+
+    if (ch === "," && depthCurly === 0 && depthSquare === 0 && depthParen === 0) {
+      const part = current.trim();
+      if (part) out.push(part);
+      current = "";
+      continue;
+    }
+
+    current += ch;
+  }
+
+  const tail = current.trim();
+  if (tail) out.push(tail);
+  return out;
+}
+
 function revive(value, placeholders) {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map((v) => revive(v, placeholders));
@@ -106,4 +180,4 @@ function reviveCtor(name, rawArg) {
   }
 }
 
-module.exports = { evalArg };
+module.exports = { evalArg, splitTopLevelArgs };
