@@ -9,6 +9,7 @@ const pkg = require("./package.json");
 const config = require("./src/config");
 const logger = require("./src/utils/logger");
 const pinoHttp = require("pino-http")({ logger });
+const mongoSanitize = require("express-mongo-sanitize");
 const { requireAuth } = require("./src/middleware/auth");
 const apiRoutes = require("./src/routes/api");
 const pageRoutes = require("./src/routes/pages");
@@ -61,6 +62,7 @@ app.use(
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+app.use(mongoSanitize());
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1d" }));
 
 app.set("view engine", "ejs");

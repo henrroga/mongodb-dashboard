@@ -16,6 +16,10 @@ const express = require("express");
 const router = express.Router();
 const mongoService = require("../../services/mongodb");
 
+function isNonEmptyString(v) {
+  return typeof v === "string" && v.trim().length > 0;
+}
+
 router.get("/databases", async (req, res) => {
   try {
     const client = mongoService.getClient();
@@ -42,7 +46,12 @@ router.post("/databases", async (req, res) => {
     if (!client) return res.status(400).json({ error: "Not connected" });
 
     const { name, initialCollection = "_init" } = req.body;
-    if (!name) return res.status(400).json({ error: "Database name is required" });
+    if (!isNonEmptyString(name)) {
+      return res.status(400).json({ error: "Database name is required" });
+    }
+    if (!isNonEmptyString(initialCollection)) {
+      return res.status(400).json({ error: "Initial collection name is required" });
+    }
 
     await client.db(name).createCollection(initialCollection);
     res.json({ success: true });
@@ -98,12 +107,15 @@ router.post("/:db/collections", async (req, res) => {
     if (!client) return res.status(400).json({ error: "Not connected" });
 
     const { name, options = {}, isView, viewOn, pipeline } = req.body;
-    if (!name)
+    if (!isNonEmptyString(name))
       return res.status(400).json({ error: "Collection name is required" });
 
     if (isView) {
-      if (!viewOn)
+      if (!isNonEmptyString(viewOn))
         return res.status(400).json({ error: "Source collection is required for views" });
+      if (pipeline !== undefined && !Array.isArray(pipeline)) {
+        return res.status(400).json({ error: "View pipeline must be an array" });
+      }
       await client.db(req.params.db).createCollection(name, {
         viewOn,
         pipeline: pipeline || [],
@@ -135,7 +147,9 @@ router.put("/:db/collections/:collection", async (req, res) => {
     if (!client) return res.status(400).json({ error: "Not connected" });
 
     const { newName } = req.body;
-    if (!newName) return res.status(400).json({ error: "New name is required" });
+    if (!isNonEmptyString(newName)) {
+      return res.status(400).json({ error: "New name is required" });
+    }
 
     const adminDb = client.db().admin();
     await adminDb.command({

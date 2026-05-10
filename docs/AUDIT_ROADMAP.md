@@ -7,7 +7,7 @@ This document tracks the audit findings and the planned roadmap for improving th
 - [x] **Logging:** Transition from `console.log` to `pino` throughout the codebase for structured logging.
 - [x] **API Route Consolidation:** Complete the migration of logic from `src/routes/api.js` into modular sub-routers in `src/routes/api/`.
 - [x] **Error Handling:** Implement a centralized Express error handling middleware to reduce try-catch boilerplate.
-- [ ] **Validation:** Add request body validation (e.g., using a library or simple schema) for API endpoints.
+- [x] **Validation:** Add request/body/query validation utilities for key API endpoints and reject malformed JSON query payloads.
 
 ## 2. Security & Performance
 
@@ -48,3 +48,29 @@ This document tracks the audit findings and the planned roadmap for improving th
 ### Batch 3: New Features
 1. View Management.
 2. GridFS support.
+
+### Batch 4: API Hardening (in progress)
+1. Add centralized route parameter validation middleware.
+2. Harden JSON query parsing for `filter`/`sort`/`projection` payloads.
+3. Enforce bounds on expensive query inputs (limits, pipeline stages).
+4. Validate import/export formats and reject unsupported ones early.
+
+### Batch 5: Frontend Resilience
+1. Add consistent `fetch` error normalization in `public/js/app.js`.
+2. Improve loading/error states for high-latency actions (schema analysis, exports, indexes).
+3. Improve Aggregation Builder templates and pipeline UX safety rails.
+
+### Batch 6: Security + Session
+1. Add CSRF protection design and compatibility checks for API + SSR flows.
+2. Add secure logout/session-expiry UX handling in frontend state.
+3. Review auth boundaries and lock down any unauthenticated metadata endpoints.
+
+### Batch 7: Reliability + Observability
+1. Add request correlation IDs surfaced in logs and API errors.
+2. Add health diagnostics (`/healthz` deep mode) for Mongo connectivity and latency.
+3. Add test coverage for new validators and failure cases.
+
+### Batch 8: Performance + Data UX
+1. Add optional projection presets and server-side sampling for large documents.
+2. Improve index management with richer options (text/geospatial/TTL helpers).
+3. Add safer bulk update flow (preview + dry-run mode).

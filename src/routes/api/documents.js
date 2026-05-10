@@ -19,6 +19,10 @@ const mongoService = require("../../services/mongodb");
 const { ObjectId } = require("mongodb");
 const { serializeDocument, parseDocument } = require("../../utils/bson");
 const { buildSearchQuery } = require("./_shared");
+const {
+  readJsonQueryParam,
+  normalizePositiveInt,
+} = require("../../middleware/validate");
 
 // List documents (paginated, with filter / search / sort / projection /
 // array-filters and either cursor- or offset-based pagination).
@@ -40,7 +44,7 @@ router.get("/:db/:collection", async (req, res) => {
       projection: projectionParam,
       skip: skipParam,
     } = req.query;
-    const pageLimit = Math.min(parseInt(limit) || 50, 1000);
+    const pageLimit = normalizePositiveInt(limit, 50, 1000);
 
     const collection = client.db(dbName).collection(colName);
 
@@ -48,26 +52,32 @@ router.get("/:db/:collection", async (req, res) => {
     const hasCustomSort = !!sortParam;
     let sort = { createdAt: -1, _id: -1 };
     if (sortParam) {
-      try { sort = JSON.parse(sortParam); } catch (_) {}
+      const parsedSort = readJsonQueryParam(req, res, "sort", null);
+      if (parsedSort === null) return;
+      sort = parsedSort;
     }
 
     let projection = {};
     if (projectionParam) {
-      try { projection = JSON.parse(projectionParam); } catch (_) {}
+      const parsedProjection = readJsonQueryParam(req, res, "projection", null);
+      if (parsedProjection === null) return;
+      projection = parsedProjection;
     }
 
-    const skipOffset = Math.max(0, parseInt(skipParam) || 0);
+    const skipOffset = Math.max(0, parseInt(skipParam, 10) || 0);
     const useOffsetPagination = hasCustomSort || skipOffset > 0;
 
     let query = {};
     if (filter) {
-      try { query = JSON.parse(filter); }
-      catch (_) { query = { $or: [] }; }
+      const parsedFilter = readJsonQueryParam(req, res, "filter", null);
+      if (parsedFilter === null) return;
+      query = parsedFilter;
     }
 
     if (arrayFilters) {
+      const filters = readJsonQueryParam(req, res, "arrayFilters", null);
+      if (filters === null) return;
       try {
-        const filters = JSON.parse(arrayFilters);
         const arrayConditions = [];
 
         Object.keys(filters).forEach((fieldName) => {

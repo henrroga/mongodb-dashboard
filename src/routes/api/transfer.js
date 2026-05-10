@@ -5,6 +5,13 @@ const { serializeDocument, parseDocument } = require("../../utils/bson");
 const audit = require("../../utils/audit");
 const logger = require("../../utils/logger");
 const { GridFSBucket, ObjectId } = require("mongodb");
+const {
+  readJsonQueryParam,
+  normalizePositiveInt,
+} = require("../../middleware/validate");
+
+const SUPPORTED_IMPORT_FORMATS = new Set(["json", "jsonl", "csv"]);
+const SUPPORTED_EXPORT_FORMATS = new Set(["json", "jsonl", "csv"]);
 
 /**
  * Simple CSV parser that handles quoted fields and commas inside quotes.
@@ -77,6 +84,10 @@ router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (r
     const { db: dbName, collection: colName } = req.params;
     const { format = "json", content, stopOnError = false } = req.body;
 
+    if (!SUPPORTED_IMPORT_FORMATS.has(format)) {
+      return res.status(400).json({ error: "Invalid import format" });
+    }
+
     if (!content) return res.status(400).json({ error: "No content provided" });
 
     const collection = client.db(dbName).collection(colName);
@@ -136,17 +147,19 @@ router.get("/:db/:collection/export", async (req, res) => {
     if (!client) return res.status(400).json({ error: "Not connected" });
 
     const { db: dbName, collection: colName } = req.params;
-    const { format = "json", filter: filterParam, sort: sortParam, limit: limitParam } = req.query;
+    const { format = "json", limit: limitParam } = req.query;
+    if (!SUPPORTED_EXPORT_FORMATS.has(format)) {
+      return res.status(400).json({ error: "Invalid export format" });
+    }
 
     const collection = client.db(dbName).collection(colName);
 
-    let query = {};
-    if (filterParam) { try { query = JSON.parse(filterParam); } catch (e) {} }
+    const query = readJsonQueryParam(req, res, "filter", {});
+    if (query === null) return;
+    const sort = readJsonQueryParam(req, res, "sort", {});
+    if (sort === null) return;
 
-    let sort = {};
-    if (sortParam) { try { sort = JSON.parse(sortParam); } catch (e) {} }
-
-    const limit = limitParam ? Math.min(parseInt(limitParam) || 10000, 100000) : 10000;
+    const limit = normalizePositiveInt(limitParam, 10000, 100000);
 
     const cursor = collection.find(query).sort(sort).limit(limit);
 
@@ -204,19 +217,13 @@ router.get("/:db/:collection/backup", async (req, res) => {
     if (!client) return res.status(400).json({ error: "Not connected" });
 
     const { db: dbName, collection: colName } = req.params;
-    const { filter: filterParam, sort: sortParam } = req.query;
+    const query = readJsonQueryParam(req, res, "filter", {});
+    if (query === null) return;
+    const sort = readJsonQueryParam(req, res, "sort", {});
+    if (sort === null) return;
 
     const db = client.db(dbName);
     const collection = db.collection(colName);
-
-    let query = {};
-    if (filterParam) {
-      try { query = JSON.parse(filterParam); } catch (_) {}
-    }
-    let sort = {};
-    if (sortParam) {
-      try { sort = JSON.parse(sortParam); } catch (_) {}
-    }
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `${dbName}.${colName}.${stamp}.jsonl`;

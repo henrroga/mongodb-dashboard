@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const { readOnlyAndAuditMiddleware } = require("./api/_shared");
+const { validateMongoPathParams } = require("../middleware/validate");
 
 router.use(readOnlyAndAuditMiddleware);
+router.use(validateMongoPathParams);
 
 // Sub-routers — extracted incrementally from this file. Order matters:
 // concrete top-level paths (/databases, /server/*, /status, /connect) must
