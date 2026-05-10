@@ -5231,3 +5231,54 @@ textarea.inline-edit-input {
 .sidebar-sparkline {
   display: block;
 }
+
+/* ─── What's New modal ────────────────────────────────────────────────────── */
+
+.whatsnew-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  margin-right: 10px;
+  vertical-align: middle;
+  font-weight: 500;
+}
+
+.whatsnew-body {
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.whatsnew-body h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.whatsnew-body ul {
+  padding-left: 22px;
+  margin: 8px 0;
+}
+
+.whatsnew-body li {
+  margin: 4px 0;
+}
+
+.whatsnew-body p {
+  margin: 6px 0;
+}
+
+.whatsnew-body code {
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.whatsnew-body strong {
+  color: var(--accent-hover, var(--accent));
+}

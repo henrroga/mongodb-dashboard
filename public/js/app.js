@@ -333,6 +333,83 @@ async function openCopyAsCodeModal({ dbName, collectionName, getInputs, kind = '
   });
 }
 
+// ─── What's new (changelog modal on version bump) ────────────────────────────
+
+const SEEN_VERSION_KEY = 'mongodb_dashboard_seen_version';
+
+function showWhatsNewModal(markdown, version) {
+  const root = document.createElement('div');
+  root.className = 'ui-modal ui-modal-whatsnew';
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  root.innerHTML = `
+    <div class="ui-modal-backdrop"></div>
+    <div class="ui-modal-dialog ui-modal-dialog-wide" tabindex="-1">
+      <header class="ui-modal-header">
+        <h3 class="ui-modal-title">
+          <span class="whatsnew-tag">v${escapeHtml(version)}</span>
+          What's new in this version
+        </h3>
+        <button class="ui-modal-close" aria-label="Close">&times;</button>
+      </header>
+      <div class="ui-modal-body whatsnew-body"></div>
+      <footer class="ui-modal-actions">
+        <span class="code-hint">Read the full history any time via the command palette: <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd> → "What's New"</span>
+        <button class="btn btn-primary" data-whatsnew-close>Got it</button>
+      </footer>
+    </div>
+  `;
+  // Render only the section for the current version (and any newer that may
+  // exist if the user is reading old localStorage state). Heuristic: include
+  // the first H2 block.
+  const m = markdown.match(/(## [^\n]+\n[\s\S]*?)(?=\n## |\n*$)/);
+  const section = m ? m[1] : markdown;
+  root.querySelector('.whatsnew-body').innerHTML = renderMiniMarkdown(section);
+  document.body.appendChild(root);
+  // eslint-disable-next-line no-unused-expressions
+  root.offsetWidth;
+  root.classList.add('ui-modal-open');
+  const close = (remember = true) => {
+    if (remember) localStorage.setItem(SEEN_VERSION_KEY, version);
+    root.classList.remove('ui-modal-open');
+    setTimeout(() => root.remove(), 150);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  root.querySelector('.ui-modal-close').addEventListener('click', () => close());
+  root.querySelector('[data-whatsnew-close]').addEventListener('click', () => close());
+  root.querySelector('.ui-modal-backdrop').addEventListener('click', () => close());
+}
+
+async function checkWhatsNew(force = false) {
+  const cfg = window.__APP_CONFIG__ || {};
+  const current = cfg.version;
+  if (!current) return;
+  if (!force) {
+    const seen = localStorage.getItem(SEEN_VERSION_KEY);
+    if (seen === current) return;
+    // Don't pop What's New on the very first visit — onboarding handles that.
+    if (!localStorage.getItem('mongodb_dashboard_onboarded_v1')) {
+      localStorage.setItem(SEEN_VERSION_KEY, current);
+      return;
+    }
+  }
+  try {
+    const res = await fetch('/api/changelog', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.markdown) showWhatsNewModal(data.markdown, data.version || current);
+  } catch (_) {}
+}
+
+window.showWhatsNew = () => checkWhatsNew(true);
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Defer slightly so onboarding wins if both would fire at first visit.
+  setTimeout(() => checkWhatsNew(false), 1200);
+});
+
 // ─── First-run onboarding ────────────────────────────────────────────────────
 
 const ONBOARDING_KEY = 'mongodb_dashboard_onboarded_v1';
@@ -1308,6 +1385,7 @@ function getCommandActions() {
     }},
     { label: 'Keyboard Shortcuts', category: 'Actions', action: toggleShortcutsModal },
     { label: 'Show Onboarding Tour', category: 'Help', action: () => window.showOnboardingTour && window.showOnboardingTour() },
+    { label: "What's New", category: 'Help', action: () => window.showWhatsNew && window.showWhatsNew() },
     { label: 'Toggle Scratchpad', category: 'Actions', action: () => document.getElementById('scratchpadBtn')?.click() },
     ...THEME_VARIANTS.map((t) => ({
       label: `Theme: ${t.label}`,

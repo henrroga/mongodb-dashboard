@@ -1,8 +1,10 @@
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 const session = require("express-session");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const pkg = require("./package.json");
 
 const config = require("./src/config");
 const { requireAuth } = require("./src/middleware/auth");
@@ -66,8 +68,13 @@ app.use((req, res, next) => {
     authEnabled: config.auth.enabled,
     readOnly: config.readOnly,
     presetLocked: !!config.presetMongoUri,
+    version: pkg.version,
   };
   next();
+});
+
+app.get("/api/changelog", requireAuth, (req, res) => {
+  res.json({ version: pkg.version, markdown: loadChangelog() });
 });
 
 const generalLimiter = rateLimit({
@@ -85,6 +92,21 @@ const loginLimiter = rateLimit({
 });
 
 app.get("/healthz", (req, res) => res.json({ ok: true }));
+
+// Public app metadata + changelog (auth-gated below by default).
+let cachedChangelog = null;
+function loadChangelog() {
+  if (cachedChangelog !== null) return cachedChangelog;
+  try {
+    cachedChangelog = fs.readFileSync(
+      path.join(__dirname, "CHANGELOG.md"),
+      "utf8"
+    );
+  } catch (_) {
+    cachedChangelog = "";
+  }
+  return cachedChangelog;
+}
 
 app.use("/login", loginLimiter, loginRouter);
 app.use("/logout", logoutRouter);
