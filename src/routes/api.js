@@ -21,6 +21,7 @@ router.use(readOnlyAndAuditMiddleware);
 // resolves them first.
 router.use("/", require("./api/connection"));
 router.use("/", require("./api/databases"));
+router.use("/", require("./api/indexes"));
 router.use("/", require("./api/documents"));
 
 // List databases
@@ -235,89 +236,6 @@ router.post("/:db/:collection/aggregate", async (req, res) => {
 });
 
 // ─── Indexes (must be before /:id routes) ────────────────────────────────────
-
-router.get("/:db/:collection/indexes", async (req, res) => {
-  try {
-    const client = mongoService.getClient();
-    if (!client) return res.status(400).json({ error: "Not connected" });
-
-    const col = client.db(req.params.db).collection(req.params.collection);
-    const indexes = await col.indexes();
-
-    // Enrich with size info if available
-    let indexSizes = {};
-    try {
-      const stats = await client.db(req.params.db).command({ collStats: req.params.collection });
-      indexSizes = stats.indexSizes || {};
-    } catch (e) { /* ignore */ }
-
-    const enriched = indexes.map((idx) => ({
-      name: idx.name,
-      key: idx.key,
-      unique: idx.unique || false,
-      sparse: idx.sparse || false,
-      hidden: idx.hidden || false,
-      expireAfterSeconds: idx.expireAfterSeconds,
-      partialFilterExpression: idx.partialFilterExpression,
-      sizeBytes: indexSizes[idx.name] || null,
-    }));
-
-    res.json({ indexes: enriched });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post("/:db/:collection/indexes", async (req, res) => {
-  try {
-    const client = mongoService.getClient();
-    if (!client) return res.status(400).json({ error: "Not connected" });
-
-    const { key, options = {} } = req.body;
-    if (!key || Object.keys(key).length === 0) {
-      return res.status(400).json({ error: "Index key is required" });
-    }
-
-    const col = client.db(req.params.db).collection(req.params.collection);
-    const name = await col.createIndex(key, options);
-    res.json({ success: true, name });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete("/:db/:collection/indexes/:indexName", async (req, res) => {
-  try {
-    const client = mongoService.getClient();
-    if (!client) return res.status(400).json({ error: "Not connected" });
-
-    if (req.params.indexName === "_id_") {
-      return res.status(400).json({ error: "Cannot drop the _id index" });
-    }
-
-    const col = client.db(req.params.db).collection(req.params.collection);
-    await col.dropIndex(req.params.indexName);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.put("/:db/:collection/indexes/:indexName", async (req, res) => {
-  try {
-    const client = mongoService.getClient();
-    if (!client) return res.status(400).json({ error: "Not connected" });
-
-    const { hidden } = req.body;
-    await client.db(req.params.db).command({
-      collMod: req.params.collection,
-      index: { name: req.params.indexName, hidden: !!hidden },
-    });
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // Get collection schema (MUST be before /:id route to avoid route conflict)
 router.get("/:db/:collection/schema", async (req, res) => {
