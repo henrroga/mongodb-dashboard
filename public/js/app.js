@@ -4672,20 +4672,33 @@ async function saveInlineEdit(td, doc, field, newValue, dbName, collectionName, 
   }
 }
 
+// Wrap occurrences of `term` in `<mark>` inside an already-escaped string.
+// `escaped` must be HTML-escaped already; we operate on raw text positions.
+function highlightTerm(escaped, term) {
+  if (!term || !term.trim()) return escaped;
+  // Find matches in the escaped string by escaping the term too. This is
+  // safe — we know `escaped` doesn't contain raw HTML, and we never wrap
+  // anything but plain text fragments.
+  const safeTerm = escapeHtml(term).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!safeTerm) return escaped;
+  return escaped.replace(new RegExp(safeTerm, "gi"), (m) => `<mark class="cell-match">${m}</mark>`);
+}
+
 function formatCellValue(value, field) {
   if (value === null || value === undefined) {
     return '<span class="cell-null">null</span>';
   }
 
   if (field === '_id' && value.$oid) {
-    return `<span class="cell-id cell-id-copy" title="Click to copy" data-copy="${value.$oid}">${value.$oid}</span>`;
+    const inner = highlightTerm(escapeHtml(value.$oid), currentSearchTerm);
+    return `<span class="cell-id cell-id-copy" title="Click to copy" data-copy="${value.$oid}">${inner}</span>`;
   }
 
   if (typeof value === 'object') {
-    if (value.$oid) return `<span class="cell-id">${value.$oid}</span>`;
-    if (value.$date) return `<span class="cell-value">${new Date(value.$date).toLocaleString()}</span>`;
+    if (value.$oid) return `<span class="cell-id">${highlightTerm(escapeHtml(value.$oid), currentSearchTerm)}</span>`;
+    if (value.$date) return `<span class="cell-value">${escapeHtml(new Date(value.$date).toLocaleString())}</span>`;
     const jsonStr = JSON.stringify(value, null, 2);
-    const escapedJson = escapeHtml(jsonStr);
+    const escapedJson = highlightTerm(escapeHtml(jsonStr), currentSearchTerm);
     if (Array.isArray(value)) {
       return `<span class="cell-object cell-expandable" title="Click to expand">[${value.length} items]<pre class="cell-expanded-json" style="display:none">${escapedJson}</pre></span>`;
     }
@@ -4695,10 +4708,10 @@ function formatCellValue(value, field) {
   if (typeof value === 'string') {
     const maxLen = 50;
     const display = value.length > maxLen ? value.substring(0, maxLen) + '...' : value;
-    return `<span class="cell-value">${escapeHtml(display)}</span>`;
+    return `<span class="cell-value">${highlightTerm(escapeHtml(display), currentSearchTerm)}</span>`;
   }
 
-  return `<span class="cell-value">${value}</span>`;
+  return `<span class="cell-value">${highlightTerm(escapeHtml(String(value)), currentSearchTerm)}</span>`;
 }
 
 function escapeHtml(str) {
