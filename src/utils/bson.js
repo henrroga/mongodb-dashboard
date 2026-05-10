@@ -77,6 +77,15 @@ function parseDocument(doc) {
     if (doc.$numberLong) {
       return Long.fromString(doc.$numberLong);
     }
+    if (doc.$binary) {
+      return new Binary(
+        Buffer.from(doc.$binary, "base64"),
+        parseInt(doc.$type || "0", 16)
+      );
+    }
+    if (doc.$timestamp) {
+      return new Timestamp({ t: doc.$timestamp.t, i: doc.$timestamp.i });
+    }
 
     const result = {};
     for (const key in doc) {

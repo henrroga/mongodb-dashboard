@@ -128,7 +128,7 @@ router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (r
   }
 });
 
-// Export documents (JSON or CSV)
+// Export documents (JSON or CSV) - now with streaming!
 router.get("/:db/:collection/export", async (req, res) => {
   try {
     const client = mongoService.getClient();
@@ -147,34 +147,52 @@ router.get("/:db/:collection/export", async (req, res) => {
 
     const limit = limitParam ? Math.min(parseInt(limitParam) || 10000, 100000) : 10000;
 
-    const docs = await collection.find(query).sort(sort).limit(limit).toArray();
-    const serialized = docs.map(serializeDocument);
+    const cursor = collection.find(query).sort(sort).limit(limit);
 
     if (format === "csv") {
-      if (serialized.length === 0) {
-        res.setHeader("Content-Type", "text/csv");
-        res.setHeader("Content-Disposition", `attachment; filename="${colName}.csv"`);
-        return res.send("");
-      }
-      const headers = [...new Set(serialized.flatMap((d) => Object.keys(d)))];
-      const csv = [headers.join(","), ...serialized.map((d) => toCsvRow(headers, d))].join("\n");
       res.setHeader("Content-Type", "text/csv");
       res.setHeader("Content-Disposition", `attachment; filename="${colName}.csv"`);
-      return res.send(csv);
+      
+      const sampleDocs = await collection.find(query).sort(sort).limit(Math.min(limit, 100)).toArray();
+      if (sampleDocs.length === 0) return res.send("");
+      
+      const headers = [...new Set(sampleDocs.flatMap(d => Object.keys(serializeDocument(d))))];
+      res.write(headers.join(",") + "\n");
+      
+      for await (const doc of cursor) {
+        res.write(toCsvRow(headers, serializeDocument(doc)) + "\n");
+      }
+      return res.end();
     }
 
     if (format === "jsonl") {
       res.setHeader("Content-Type", "application/x-ndjson");
       res.setHeader("Content-Disposition", `attachment; filename="${colName}.jsonl"`);
-      return res.send(serialized.map((d) => JSON.stringify(d)).join("\n"));
+      for await (const doc of cursor) {
+        res.write(JSON.stringify(serializeDocument(doc)) + "\n");
+      }
+      return res.end();
     }
 
+    // JSON Array
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="${colName}.json"`);
-    res.send(JSON.stringify(serialized, null, 2));
+    res.write("[\n");
+    let first = true;
+    for await (const doc of cursor) {
+      if (!first) res.write(",\n");
+      res.write(JSON.stringify(serializeDocument(doc), null, 2));
+      first = false;
+    }
+    res.write("\n]");
+    res.end();
   } catch (err) {
     logger.error(err);
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.end();
+    }
   }
 });
 

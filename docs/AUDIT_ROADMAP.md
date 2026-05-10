@@ -11,10 +11,10 @@ This document tracks the audit findings and the planned roadmap for improving th
 
 ## 2. Security & Performance
 
-- [ ] **Streaming Exports:** Refactor the `/export` API route to use MongoDB's `cursor.stream()` to prevent OOM errors on large collections.
-- [ ] **BSON Type Completeness:** Update `src/utils/bson.js` to handle all common BSON types during parsing (missing `$binary`, `$timestamp`).
+- [x] **Streaming Exports:** Refactor the `/export` API route to use MongoDB's `cursor.stream()` to prevent OOM errors on large collections.
+- [x] **BSON Type Completeness:** Update `src/utils/bson.js` to handle all common BSON types during parsing (missing `$binary`, `$timestamp`).
 - [ ] **CSRF Protection:** Evaluate and implement CSRF protection (e.g., using `csurf` or similar middleware).
-- [ ] **Shell Parser Audit:** Perform a deep dive into `src/utils/shellArg.js` to ensure no injection vulnerabilities exist.
+- [x] **Shell Parser Audit:** Perform a deep dive into `src/utils/shellArg.js` to ensure no injection vulnerabilities exist.
 
 ## 3. Feature Enhancements
 
