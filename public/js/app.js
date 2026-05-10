@@ -1216,56 +1216,52 @@ async function autoReconnect() {
 
 // ─── Keyboard Shortcuts ──────────────────────────────────────────────────────
 
-function initKeyboardShortcuts() {
-  document.addEventListener('keydown', (e) => {
-    const isMod = e.metaKey || e.ctrlKey;
-    const tag = document.activeElement?.tagName;
-    const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.closest('.CodeMirror');
-
-    // Escape — close any open modal
-    if (e.key === 'Escape') {
+// Declarative binding table. Each entry has:
+//   matcher  — predicate over { e, isMod, isEditing }
+//   when     — optional precondition (omitted ⇒ always)
+//   handler  — what to do; runs preventDefault if it returns nothing/true
+//   allowInEditing — set when the binding should fire even inside an input
+//
+// Adding or changing a shortcut means adding to this table only; the dispatch
+// loop never gets touched.
+const KEYBINDINGS = [
+  // Escape — close any legacy .modal that's open. The new ui-modal system
+  // handles its own Escape.
+  {
+    name: 'esc-close-modal',
+    matcher: ({ e }) => e.key === 'Escape',
+    allowInEditing: true,
+    handler: () => {
       const openModal = document.querySelector('.modal[style*="display: flex"], .modal[style*="display:flex"]');
-      if (openModal) {
-        openModal.style.display = 'none';
-        e.preventDefault();
-        return;
-      }
-      // Close shortcuts modal
+      if (openModal) { openModal.style.display = 'none'; return; }
       const shortcutsModal = document.getElementById('shortcutsModal');
       if (shortcutsModal && shortcutsModal.style.display !== 'none') {
         shortcutsModal.style.display = 'none';
-        e.preventDefault();
         return;
       }
-    }
+      return false; // not handled — don't preventDefault
+    },
+  },
 
-    // Don't capture shortcuts when typing in inputs (except specific combos)
-    if (isEditing && !(isMod && (e.key === 'Enter' || e.key === '/' || e.key === 'k'))) return;
+  { name: 'cmd-k-palette',
+    matcher: ({ e, isMod }) => isMod && e.key.toLowerCase() === 'k',
+    allowInEditing: true,
+    handler: () => toggleCommandPalette() },
 
-    // Cmd/Ctrl + K — open command palette
-    if (isMod && e.key === 'k') {
-      e.preventDefault();
-      toggleCommandPalette();
-      return;
-    }
+  { name: 'cmd-enter-run',
+    matcher: ({ e, isMod }) => isMod && e.key === 'Enter',
+    allowInEditing: true,
+    handler: () => document.getElementById('queryRunBtn')?.click() },
 
-    // Cmd/Ctrl + Enter — run query
-    if (isMod && e.key === 'Enter') {
-      e.preventDefault();
-      document.getElementById('queryRunBtn')?.click();
-      return;
-    }
+  { name: 'cmd-shift-n-new-doc',
+    matcher: ({ e, isMod }) => isMod && e.shiftKey && e.key === 'N',
+    handler: () => document.getElementById('addDocBtn')?.click() },
 
-    // Cmd/Ctrl + Shift + N — new document
-    if (isMod && e.shiftKey && e.key === 'N') {
-      e.preventDefault();
-      document.getElementById('addDocBtn')?.click();
-      return;
-    }
-
-    // Cmd/Ctrl + 1..9 — recall the Nth saved query for the current collection.
-    if (isMod && /^[1-9]$/.test(e.key) && currentDbName && currentCollectionName) {
-      e.preventDefault();
+  { name: 'cmd-1-9-saved-query',
+    matcher: ({ e, isMod }) =>
+      isMod && /^[1-9]$/.test(e.key) && currentDbName && currentCollectionName,
+    allowInEditing: true,
+    handler: ({ e }) => {
       const queries = getSavedQueries(currentDbName, currentCollectionName);
       const idx = parseInt(e.key) - 1;
       const q = queries[idx];
@@ -1276,52 +1272,60 @@ function initKeyboardShortcuts() {
       } else {
         showToast(`No saved query in slot ${e.key}`, 'info', 1500);
       }
-      return;
-    }
+    } },
 
-    // Cmd/Ctrl + / — toggle shell panel
-    if (isMod && e.key === '/') {
-      e.preventDefault();
+  { name: 'cmd-slash-shell',
+    matcher: ({ e, isMod }) => isMod && e.key === '/',
+    allowInEditing: true,
+    handler: () => {
       const shellPanel = document.getElementById('shellPanel');
-      const shellOpenBtn = document.getElementById('shellOpenBtn');
-      if (shellPanel?.classList.contains('shell-panel-closed')) {
-        shellOpenBtn?.click();
-      } else {
+      if (shellPanel?.classList.contains('shell-panel-closed'))
+        document.getElementById('shellOpenBtn')?.click();
+      else
         document.getElementById('shellToggleBtn')?.click();
-      }
-      return;
-    }
+    } },
 
-    // ? — show shortcuts help (when not editing)
-    if (e.key === '?' && !isEditing) {
-      e.preventDefault();
-      toggleShortcutsModal();
-      return;
-    }
+  { name: 'help-shortcuts',
+    matcher: ({ e }) => e.key === '?',
+    handler: () => toggleShortcutsModal() },
 
-    // R — refresh (when not editing)
-    if (e.key === 'r' && !isEditing && !isMod) {
-      e.preventDefault();
-      document.getElementById('refreshBtn')?.click();
-      return;
-    }
+  { name: 'r-refresh',
+    matcher: ({ e, isMod }) => e.key === 'r' && !isMod,
+    handler: () => document.getElementById('refreshBtn')?.click() },
 
-    // F — focus filter (when not editing)
-    if (e.key === 'f' && !isEditing && !isMod) {
-      e.preventDefault();
-      const filterEl = document.getElementById('queryFilter');
-      if (filterEl) filterEl.focus();
-      return;
-    }
+  { name: 'f-focus-filter',
+    matcher: ({ e, isMod }) => e.key === 'f' && !isMod,
+    handler: () => document.getElementById('queryFilter')?.focus() },
 
-    // 1-5 — switch tabs (when not editing)
-    if (!isEditing && e.key >= '1' && e.key <= '5') {
+  { name: 'digit-tabs',
+    matcher: ({ e }) => e.key >= '1' && e.key <= '5',
+    handler: ({ e }) => {
       const tabNames = ['documents', 'indexes', 'schema', 'aggregation', 'validation'];
       const idx = parseInt(e.key) - 1;
-      if (idx < tabNames.length) {
-        const tab = document.querySelector(`.collection-tab[data-tab="${tabNames[idx]}"]`);
-        if (tab) { e.preventDefault(); tab.click(); }
-      }
+      const tab = document.querySelector(`.collection-tab[data-tab="${tabNames[idx]}"]`);
+      if (!tab) return false;
+      tab.click();
+    } },
+];
+
+function initKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    const isMod = e.metaKey || e.ctrlKey;
+    const tag = document.activeElement?.tagName;
+    const isEditing =
+      tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+      document.activeElement?.closest('.CodeMirror');
+
+    for (const b of KEYBINDINGS) {
+      if (isEditing && !b.allowInEditing) continue;
+      let matched;
+      try { matched = b.matcher({ e, isMod, isEditing }); }
+      catch (_) { matched = false; }
+      if (!matched) continue;
+      const result = b.handler({ e, isMod, isEditing });
+      if (result === false) continue; // not actually handled, try next
+      e.preventDefault();
+      return;
     }
   });
 }
