@@ -9309,6 +9309,7 @@ function initImportExport(dbName, collectionName) {
     document.getElementById('restoreConfirmBtn')?.addEventListener('click', async () => {
       const file = document.getElementById('restoreFileInput')?.files?.[0];
       const mode = document.getElementById('restoreMode')?.value || 'insert';
+      const strict = document.getElementById('restoreStrictMode')?.checked === true;
       if (!file) {
         showToast('Select a backup file first.', 'warning');
         return;
@@ -9327,9 +9328,13 @@ function initImportExport(dbName, collectionName) {
         const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/restore`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, mode, confirmReplace: mode === 'replace' }),
+          body: JSON.stringify({ content, mode, strict, confirmReplace: mode === 'replace' }),
         });
-        showToast(`Restore complete: ${data.restored}/${data.total}`, 'success');
+        if (data.failed > 0) {
+          showToast(`Restore finished with errors: restored ${data.restored}/${data.total}, failed ${data.failed}`, 'warning', 5000);
+        } else {
+          showToast(`Restore complete: ${data.restored}/${data.total}`, 'success');
+        }
         currentCursor = null;
         currentNextSkip = null;
         allDocuments = [];

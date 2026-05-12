@@ -325,6 +325,7 @@ router.post("/:db/:collection/restore", express.json({ limit: "100mb" }), async 
     if (!["insert", "replace"].includes(mode)) return bad(res, "mode must be insert or replace");
     const dryRun = req.body?.dryRun === true;
     const confirmReplace = req.body?.confirmReplace === true;
+    const strict = req.body?.strict === true;
     const content = contentField.value;
     const docs = parseRestorePayload(content);
     const withId = docs.filter((d) => d && typeof d === "object" && d._id).length;
@@ -350,6 +351,8 @@ router.post("/:db/:collection/restore", express.json({ limit: "100mb" }), async 
     }
     const col = client.db(dbName).collection(colName);
     let restored = 0;
+    let failed = 0;
+    const errors = [];
     if (mode === "replace") {
       await col.deleteMany({});
     }
@@ -361,17 +364,41 @@ router.post("/:db/:collection/restore", express.json({ limit: "100mb" }), async 
           await col.insertOne(d);
         }
         restored += 1;
-      } catch (_) {}
+      } catch (err) {
+        failed += 1;
+        if (errors.length < 20) {
+          errors.push(String(err?.message || "restore write error"));
+        }
+        if (strict) {
+          return res.status(409).json({
+            success: false,
+            restored,
+            failed,
+            total: docs.length,
+            strict: true,
+            error: `Restore stopped on first write error: ${errors[0]}`,
+            errors,
+          });
+        }
+      }
     }
     appendBackupRun({
       ts: new Date().toISOString(),
       db: dbName,
       collection: colName,
       restored,
+      failed,
       mode,
       event: "restore",
     });
-    res.json({ success: true, restored, total: docs.length });
+    res.json({
+      success: failed === 0,
+      restored,
+      failed,
+      total: docs.length,
+      strict,
+      errors,
+    });
   } catch (err) {
     logger.error(err);
     res.status(err.status || 500).json({ error: err.message });
