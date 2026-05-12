@@ -8,14 +8,25 @@ function parseBool(v, def = false) {
 
 const authPasswordHash = process.env.AUTH_PASSWORD_HASH || "";
 const authPasswordPlain = process.env.AUTH_PASSWORD || "";
+const authBootstrapUsername = process.env.AUTH_BOOTSTRAP_USERNAME || "";
+const authBootstrapPassword = process.env.AUTH_BOOTSTRAP_PASSWORD || "";
 const authEnabled = parseBool(
   process.env.AUTH_ENABLED,
-  !!(authPasswordHash || authPasswordPlain)
+  !!(
+    authPasswordHash ||
+    authPasswordPlain ||
+    (authBootstrapUsername && authBootstrapPassword)
+  )
 );
 
-if (authEnabled && !authPasswordHash && !authPasswordPlain) {
+if (
+  authEnabled &&
+  !authPasswordHash &&
+  !authPasswordPlain &&
+  !(authBootstrapUsername && authBootstrapPassword)
+) {
   throw new Error(
-    "AUTH_ENABLED=true but no AUTH_PASSWORD or AUTH_PASSWORD_HASH was provided"
+    "AUTH_ENABLED=true but no AUTH_PASSWORD, AUTH_PASSWORD_HASH, or bootstrap credentials were provided"
   );
 }
 
@@ -69,6 +80,9 @@ const config = {
     maxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS || "5", 10),
     lockoutMs: parseInt(process.env.LOGIN_LOCKOUT_MS || "900000", 10),
     usersFile: process.env.AUTH_USERS_FILE || "data/users.json",
+    bootstrapUsername: process.env.AUTH_BOOTSTRAP_USERNAME || "",
+    bootstrapPassword: process.env.AUTH_BOOTSTRAP_PASSWORD || "",
+    bootstrapRole: process.env.AUTH_BOOTSTRAP_ROLE || "admin",
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000", 10),

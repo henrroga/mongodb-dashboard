@@ -40,6 +40,38 @@ async function ensureUsersFile() {
       );
     }
   }
+
+  // Optional first-boot admin bootstrap from env, only when store is empty.
+  try {
+    const raw = await fs.readFile(USERS_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    const users = Array.isArray(parsed?.users) ? parsed.users : [];
+    if (
+      users.length === 0 &&
+      config.auth.bootstrapUsername &&
+      config.auth.bootstrapPassword
+    ) {
+      const role = ["viewer", "editor", "admin"].includes(
+        config.auth.bootstrapRole
+      )
+        ? config.auth.bootstrapRole
+        : "admin";
+      const seeded = {
+        version: 1,
+        users: [
+          {
+            username: config.auth.bootstrapUsername,
+            passwordHash: bcrypt.hashSync(config.auth.bootstrapPassword, 12),
+            role,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
+      await fs.writeFile(USERS_PATH, JSON.stringify(seeded, null, 2), "utf8");
+    }
+  } catch {
+    // best effort only
+  }
 }
 
 async function readUsers() {

@@ -18,10 +18,12 @@ This template persists:
 - `/app/logs` for audit logs
 
 ## First admin user
-After first deploy, exec into the container and run:
+Preferred: set `AUTH_BOOTSTRAP_USERNAME`, `AUTH_BOOTSTRAP_PASSWORD`, and
+`AUTH_BOOTSTRAP_ROLE=admin` in Coolify before first boot. The app seeds this
+user only when the user store is empty.
+
+Alternative (manual):
 
 ```bash
 node scripts/create-user.js admin 'strong-password' admin
 ```
-
-Then sign in with that user.

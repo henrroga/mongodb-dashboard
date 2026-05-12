@@ -106,6 +106,9 @@ All options are env-driven (`.env.example` is the source of truth).
 | `AUTH_ENABLED` | auto | Enables auth (auto-true if password/hash exists) |
 | `AUTH_PASSWORD_HASH` | — | bcrypt hash used for login |
 | `AUTH_USERS_FILE` | `data/users.json` | JSON user store for multi-user auth (`username`, `passwordHash`, `role`) |
+| `AUTH_BOOTSTRAP_USERNAME` | — | optional first-boot user (applies only when user store is empty) |
+| `AUTH_BOOTSTRAP_PASSWORD` | — | password for bootstrapped user |
+| `AUTH_BOOTSTRAP_ROLE` | `admin` | role for bootstrapped user (`viewer`, `editor`, `admin`) |
 | `AUTH_PASSWORD` | — | dev convenience plaintext password |
 | `SESSION_SECRET` | random in non-prod | session signing secret (required in production auth setups) |
 | `CONNECTION_VAULT_SECRET` | falls back to `SESSION_SECRET` | encryption key for saved server-side connection vault entries |
