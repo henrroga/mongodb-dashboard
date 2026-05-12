@@ -5397,6 +5397,8 @@ let currentModalDb = null;
 let currentModalCol = null;
 let currentSchema = null;
 let useFormMode = true;
+let docModalOriginalSerialized = null;
+let editModalOriginalSerialized = null;
 
 function summarizeTopLevelChanges(beforeDoc, afterDoc) {
   const before = beforeDoc && typeof beforeDoc === 'object' ? beforeDoc : {};
@@ -5435,14 +5437,25 @@ function setupModalHandlers() {
   const saveBtn = document.getElementById('modalSave');
   const deleteBtn = document.getElementById('modalDelete');
 
-  const closeModal = () => {
+  const closeModal = async () => {
+    const shouldWarn = modal.style.display !== 'none' && isDocModalDirty();
+    if (shouldWarn) {
+      const ok = await ui.confirm({
+        title: 'Discard unsaved changes?',
+        message: 'You have unsaved document changes.',
+        confirmText: 'Discard',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     modal.style.display = 'none';
     currentModalDoc = null;
+    docModalOriginalSerialized = null;
   };
 
-  backdrop.addEventListener('click', closeModal);
-  closeBtn.addEventListener('click', closeModal);
-  cancelBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', () => { closeModal(); });
+  closeBtn.addEventListener('click', () => { closeModal(); });
+  cancelBtn.addEventListener('click', () => { closeModal(); });
 
   saveBtn.addEventListener('click', saveDocument);
   deleteBtn.addEventListener('click', () => {
@@ -5482,6 +5495,16 @@ function setupModalHandlers() {
   });
 
   // Delete now uses ui.confirm — no static modal handlers.
+  document.addEventListener('keydown', (e) => {
+    if (modal.style.display === 'none') return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      saveDocument();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeModal();
+    }
+  });
 }
 
 function openTemplatePickerMenu(anchor, dbName, collectionName) {
@@ -5558,6 +5581,7 @@ async function openDocModal(dbName, collectionName, doc) {
     title.textContent = 'Edit Document';
     deleteBtn.style.display = 'block';
     setEditorValue('docEditor', JSON.stringify(doc, null, 2));
+    docModalOriginalSerialized = JSON.stringify(doc);
     useFormMode = false;
     formToggle.style.display = 'none';
     formContainer.style.display = 'none';
@@ -5575,6 +5599,7 @@ async function openDocModal(dbName, collectionName, doc) {
         useFormMode = true;
         formToggle.style.display = 'flex';
         renderFormFromSchema(formContainer, currentSchema.fields);
+        docModalOriginalSerialized = JSON.stringify(getFormData(formContainer) || {});
         formContainer.style.display = 'block';
         if (cmWrap) cmWrap.style.display = 'none';
       } else {
@@ -5584,6 +5609,7 @@ async function openDocModal(dbName, collectionName, doc) {
         formContainer.style.display = 'none';
         if (cmWrap) cmWrap.style.display = '';
         setEditorValue('docEditor', '{\n  \n}');
+        docModalOriginalSerialized = JSON.stringify({});
       }
     } catch (err) {
       currentSchema = null;
@@ -5592,6 +5618,7 @@ async function openDocModal(dbName, collectionName, doc) {
       formContainer.style.display = 'none';
       if (cmWrap) cmWrap.style.display = '';
       setEditorValue('docEditor', '{\n  \n}');
+      docModalOriginalSerialized = JSON.stringify({});
     }
   }
 
@@ -5603,6 +5630,22 @@ async function openDocModal(dbName, collectionName, doc) {
     if (firstInput) firstInput.focus();
   } else {
     focusEditor('docEditor');
+  }
+}
+
+function isDocModalDirty() {
+  const modal = document.getElementById('docModal');
+  if (!modal || modal.style.display === 'none') return false;
+  try {
+    if (useFormMode && currentSchema) {
+      const formContainer = document.getElementById('docFormContainer');
+      const cur = JSON.stringify(getFormData(formContainer) || {});
+      return cur !== (docModalOriginalSerialized || JSON.stringify({}));
+    }
+    const cur = JSON.stringify(JSON.parse(getEditorValue('docEditor') || '{}'));
+    return cur !== (docModalOriginalSerialized || JSON.stringify({}));
+  } catch (_) {
+    return true;
   }
 }
 
@@ -5671,6 +5714,7 @@ async function saveDocument() {
     document.getElementById('docModal').style.display = 'none';
     currentModalDoc = null;
     currentSchema = null;
+    docModalOriginalSerialized = null;
     
     // Refresh the document list
     currentCursor = null;
@@ -5905,6 +5949,7 @@ function openEditModal(doc) {
   }
 
   editOriginalDoc = JSON.parse(JSON.stringify(doc));
+  editModalOriginalSerialized = JSON.stringify(doc);
   setEditorValue('editDocEditor', JSON.stringify(doc, null, 2));
   document.getElementById('editError').style.display = 'none';
   const diffView = document.getElementById('diffView');
@@ -5936,10 +5981,33 @@ function setupEditModalHandlers(dbName, collectionName, docId) {
 
   const diffToggle = document.getElementById('editDiffToggle');
 
-  const closeModal = () => closeEditModal();
+  const closeModal = async () => {
+    try {
+      const cur = JSON.stringify(JSON.parse(getEditorValue('editDocEditor') || '{}'));
+      if (editModalOriginalSerialized && cur !== editModalOriginalSerialized) {
+        const ok = await ui.confirm({
+          title: 'Discard unsaved changes?',
+          message: 'You have unsaved changes in this editor.',
+          confirmText: 'Discard',
+          danger: true,
+        });
+        if (!ok) return;
+      }
+    } catch (_) {
+      const ok = await ui.confirm({
+        title: 'Discard unsaved changes?',
+        message: 'Editor has invalid JSON or unsaved edits.',
+        confirmText: 'Discard',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    editModalOriginalSerialized = null;
+    closeEditModal();
+  };
 
-  backdrop.addEventListener('click', closeModal);
-  closeBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', () => { closeModal(); });
+  closeBtn.addEventListener('click', () => { closeModal(); });
 
   // Esc closes when this modal is the active one.
   document.addEventListener('keydown', (e) => {
@@ -5948,7 +6016,7 @@ function setupEditModalHandlers(dbName, collectionName, docId) {
     e.preventDefault();
     closeModal();
   });
-  cancelBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', () => { closeModal(); });
 
   diffToggle?.addEventListener('click', () => {
     const diffView = document.getElementById('diffView');
@@ -6014,6 +6082,13 @@ function setupEditModalHandlers(dbName, collectionName, docId) {
   });
 
   // Delete confirmation now uses ui.confirm — no static modal markup.
+  document.addEventListener('keydown', (e) => {
+    if (!modal.classList.contains('ui-modal-open')) return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      saveBtn.click();
+    }
+  });
 }
 
 async function openDeleteModalForPage(dbName, collectionName, docId) {
