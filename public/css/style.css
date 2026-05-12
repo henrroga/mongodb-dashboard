@@ -3171,6 +3171,21 @@ kbd {
   word-break: break-word;
 }
 
+.toast-action {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: var(--bg-primary);
+}
+
 .toast-close {
   flex-shrink: 0;
   background: none;

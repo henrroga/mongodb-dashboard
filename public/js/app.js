@@ -133,7 +133,7 @@ const TOAST_ICONS = {
   info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
 };
 
-function showToast(message, type = 'info', duration = 4000) {
+function showToast(message, type = 'info', duration = 4000, options = {}) {
   let container = document.getElementById('toastContainer');
   if (!container) {
     container = document.createElement('div');
@@ -144,13 +144,27 @@ function showToast(message, type = 'info', duration = 4000) {
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
+  const actionHtml = options?.actionLabel
+    ? `<button class="toast-action" type="button">${escapeHtml(options.actionLabel)}</button>`
+    : '';
   toast.innerHTML = `
     <span class="toast-icon">${TOAST_ICONS[type] || TOAST_ICONS.info}</span>
     <span class="toast-message">${escapeHtml(message)}</span>
+    ${actionHtml}
     <button class="toast-close" onclick="this.parentElement.classList.add('toast-removing'); setTimeout(() => this.parentElement.remove(), 200)">&times;</button>
   `;
 
   container.appendChild(toast);
+  if (options?.actionLabel && typeof options?.onAction === 'function') {
+    toast.querySelector('.toast-action')?.addEventListener('click', async () => {
+      try {
+        await options.onAction();
+      } finally {
+        toast.classList.add('toast-removing');
+        setTimeout(() => toast.remove(), 200);
+      }
+    });
+  }
 
   if (duration > 0) {
     setTimeout(() => {
@@ -4651,7 +4665,7 @@ function createDocumentRow(doc, dbName, collectionName) {
     </svg>
   `;
   deleteBtn.addEventListener('click', (e) => {
-    openDeleteModal(dbName, collectionName, e.currentTarget.dataset.id);
+    openDeleteModal(dbName, collectionName, e.currentTarget.dataset.id, doc);
   });
   actionsDiv.appendChild(deleteBtn);
   
@@ -5507,11 +5521,18 @@ async function saveDocument() {
 let deleteDocId = null;
 let deleteDbName = null;
 let deleteColName = null;
+let deleteDocSnapshot = null;
 
-async function openDeleteModal(dbName, collectionName, docId) {
+function findLoadedDocumentById(docId) {
+  const idStr = String(docId);
+  return allDocuments.find((d) => String(d?._id?.$oid || d?._id) === idStr) || null;
+}
+
+async function openDeleteModal(dbName, collectionName, docId, snapshot = null) {
   deleteDocId = docId;
   deleteDbName = dbName;
   deleteColName = collectionName;
+  deleteDocSnapshot = snapshot || findLoadedDocumentById(docId);
 
   const ok = await ui.confirm({
     title: 'Delete document?',
@@ -5533,13 +5554,34 @@ async function confirmDelete() {
     if (window.location.pathname.includes(`/${deleteDocId}`)) {
       window.location.href = `/browse/${deleteDbName}/${deleteColName}`;
     } else {
+      const deletedSnapshot = deleteDocSnapshot
+        ? JSON.parse(JSON.stringify(deleteDocSnapshot))
+        : null;
       // Refresh the document list
       currentCursor = null;
       allDocuments = [];
       loadDocuments(deleteDbName, deleteColName);
+      if (deletedSnapshot) {
+        showToast('Document deleted', 'warning', 8000, {
+          actionLabel: 'Undo',
+          onAction: async () => {
+            await apiFetchJson(`/api/${encodeURIComponent(deleteDbName)}/${encodeURIComponent(deleteColName)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(deletedSnapshot),
+            });
+            currentCursor = null;
+            allDocuments = [];
+            loadDocuments(deleteDbName, deleteColName);
+            showToast('Delete undone', 'success', 2200);
+          },
+        });
+      }
     }
+    deleteDocSnapshot = null;
   } catch (err) {
     showToast('Delete failed: ' + err.message, 'error');
+    deleteDocSnapshot = null;
   }
 }
 
