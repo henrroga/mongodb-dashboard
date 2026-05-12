@@ -27,3 +27,13 @@ Alternative (manual):
 ```bash
 node scripts/create-user.js admin 'strong-password' admin
 ```
+
+## Post-deploy checks
+After deployment, run:
+
+```bash
+bash scripts/post-deploy-check.sh https://your-public-url
+```
+
+This validates `readyz`, `healthz`, and deep health (`healthz?deep=1`) so you
+can quickly confirm the instance is actually ready for use.

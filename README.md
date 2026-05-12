@@ -173,6 +173,10 @@ npm start
 
 # run tests
 npm test
+npm run test:local
+
+# run post-deploy smoke checks (pass base URL)
+npm run postdeploy:check -- http://127.0.0.1:3000
 
 # generate auth hash
 npm run hash-password
@@ -201,6 +205,7 @@ Health endpoints:
 - Ready-to-import compose template: [coolify/docker-compose.yml](coolify/docker-compose.yml)
 - Example env set: [coolify/.env.example](coolify/.env.example)
 - Setup notes: [coolify/README.md](coolify/README.md)
+- Post-deploy verification script: `scripts/post-deploy-check.sh`
 
 ## Project structure
 
