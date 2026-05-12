@@ -3711,6 +3711,7 @@ async function initBrowser(dbName, collectionName) {
   initChangeStreamPanel(dbName, collectionName);
   initSqlPanel(dbName, collectionName);
   initViewModeToggle(dbName, collectionName);
+  initResultCharts();
   initShellPanel(dbName);
 
   // Delegated click handler for expandable cells and copyable IDs
@@ -3733,6 +3734,94 @@ async function initBrowser(dbName, collectionName) {
     const isVisible = pre.style.display !== 'none';
     pre.style.display = isVisible ? 'none' : 'block';
     expandable.classList.toggle('cell-expanded', !isVisible);
+  });
+}
+
+function initResultCharts() {
+  const openBtn = document.getElementById('chartBtn');
+  const modal = document.getElementById('chartModal');
+  const close1 = document.getElementById('chartModalClose');
+  const close2 = document.getElementById('chartModalClose2');
+  const fieldSel = document.getElementById('chartField');
+  const typeSel = document.getElementById('chartType');
+  const renderBtn = document.getElementById('chartRenderBtn');
+  const canvasWrap = document.getElementById('chartCanvasWrap');
+  if (!openBtn || !modal || !fieldSel || !typeSel || !renderBtn || !canvasWrap) return;
+
+  const close = () => { modal.style.display = 'none'; };
+  close1?.addEventListener('click', close);
+  close2?.addEventListener('click', close);
+  modal.querySelector('.modal-backdrop')?.addEventListener('click', close);
+
+  function chartableFields() {
+    const set = new Set();
+    (allDocuments || []).slice(0, 200).forEach((d) => {
+      Object.entries(d || {}).forEach(([k, v]) => {
+        if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') set.add(k);
+      });
+    });
+    return [...set];
+  }
+
+  function computeCounts(field) {
+    const m = new Map();
+    (allDocuments || []).forEach((d) => {
+      const raw = d ? d[field] : undefined;
+      if (raw === undefined) return;
+      const key = String(raw);
+      m.set(key, (m.get(key) || 0) + 1);
+    });
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  }
+
+  function renderBar(data) {
+    const max = Math.max(...data.map((d) => d[1]), 1);
+    return data.map(([label, count]) => `
+      <div style="display:grid;grid-template-columns:160px 1fr 48px;gap:8px;align-items:center;margin:6px 0">
+        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+        <div style="background:var(--bg-tertiary);height:16px;border-radius:4px;overflow:hidden"><div style="height:100%;width:${(count / max) * 100}%;background:var(--accent)"></div></div>
+        <div style="text-align:right">${count}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderPie(data) {
+    const total = data.reduce((a, b) => a + b[1], 0) || 1;
+    let acc = 0;
+    const colors = ['#3fb950', '#58a6ff', '#d29922', '#f85149', '#bc8cff', '#79c0ff', '#8b949e', '#ff7b72', '#56d364', '#a371f7'];
+    const slices = data.map((d, i) => {
+      const start = acc / total * 360;
+      acc += d[1];
+      const end = acc / total * 360;
+      return `${colors[i % colors.length]} ${start}deg ${end}deg`;
+    }).join(', ');
+    return `
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+        <div style="width:220px;height:220px;border-radius:50%;background:conic-gradient(${slices});border:1px solid var(--border-color)"></div>
+        <div style="min-width:220px">${data.map((d, i) => `<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${colors[i % colors.length]}"></span><span>${escapeHtml(String(d[0]))}</span><span style="margin-left:auto">${d[1]}</span></div>`).join('')}</div>
+      </div>
+    `;
+  }
+
+  openBtn.addEventListener('click', () => {
+    const fields = chartableFields();
+    if (!fields.length) {
+      showToast('No chartable fields in current results.', 'warning');
+      return;
+    }
+    fieldSel.innerHTML = fields.map((f) => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+    canvasWrap.innerHTML = '';
+    modal.style.display = 'flex';
+  });
+
+  renderBtn.addEventListener('click', () => {
+    const field = fieldSel.value;
+    const data = computeCounts(field);
+    if (!data.length) {
+      canvasWrap.innerHTML = '<div class="agg-result-placeholder">No data for selected field.</div>';
+      return;
+    }
+    canvasWrap.innerHTML = typeSel.value === 'pie' ? renderPie(data) : renderBar(data);
   });
 }
 

@@ -383,6 +383,9 @@
                 </svg>
                 Export
               </button>
+              <button id="chartBtn" class="btn btn-ghost" title="Chart results" aria-label="Chart results">
+                Chart
+              </button>
               <button
                 id="columnsBtn"
                 class="btn btn-ghost"
@@ -1143,6 +1146,30 @@
           <div class="modal-footer">
             <button id="exportCancel" class="btn btn-ghost">Cancel</button>
             <button id="exportConfirm" class="btn btn-primary">Download</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="chartModal" class="modal" style="display:none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3>Result Charts</h3>
+            <button class="modal-close" id="chartModalClose">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+              <select id="chartType" class="query-input" style="width:140px">
+                <option value="bar">Bar</option>
+                <option value="pie">Pie</option>
+              </select>
+              <select id="chartField" class="query-input" style="flex:1"></select>
+              <button id="chartRenderBtn" class="btn btn-primary btn-sm">Render</button>
+            </div>
+            <div id="chartCanvasWrap" style="min-height:320px;border:1px solid var(--border-color);border-radius:8px;padding:10px;overflow:auto"></div>
+          </div>
+          <div class="modal-footer">
+            <button id="chartModalClose2" class="btn btn-ghost">Close</button>
           </div>
         </div>
       </div>
