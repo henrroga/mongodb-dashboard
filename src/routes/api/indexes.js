@@ -106,4 +106,73 @@ router.put("/:db/:collection/indexes/:indexName", async (req, res) => {
   }
 });
 
+router.post("/:db/:collection/indexes/advisor", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const db = client.db(req.params.db);
+    const col = db.collection(req.params.collection);
+    const indexes = await col.indexes();
+    const { filter = {}, sort = {} } = req.body || {};
+
+    const recommendations = [];
+    const warnings = [];
+
+    const hasPrefixIndex = (fields) => {
+      const wanted = Object.keys(fields);
+      return indexes.some((idx) => {
+        const keys = Object.keys(idx.key || {});
+        if (keys.length < wanted.length) return false;
+        for (let i = 0; i < wanted.length; i += 1) {
+          if (keys[i] !== wanted[i]) return false;
+        }
+        return true;
+      });
+    };
+
+    if (filter && typeof filter === "object" && Object.keys(filter).length > 0) {
+      const key = {};
+      for (const k of Object.keys(filter)) key[k] = 1;
+      if (!hasPrefixIndex(key)) {
+        recommendations.push({
+          type: "missing_filter_index",
+          message: "No index matches current filter fields",
+          key,
+        });
+      }
+    }
+
+    if (sort && typeof sort === "object" && Object.keys(sort).length > 0) {
+      if (!hasPrefixIndex(sort)) {
+        recommendations.push({
+          type: "missing_sort_index",
+          message: "No index matches current sort pattern",
+          key: sort,
+        });
+      }
+    }
+
+    const byKey = new Map();
+    for (const idx of indexes) {
+      const sig = JSON.stringify(idx.key || {});
+      if (!byKey.has(sig)) byKey.set(sig, []);
+      byKey.get(sig).push(idx.name);
+    }
+    for (const [sig, names] of byKey.entries()) {
+      if (names.length > 1) {
+        warnings.push({
+          type: "duplicate_index",
+          message: "Duplicate index key pattern detected",
+          key: JSON.parse(sig),
+          names,
+        });
+      }
+    }
+
+    res.json({ recommendations, warnings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

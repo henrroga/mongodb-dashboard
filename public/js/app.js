@@ -8361,6 +8361,42 @@ async function loadIndexes(dbName, collectionName) {
 
 function initIndexesPanel(dbName, collectionName) {
   document.getElementById('refreshIndexesBtn')?.addEventListener('click', () => loadIndexes(dbName, collectionName));
+  document.getElementById('indexAdvisorBtn')?.addEventListener('click', async () => {
+    const box = document.getElementById('indexAdvisorBox');
+    const body = document.getElementById('indexAdvisorBody');
+    if (!box || !body) return;
+    let filter = {};
+    let sort = {};
+    try {
+      const qf = document.getElementById('queryFilter')?.value?.trim();
+      if (qf) filter = JSON.parse(qf);
+    } catch {}
+    try {
+      const qs = document.getElementById('querySort')?.value?.trim();
+      if (qs) sort = JSON.parse(qs);
+    } catch {}
+    body.innerHTML = '<div style="display:flex;justify-content:center;padding:10px"><div class="loading-spinner"></div></div>';
+    box.style.display = 'block';
+    try {
+      const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes/advisor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filter, sort }),
+      });
+      const recs = data.recommendations || [];
+      const warns = data.warnings || [];
+      if (!recs.length && !warns.length) {
+        body.innerHTML = '<div style="color:var(--success)">No obvious index issues detected for current filter/sort.</div>';
+        return;
+      }
+      body.innerHTML = [
+        ...recs.map((r) => `<div style="margin-bottom:8px"><strong>${escapeHtml(r.message)}</strong><pre style="margin:4px 0">${escapeHtml(JSON.stringify(r.key, null, 2))}</pre></div>`),
+        ...warns.map((w) => `<div style="margin-bottom:8px;color:var(--warning)"><strong>${escapeHtml(w.message)}</strong> (${escapeHtml(w.names.join(', '))})</div>`),
+      ].join('');
+    } catch (err) {
+      body.innerHTML = `<div style="color:var(--danger)">Advisor failed: ${escapeHtml(err.message)}</div>`;
+    }
+  });
 
   // Create index modal
   const createModal = document.getElementById('createIndexModal');
