@@ -1,0 +1,38 @@
+services:
+  mongodb-dashboard:
+    image: ghcr.io/henrroga/mongodb-dashboard:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      PUBLIC_URL: ${PUBLIC_URL}
+      TRUST_PROXY: ${TRUST_PROXY:-loopback}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      AUTH_USERS_FILE: /app/data/users.json
+      SESSION_SECRET: ${SESSION_SECRET}
+      CONNECTION_VAULT_SECRET: ${CONNECTION_VAULT_SECRET:-}
+      MONGODB_URI: ${MONGODB_URI}
+      READ_ONLY: ${READ_ONLY:-false}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_LOGIN_MAX: ${RATE_LIMIT_LOGIN_MAX:-10}
+      AUDIT_LOG_DIR: /app/logs
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - dashboard_data:/app/data
+      - dashboard_logs:/app/logs
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  dashboard_data:
+  dashboard_logs:
