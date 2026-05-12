@@ -11,7 +11,8 @@
     "test": "node --test tests/*.test.js",
     "test:local": "bash scripts/test-local.sh",
     "postdeploy:check": "bash scripts/post-deploy-check.sh",
-    "lint:css": "node scripts/lint-css-tokens.js"
+    "lint:css": "node scripts/lint-css-tokens.js",
+    "lint:coolify": "node scripts/validate-coolify-contract.js"
   },
   "keywords": [
     "mongodb",

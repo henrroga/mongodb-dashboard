@@ -52,6 +52,9 @@ jobs:
           # for the remaining inline hexes (chart palettes, hover tints).
           MAX_HEX_OUTSIDE_TOKENS=72 node scripts/lint-css-tokens.js --strict-hex
 
+      - name: Coolify contract checks
+        run: npm run lint:coolify
+
       - name: Run unit tests
         run: npm test
 

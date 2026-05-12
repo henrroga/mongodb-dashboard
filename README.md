@@ -175,6 +175,9 @@ npm start
 npm test
 npm run test:local
 
+# verify Coolify template/env contract
+npm run lint:coolify
+
 # run post-deploy smoke checks (pass base URL)
 npm run postdeploy:check -- http://127.0.0.1:3000
 
