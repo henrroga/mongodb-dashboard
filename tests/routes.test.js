@@ -95,6 +95,7 @@ const EXPECTED = [
   "GET /api/audit/logs",
   "GET /api/plugins",
   "POST /api/disconnect",
+  "GET /api/self-check",
   "GET /api/changelog",
 ];
 

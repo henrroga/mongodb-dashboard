@@ -4,6 +4,7 @@
 //   POST   /connect
 //   POST   /disconnect
 //   GET    /status
+//   GET    /self-check
 //   GET    /server-info
 //   GET    /server/stats
 //   GET    /server/currentop
@@ -17,6 +18,92 @@ const { redactConnectionString } = require("./_shared");
 const connectionVault = require("../../services/connectionVault");
 const usersService = require("../../services/users");
 const { bad, requireStringField } = require("../../middleware/validate-body");
+
+function buildSelfCheck() {
+  const checks = [];
+  const isProd = String(config.nodeEnv).toLowerCase() === "production";
+  const usingPresetMongo = !!config.presetMongoUri;
+  const isHttpsUrl = /^https:\/\//i.test(config.publicUrl || "");
+  const hasVaultSecret = !!String(config.connectionVaultSecret || "").trim();
+  const hasSessionSecret = !!String(config.auth.sessionSecret || "").trim();
+  const hasBootstrap = !!(config.auth.bootstrapUsername && config.auth.bootstrapPassword);
+
+  checks.push({
+    id: "auth-enabled",
+    level: config.auth.enabled ? "ok" : "warn",
+    message: config.auth.enabled
+      ? "Authentication is enabled."
+      : "Authentication is disabled.",
+  });
+  checks.push({
+    id: "cookie-secure",
+    level: config.cookieSecure ? "ok" : (isProd ? "error" : "warn"),
+    message: config.cookieSecure
+      ? "Secure cookies are enabled."
+      : "Secure cookies are disabled.",
+  });
+  checks.push({
+    id: "public-url-https",
+    level: isHttpsUrl ? "ok" : (isProd ? "error" : "warn"),
+    message: isHttpsUrl
+      ? "PUBLIC_URL uses HTTPS."
+      : "PUBLIC_URL is missing or not HTTPS.",
+  });
+  checks.push({
+    id: "trust-proxy",
+    level: config.trustProxy ? "ok" : "warn",
+    message: config.trustProxy
+      ? `TRUST_PROXY is set (${String(config.trustProxy)}).`
+      : "TRUST_PROXY is not set.",
+  });
+  checks.push({
+    id: "vault-secret",
+    level: hasVaultSecret ? "ok" : "warn",
+    message: hasVaultSecret
+      ? "CONNECTION_VAULT_SECRET is configured."
+      : "CONNECTION_VAULT_SECRET is not set (falls back to SESSION_SECRET).",
+  });
+  checks.push({
+    id: "session-secret",
+    level: hasSessionSecret ? "ok" : "error",
+    message: hasSessionSecret
+      ? "SESSION_SECRET is set."
+      : "SESSION_SECRET is missing.",
+  });
+  checks.push({
+    id: "mongo-uri",
+    level: usingPresetMongo ? "ok" : "warn",
+    message: usingPresetMongo
+      ? "MONGODB_URI is preset."
+      : "MONGODB_URI is not preset; users can connect manually.",
+  });
+  checks.push({
+    id: "bootstrap-user",
+    level: hasBootstrap ? "ok" : "warn",
+    message: hasBootstrap
+      ? "Bootstrap user credentials are configured."
+      : "Bootstrap user credentials are not configured.",
+  });
+
+  const counts = checks.reduce(
+    (acc, c) => {
+      acc[c.level] = (acc[c.level] || 0) + 1;
+      return acc;
+    },
+    { ok: 0, warn: 0, error: 0 }
+  );
+
+  return {
+    summary: {
+      ready: counts.error === 0,
+      ok: counts.ok,
+      warn: counts.warn,
+      error: counts.error,
+      environment: config.nodeEnv,
+    },
+    checks,
+  };
+}
 
 // Test connection and return database list. Refused when MONGODB_URI is set
 // at the env level — in that mode the dashboard is locked to one cluster.
@@ -96,6 +183,14 @@ router.get("/status", async (req, res) => {
   } catch (_err) {
     res.json({ connected: false });
   }
+});
+
+router.get("/self-check", async (req, res) => {
+  if (config.auth.enabled && !usersService.hasPermission(req.session, "audit")) {
+    return res.status(403).json({ error: "Deployment self-check denied by RBAC" });
+  }
+  const out = buildSelfCheck();
+  return res.status(out.summary.ready ? 200 : 503).json(out);
 });
 
 router.get("/server-info", async (req, res) => {

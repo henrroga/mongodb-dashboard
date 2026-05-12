@@ -106,3 +106,20 @@ test('RBAC blocks plugins listing for non-admin', async () => {
     server.close();
   }
 });
+
+test("RBAC blocks deployment self-check for non-admin", async () => {
+  const connectionRouter = fresh("../src/routes/api/connection");
+  const app = makeApp(connectionRouter, {
+    authenticated: true,
+    role: "viewer",
+    permissions: ["read"],
+  });
+  const server = app.listen(0);
+  const { port } = server.address();
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/self-check`);
+    assert.equal(res.status, 403);
+  } finally {
+    server.close();
+  }
+});
