@@ -40,7 +40,7 @@
   --border: #30363d;
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
-  --text-muted: #6e7681;
+  --text-muted: #a0a8b3;
   --accent: #58a6ff;
   --accent-hover: #79c0ff;
   --success: #3fb950;
@@ -50,6 +50,28 @@
   --radius-lg: 8px;
   --shadow: 0 8px 24px rgba(0,0,0,0.4);
   --transition: 0.15s ease;
+
+  /* Semantic tinted backgrounds — derive from theme accents so they
+     follow data-theme switches instead of staying frozen in dark mode. */
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent) 22%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 35%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 12%, transparent);
+  --danger-ring: color-mix(in srgb, var(--danger) 35%, transparent);
+  --success-soft: color-mix(in srgb, var(--success) 14%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 14%, transparent);
+  --overlay: rgba(0, 0, 0, 0.55);
+
+  /* Spacing scale — 4px base.  Use these instead of ad-hoc pixel values
+     so layouts stay rhythmically aligned across the app. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
 
   /* ── Aliases ─────────────────────────────────────────────────────────────
    * Throughout the codebase, components have been written referring to
@@ -69,8 +91,8 @@
   --bg-hover: #d0d7de;
   --border: #d0d7de;
   --text-primary: #1f2328;
-  --text-secondary: #656d76;
-  --text-muted: #8b949e;
+  --text-secondary: #57606a;
+  --text-muted: #6e7781;
   --accent: #0969da;
   --accent-hover: #0860ca;
   --success: #1a7f37;
@@ -215,6 +237,24 @@ a {
 
 a:hover {
   color: var(--accent-hover);
+}
+
+/* Global keyboard-focus indicator — applies to anything focusable that
+   doesn't already paint its own ring (modals, inputs, buttons, links). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+/* Inputs paint a contained ring instead of an offset outline. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.query-input:focus-visible,
+.ui-prompt-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 /* Buttons */
@@ -4239,7 +4279,7 @@ textarea.inline-edit-input {
 .ui-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--overlay);
   backdrop-filter: blur(2px);
 }
 
@@ -4358,8 +4398,8 @@ textarea.inline-edit-input {
 
 .ui-prompt-input:focus {
   outline: none;
-  border-color: var(--accent, var(--accent));
-  box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .ui-prompt-error {
