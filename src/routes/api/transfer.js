@@ -39,6 +39,27 @@ async function appendBackupRun(run) {
   } catch (_) {}
 }
 
+function parseRestorePayload(content) {
+  const lines = String(content).split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) {
+    const err = new Error("Empty backup content");
+    err.status = 400;
+    throw err;
+  }
+  const docs = [];
+  for (const line of lines) {
+    const parsed = JSON.parse(line);
+    if (parsed && parsed._meta) continue;
+    docs.push(parseDocument(parsed));
+  }
+  if (!docs.length) {
+    const err = new Error("No documents found in backup payload");
+    err.status = 400;
+    throw err;
+  }
+  return docs;
+}
+
 // Import documents (JSON array, NDJSON, or CSV)
 router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (req, res) => {
   try {
@@ -302,16 +323,31 @@ router.post("/:db/:collection/restore", express.json({ limit: "100mb" }), async 
     if (!contentField.ok) return bad(res, contentField.error);
     const mode = String(req.body?.mode || "insert");
     if (!["insert", "replace"].includes(mode)) return bad(res, "mode must be insert or replace");
+    const dryRun = req.body?.dryRun === true;
+    const confirmReplace = req.body?.confirmReplace === true;
     const content = contentField.value;
-    const lines = String(content).split(/\r?\n/).filter((l) => l.trim());
-    if (!lines.length) return res.status(400).json({ error: "Empty backup content" });
-    const docs = [];
-    for (const line of lines) {
-      const parsed = JSON.parse(line);
-      if (parsed && parsed._meta) continue;
-      docs.push(parseDocument(parsed));
+    const docs = parseRestorePayload(content);
+    const withId = docs.filter((d) => d && typeof d === "object" && d._id).length;
+    const withoutId = docs.length - withId;
+    if (dryRun) {
+      return res.json({
+        success: true,
+        dryRun: true,
+        total: docs.length,
+        withId,
+        withoutId,
+        mode,
+        warning: mode === "replace"
+          ? "Replace mode will delete all documents in the target collection before restore."
+          : null,
+      });
     }
-    if (!docs.length) return res.status(400).json({ error: "No documents found in backup payload" });
+    if (mode === "replace" && !confirmReplace) {
+      return res.status(400).json({
+        error: "replace mode requires explicit confirmation",
+        code: "RESTORE_CONFIRM_REQUIRED",
+      });
+    }
     const col = client.db(dbName).collection(colName);
     let restored = 0;
     if (mode === "replace") {
@@ -338,7 +374,7 @@ router.post("/:db/:collection/restore", express.json({ limit: "100mb" }), async 
     res.json({ success: true, restored, total: docs.length });
   } catch (err) {
     logger.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

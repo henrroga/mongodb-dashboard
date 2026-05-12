@@ -9315,10 +9315,19 @@ function initImportExport(dbName, collectionName) {
       }
       const content = await file.text();
       try {
+        const preview = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, mode, dryRun: true }),
+        });
+        if (mode === 'replace') {
+          const confirmMsg = `Replace mode will remove existing documents before restoring ${preview.total} document(s). Continue?`;
+          if (!window.confirm(confirmMsg)) return;
+        }
         const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/restore`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, mode }),
+          body: JSON.stringify({ content, mode, confirmReplace: mode === 'replace' }),
         });
         showToast(`Restore complete: ${data.restored}/${data.total}`, 'success');
         currentCursor = null;
@@ -9328,6 +9337,37 @@ function initImportExport(dbName, collectionName) {
         loadBackupHistory();
       } catch (err) {
         showToast('Restore failed: ' + err.message, 'error');
+      }
+    });
+
+    document.getElementById('restorePreviewBtn')?.addEventListener('click', async () => {
+      const file = document.getElementById('restoreFileInput')?.files?.[0];
+      const mode = document.getElementById('restoreMode')?.value || 'insert';
+      const box = document.getElementById('restorePreviewBox');
+      if (!box) return;
+      if (!file) {
+        showToast('Select a backup file first.', 'warning');
+        return;
+      }
+      try {
+        const content = await file.text();
+        const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, mode, dryRun: true }),
+        });
+        const warning = data.warning ? `<div style="margin-top:6px;color:var(--danger)">${escapeHtml(data.warning)}</div>` : '';
+        box.innerHTML = `
+          <div><strong>Preview</strong></div>
+          <div>Total docs: ${Number(data.total || 0)}</div>
+          <div>Docs with _id: ${Number(data.withId || 0)}</div>
+          <div>Docs without _id: ${Number(data.withoutId || 0)}</div>
+          ${warning}
+        `;
+        box.style.display = 'block';
+      } catch (err) {
+        box.textContent = `Preview failed: ${err.message}`;
+        box.style.display = 'block';
       }
     });
   }
