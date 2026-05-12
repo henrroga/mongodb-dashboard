@@ -177,6 +177,9 @@ router.get("/audit", async (req, res) => {
 });
 
 router.get("/plugins", async (_req, res) => {
+  if (config.auth.enabled && !usersService.hasPermission(_req.session, "audit")) {
+    return res.status(403).send("Access denied");
+  }
   res.render("plugins", { title: "Plugins" });
 });
 

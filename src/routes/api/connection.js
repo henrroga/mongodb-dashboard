@@ -15,6 +15,7 @@ const mongoService = require("../../services/mongodb");
 const config = require("../../config");
 const { redactConnectionString } = require("./_shared");
 const connectionVault = require("../../services/connectionVault");
+const usersService = require("../../services/users");
 
 // Test connection and return database list. Refused when MONGODB_URI is set
 // at the env level — in that mode the dashboard is locked to one cluster.
@@ -173,6 +174,9 @@ router.get("/server/currentop", async (req, res) => {
 
 router.delete("/server/currentop/:opid", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "write")) {
+      return res.status(403).json({ error: "Operation kill denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 
@@ -204,6 +208,9 @@ router.get("/server/profiler", async (req, res) => {
 
 router.post("/server/profiler", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "write")) {
+      return res.status(403).json({ error: "Profiler update denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
     const dbName = String(req.body?.db || "admin");
