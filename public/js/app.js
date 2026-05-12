@@ -2561,13 +2561,47 @@ function initShellPanel(dbName) {
   const runBtn = document.getElementById('shellRunBtn');
   const output = document.getElementById('shellOutput');
   const dbLabel = document.getElementById('shellDbLabel');
+  const tabSelect = document.getElementById('shellTabSelect');
+  const newTabBtn = document.getElementById('shellNewTabBtn');
+  const snippetsBtn = document.getElementById('shellSnippetsBtn');
   if (!panel || !input) return;
 
-  let shellDb = dbName;
-  let history = [];
+  const tabsKey = `mongodb_shell_tabs_${dbName}`;
+  const loadTabs = () => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(tabsKey) || '[]');
+      if (Array.isArray(raw) && raw.length) return raw;
+    } catch {}
+    return [{ id: 'default', name: 'default', db: dbName, history: [] }];
+  };
+  let shellTabs = loadTabs();
+  let activeTabId = shellTabs[0].id;
   let historyIdx = -1;
+  const snippets = [
+    'show collections',
+    'db.runCommand({ ping: 1 })',
+    'db.collection.find({}).limit(10)',
+    'db.collection.countDocuments({})',
+    'db.collection.aggregate([{ $match: {} }, { $limit: 10 }])',
+  ];
+
+  function activeTab() {
+    return shellTabs.find((t) => t.id === activeTabId) || shellTabs[0];
+  }
+  function persistTabs() {
+    try { localStorage.setItem(tabsKey, JSON.stringify(shellTabs.slice(0, 8))); } catch {}
+  }
+  function renderTabs() {
+    if (!tabSelect) return;
+    tabSelect.innerHTML = shellTabs.map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+    tabSelect.value = activeTabId;
+  }
+
+  let shellDb = activeTab().db || dbName;
+  let history = activeTab().history || [];
 
   if (dbLabel) dbLabel.textContent = `[${shellDb}]`;
+  renderTabs();
 
   const open = () => {
     panel.classList.remove('shell-panel-closed');
@@ -2583,6 +2617,35 @@ function initShellPanel(dbName) {
   openBtn?.addEventListener('click', open);
   toggleBtn?.addEventListener('click', close);
   clearBtn?.addEventListener('click', () => { if (output) output.innerHTML = ''; });
+  newTabBtn?.addEventListener('click', async () => {
+    const name = await ui.prompt({ title: 'New shell tab', placeholder: 'analytics', confirmText: 'Create' });
+    if (!name) return;
+    const id = `tab_${Date.now()}`;
+    shellTabs.push({ id, name: name.trim() || id, db: shellDb, history: [] });
+    activeTabId = id;
+    history = [];
+    historyIdx = -1;
+    renderTabs();
+    persistTabs();
+  });
+  tabSelect?.addEventListener('change', () => {
+    activeTabId = tabSelect.value;
+    const tab = activeTab();
+    shellDb = tab.db || dbName;
+    history = Array.isArray(tab.history) ? tab.history : [];
+    historyIdx = -1;
+    if (dbLabel) dbLabel.textContent = `[${shellDb}]`;
+  });
+  snippetsBtn?.addEventListener('click', async () => {
+    const picked = await ui.prompt({
+      title: 'Insert shell snippet',
+      placeholder: snippets.join(' | '),
+      confirmText: 'Insert',
+    });
+    if (!picked) return;
+    input.value = picked;
+    input.focus();
+  });
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { runShellCommand(); return; }
@@ -2633,6 +2696,10 @@ function initShellPanel(dbName) {
     if (!cmd) return;
 
     history.unshift(cmd);
+    const tab = activeTab();
+    tab.history = history.slice(0, 100);
+    tab.db = shellDb;
+    persistTabs();
     historyIdx = -1;
     input.value = '';
 
@@ -2651,6 +2718,9 @@ function initShellPanel(dbName) {
       if (data.switchDb) {
         shellDb = data.switchDb;
         if (dbLabel) dbLabel.textContent = `[${shellDb}]`;
+        const tab = activeTab();
+        tab.db = shellDb;
+        persistTabs();
       }
 
       appendEntry(cmd, data.result, data.type || 'json');
