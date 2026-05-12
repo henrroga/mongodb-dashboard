@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const fsPromises = require("fs/promises");
 const session = require("express-session");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
@@ -135,6 +136,39 @@ app.get("/healthz", async (req, res) => {
 
   const status = health.ok ? 200 : 503;
   return res.status(status).json(health);
+});
+
+app.get("/readyz", async (_req, res) => {
+  const readiness = {
+    ok: true,
+    checks: {
+      mongodb: { ok: true, required: !!config.presetMongoUri },
+      dataDir: { ok: true, path: process.env.DATA_DIR || path.join(__dirname, "data") },
+    },
+  };
+
+  try {
+    await fsPromises.mkdir(readiness.checks.dataDir.path, { recursive: true });
+    await fsPromises.access(readiness.checks.dataDir.path, fs.constants.W_OK);
+  } catch (err) {
+    readiness.ok = false;
+    readiness.checks.dataDir.ok = false;
+    readiness.checks.dataDir.error = err.message;
+  }
+
+  if (config.presetMongoUri) {
+    try {
+      const client = mongoService.getClient();
+      if (!client || !mongoService.isConnected()) throw new Error("Mongo client is not connected");
+      await client.db().admin().ping();
+    } catch (err) {
+      readiness.ok = false;
+      readiness.checks.mongodb.ok = false;
+      readiness.checks.mongodb.error = err.message;
+    }
+  }
+
+  return res.status(readiness.ok ? 200 : 503).json(readiness);
 });
 
 // Public app metadata + changelog (auth-gated below by default).

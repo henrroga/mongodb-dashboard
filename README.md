@@ -189,6 +189,10 @@ The test suite is Node's built-in runner and includes focused regression tests f
 
 Start with `docs/reverse-proxy/README.md` and `SECURITY.md`.
 
+Health endpoints:
+- `GET /healthz`: liveness (+ optional `?deep=1`)
+- `GET /readyz`: readiness for orchestrators; checks data dir writability and, when `MONGODB_URI` is preset, active Mongo connectivity
+
 ## Coolify deployment template
 
 - Ready-to-import compose template: [coolify/docker-compose.yml](coolify/docker-compose.yml)
