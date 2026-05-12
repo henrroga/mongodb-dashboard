@@ -9,6 +9,8 @@
 const express = require("express");
 const router = express.Router();
 const mongoService = require("../../services/mongodb");
+const config = require("../../config");
+const usersService = require("../../services/users");
 
 router.get("/:db/:collection/indexes", async (req, res) => {
   try {
@@ -46,6 +48,9 @@ router.get("/:db/:collection/indexes", async (req, res) => {
 
 router.post("/:db/:collection/indexes", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "indexAdmin")) {
+      return res.status(403).json({ error: "Index admin access denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 
@@ -64,6 +69,9 @@ router.post("/:db/:collection/indexes", async (req, res) => {
 
 router.delete("/:db/:collection/indexes/:indexName", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "indexAdmin")) {
+      return res.status(403).json({ error: "Index admin access denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 
@@ -81,6 +89,9 @@ router.delete("/:db/:collection/indexes/:indexName", async (req, res) => {
 
 router.put("/:db/:collection/indexes/:indexName", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "indexAdmin")) {
+      return res.status(403).json({ error: "Index admin access denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 

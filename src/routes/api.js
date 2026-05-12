@@ -11,6 +11,7 @@ router.use(validateMongoPathParams);
 // register BEFORE catch-alls like /:db/:collection so routing precedence
 // resolves them first.
 router.use("/", require("./api/connection"));
+router.use("/", require("./api/audit"));
 router.use("/", require("./api/databases"));
 router.use("/", require("./api/indexes"));
 router.use("/", require("./api/shell"));

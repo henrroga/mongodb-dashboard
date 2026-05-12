@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoService = require("../../services/mongodb");
 const config = require("../../config");
 const audit = require("../../utils/audit");
+const usersService = require("../../services/users");
 const { serializeDocument } = require("../../utils/bson");
 const { evalArg, splitTopLevelArgs } = require("../../utils/shellArg");
 const logger = require("../../utils/logger");
@@ -28,6 +29,9 @@ router.post("/shell/exec", async (req, res) => {
 
     const cmd = command.trim();
     const db = client.db(dbName || undefined);
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "shell")) {
+      return res.status(403).json({ error: "Shell access denied by RBAC" });
+    }
 
     // show dbs
     if (/^show\s+(dbs|databases)$/i.test(cmd)) {
@@ -95,6 +99,17 @@ router.post("/shell/exec", async (req, res) => {
           .json({ error: "Dashboard is in read-only mode (READ_ONLY=true)" });
       }
       if (WRITE_METHODS.has(method)) {
+        if (config.auth.enabled && !usersService.hasPermission(req.session, "write")) {
+          audit.log({
+            event: "shell_write_blocked_rbac",
+            method,
+            colName,
+            ip: req.ip,
+            username: req.session?.username || null,
+            role: req.session?.role || null,
+          });
+          return res.status(403).json({ error: "Write access denied by RBAC" });
+        }
         audit.log({
           event: "shell_write",
           method,

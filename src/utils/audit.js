@@ -47,3 +47,25 @@ function log(entry) {
 }
 
 module.exports = { log };
+async function readRecent(limit = 500) {
+  const fsPromises = require("fs/promises");
+  try {
+    const raw = await fsPromises.readFile(LOG_FILE, "utf8");
+    const lines = raw.trim().split("\n").filter(Boolean);
+    const tail = lines.slice(Math.max(0, lines.length - Math.max(1, limit)));
+    return tail
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .reverse();
+  } catch {
+    return [];
+  }
+}
+
+module.exports = { log, readRecent };

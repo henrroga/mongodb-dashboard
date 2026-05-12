@@ -79,6 +79,9 @@ app.use((req, res, next) => {
     presetLocked: !!config.presetMongoUri,
     version: pkg.version,
     csrfToken: req.session?.csrfToken || null,
+    currentUser: req.session?.username || null,
+    currentRole: req.session?.role || null,
+    permissions: req.session?.permissions || [],
   };
   next();
 });

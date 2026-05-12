@@ -4,6 +4,7 @@
 
 const config = require("../../config");
 const audit = require("../../utils/audit");
+const usersService = require("../../services/users");
 
 function redactConnectionString(uri) {
   if (!uri) return uri;
@@ -32,6 +33,18 @@ function readOnlyAndAuditMiddleware(req, res, next) {
   if (NON_WRITE_SUFFIXES.some((s) => p.endsWith(s))) return next();
   // Shell exec is gated separately (read-only ops are still allowed inside).
   if (p === "/shell/exec") return next();
+
+  if (config.auth.enabled && !usersService.hasPermission(req.session, "write")) {
+    audit.log({
+      event: "write_blocked_rbac",
+      method,
+      path: p,
+      ip: req.ip,
+      username: req.session?.username || null,
+      role: req.session?.role || null,
+    });
+    return res.status(403).json({ error: "Write access denied by RBAC" });
+  }
 
   if (config.readOnly) {
     audit.log({

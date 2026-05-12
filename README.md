@@ -102,6 +102,7 @@ All options are env-driven (`.env.example` is the source of truth).
 | --- | --- | --- |
 | `AUTH_ENABLED` | auto | Enables auth (auto-true if password/hash exists) |
 | `AUTH_PASSWORD_HASH` | — | bcrypt hash used for login |
+| `AUTH_USERS_FILE` | `data/users.json` | JSON user store for multi-user auth (`username`, `passwordHash`, `role`) |
 | `AUTH_PASSWORD` | — | dev convenience plaintext password |
 | `SESSION_SECRET` | random in non-prod | session signing secret (required in production auth setups) |
 | `CONNECTION_VAULT_SECRET` | falls back to `SESSION_SECRET` | encryption key for saved server-side connection vault entries |
@@ -117,6 +118,12 @@ All options are env-driven (`.env.example` is the source of truth).
 | `RATE_LIMIT_MAX` | 300 | default requests/window per IP |
 | `RATE_LIMIT_LOGIN_MAX` | 10 | tighter login route limit |
 | `AUDIT_LOG_DIR` | `./logs` | JSONL audit log directory |
+
+### RBAC roles
+
+- `viewer`: read-only app access
+- `editor`: read + write CRUD access
+- `admin`: full access including shell, index admin, and audit viewer
 
 ## API surface (high level)
 

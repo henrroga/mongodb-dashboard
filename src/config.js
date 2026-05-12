@@ -68,6 +68,7 @@ const config = {
     ),
     maxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS || "5", 10),
     lockoutMs: parseInt(process.env.LOGIN_LOCKOUT_MS || "900000", 10),
+    usersFile: process.env.AUTH_USERS_FILE || "data/users.json",
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000", 10),
