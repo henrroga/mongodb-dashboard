@@ -95,6 +95,8 @@ docker compose up -d --build
 By default, compose binds to `127.0.0.1:3000`. Expose through TLS reverse proxy only. Ready examples: `docs/reverse-proxy/README.md`.
 The compose file persists both `/app/logs` and `/app/data` so auth users, connection vault entries, and backup history survive container restarts.
 
+Prebuilt image (auto-published on `main`): `ghcr.io/henrroga/mongodb-dashboard:latest`.
+
 ## Configuration reference (high-impact)
 
 All options are env-driven (`.env.example` is the source of truth).
