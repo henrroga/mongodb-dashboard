@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plugins | MongoDB Dashboard</title>
+  <script>
+    (function() {
+      try {
+        const theme = localStorage.getItem('mongodb_dashboard_theme') || 'system';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/css/style.css" />
+  <%- include("./partials/app-config") %>
+</head>
+<body>
+  <header class="header">
+    <a href="/" class="logo">MongoDB Dashboard</a>
+    <nav class="nav">
+      <a href="/databases" class="nav-link">Databases</a>
+      <span class="nav-sep">|</span>
+      <span class="nav-current">Plugins</span>
+    </nav>
+    <div class="header-actions"><button id="disconnectBtn" class="btn btn-sm btn-ghost">Disconnect</button></div>
+  </header>
+  <main class="main">
+    <div class="databases-page">
+      <div class="page-header"><div><h1>Plugin SDK</h1><p class="page-subtitle">Discovered plugin manifests from <code>plugins/</code></p></div></div>
+      <div id="pluginsList" class="database-grid"></div>
+    </div>
+  </main>
+  <script src="/js/app.js"></script>
+  <script>
+    (async function() {
+      const root = document.getElementById('pluginsList');
+      try {
+        const res = await fetch('/api/plugins');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load plugins');
+        const list = data.plugins || [];
+        if (!list.length) {
+          root.innerHTML = '<p style="color:var(--text-muted)">No plugins found. Add plugin folders under <code>plugins/</code>.</p>';
+          return;
+        }
+        root.innerHTML = list.map((p) => `
+          <div class="database-card-wrapper"><div class="database-card" style="cursor:default">
+            <div class="database-info">
+              <h3 class="database-name">${escapeHtml(p.name)} <small style="font-weight:400;color:var(--text-muted)">${escapeHtml(p.version)}</small></h3>
+              <div style="font-size:12px;color:var(--text-secondary)">${escapeHtml(p.description || '')}</div>
+              <div style="font-size:11px;margin-top:6px"><code>${escapeHtml((p.hooks || []).join(', ') || 'no hooks')}</code></div>
+            </div>
+          </div></div>
+        `).join('');
+      } catch (err) {
+        root.innerHTML = `<p style="color:var(--danger)">${escapeHtml(err.message)}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>

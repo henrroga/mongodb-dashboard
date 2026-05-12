@@ -9,6 +9,9 @@
 const express = require("express");
 const router = express.Router();
 const mongoService = require("../../services/mongodb");
+const config = require("../../config");
+const usersService = require("../../services/users");
+const { bad, isPlainObject } = require("../../middleware/validate-body");
 
 router.get("/:db/:collection/indexes", async (req, res) => {
   try {
@@ -46,6 +49,9 @@ router.get("/:db/:collection/indexes", async (req, res) => {
 
 router.post("/:db/:collection/indexes", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "indexAdmin")) {
+      return res.status(403).json({ error: "Index admin access denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 
@@ -64,6 +70,9 @@ router.post("/:db/:collection/indexes", async (req, res) => {
 
 router.delete("/:db/:collection/indexes/:indexName", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "indexAdmin")) {
+      return res.status(403).json({ error: "Index admin access denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 
@@ -81,6 +90,9 @@ router.delete("/:db/:collection/indexes/:indexName", async (req, res) => {
 
 router.put("/:db/:collection/indexes/:indexName", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "indexAdmin")) {
+      return res.status(403).json({ error: "Index admin access denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 
@@ -90,6 +102,79 @@ router.put("/:db/:collection/indexes/:indexName", async (req, res) => {
       index: { name: req.params.indexName, hidden: !!hidden },
     });
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/:db/:collection/indexes/advisor", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const db = client.db(req.params.db);
+    const col = db.collection(req.params.collection);
+    const indexes = await col.indexes();
+    const filter = req.body?.filter ?? {};
+    const sort = req.body?.sort ?? {};
+    if (!isPlainObject(filter) || !isPlainObject(sort)) {
+      return bad(res, "filter and sort must be objects");
+    }
+
+    const recommendations = [];
+    const warnings = [];
+
+    const hasPrefixIndex = (fields) => {
+      const wanted = Object.keys(fields);
+      return indexes.some((idx) => {
+        const keys = Object.keys(idx.key || {});
+        if (keys.length < wanted.length) return false;
+        for (let i = 0; i < wanted.length; i += 1) {
+          if (keys[i] !== wanted[i]) return false;
+        }
+        return true;
+      });
+    };
+
+    if (filter && typeof filter === "object" && Object.keys(filter).length > 0) {
+      const key = {};
+      for (const k of Object.keys(filter)) key[k] = 1;
+      if (!hasPrefixIndex(key)) {
+        recommendations.push({
+          type: "missing_filter_index",
+          message: "No index matches current filter fields",
+          key,
+        });
+      }
+    }
+
+    if (sort && typeof sort === "object" && Object.keys(sort).length > 0) {
+      if (!hasPrefixIndex(sort)) {
+        recommendations.push({
+          type: "missing_sort_index",
+          message: "No index matches current sort pattern",
+          key: sort,
+        });
+      }
+    }
+
+    const byKey = new Map();
+    for (const idx of indexes) {
+      const sig = JSON.stringify(idx.key || {});
+      if (!byKey.has(sig)) byKey.set(sig, []);
+      byKey.get(sig).push(idx.name);
+    }
+    for (const [sig, names] of byKey.entries()) {
+      if (names.length > 1) {
+        warnings.push({
+          type: "duplicate_index",
+          message: "Duplicate index key pattern detected",
+          key: JSON.parse(sig),
+          names,
+        });
+      }
+    }
+
+    res.json({ recommendations, warnings });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audit Log | MongoDB Dashboard</title>
+  <script>
+    (function() {
+      try {
+        const theme = localStorage.getItem('mongodb_dashboard_theme') || 'system';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch(e) {
+        document.documentElement.setAttribute('data-theme', 'system');
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/css/style.css">
+  <%- include("./partials/app-config") %>
+</head>
+<body>
+  <header class="header">
+    <a href="/" class="logo">MongoDB Dashboard</a>
+    <nav class="nav">
+      <a href="/databases" class="nav-link">Databases</a>
+      <span class="nav-sep">|</span>
+      <a href="/performance" class="nav-link">Performance</a>
+      <span class="nav-sep">|</span>
+      <span class="nav-current">Audit</span>
+    </nav>
+    <div class="header-actions">
+      <button id="disconnectBtn" class="btn btn-sm btn-ghost" title="Disconnect">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="databases-page">
+      <div class="page-header">
+        <div>
+          <h1>Audit Log</h1>
+          <p class="page-subtitle">Recent security and write events</p>
+        </div>
+      </div>
+      <div style="overflow:auto;border:1px solid var(--border-color);border-radius:8px;">
+        <table class="data-table" id="auditTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Event</th>
+              <th>User</th>
+              <th>Method</th>
+              <th>Path</th>
+              <th>IP</th>
+            </tr>
+          </thead>
+          <tbody id="auditRows">
+            <tr><td colspan="6" class="empty-state-cell">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/app.js"></script>
+  <script>
+    async function loadAudit() {
+      const tbody = document.getElementById('auditRows');
+      try {
+        const res = await fetch('/api/audit/logs?limit=300');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load audit logs');
+        const entries = data.entries || [];
+        if (!entries.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state-cell">No audit entries yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = entries.map((e) => `
+          <tr>
+            <td>${escapeHtml(String(e.ts || ''))}</td>
+            <td>${escapeHtml(String(e.event || ''))}</td>
+            <td>${escapeHtml(String(e.username || ''))}</td>
+            <td>${escapeHtml(String(e.method || ''))}</td>
+            <td><code>${escapeHtml(String(e.path || e.colName || ''))}</code></td>
+            <td>${escapeHtml(String(e.ip || ''))}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state-cell">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+    loadAudit();
+  </script>
+</body>
+</html>

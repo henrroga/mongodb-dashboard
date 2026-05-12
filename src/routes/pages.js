@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const mongoService = require("../services/mongodb");
+const config = require("../config");
+const usersService = require("../services/users");
 
 // Home / Connect page
 router.get("/", async (req, res) => {
@@ -161,6 +163,24 @@ router.get("/performance", async (req, res) => {
   } catch (err) {
     res.redirect("/");
   }
+});
+
+router.get("/audit", async (req, res) => {
+  try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "audit")) {
+      return res.status(403).send("Access denied");
+    }
+    res.render("audit", { title: "Audit Log" });
+  } catch (_err) {
+    res.status(500).send("Failed to load audit log");
+  }
+});
+
+router.get("/plugins", async (_req, res) => {
+  if (config.auth.enabled && !usersService.hasPermission(_req.session, "audit")) {
+    return res.status(403).send("Access denied");
+  }
+  res.render("plugins", { title: "Plugins" });
 });
 
 // Document detail page

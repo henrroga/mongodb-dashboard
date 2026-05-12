@@ -1043,6 +1043,7 @@ ui.alert = function ({ title = 'Notice', message = '', confirmText = 'OK' } = {}
 // Storage keys
 const STORAGE_KEY = 'mongodb_dashboard_connections';
 const ACTIVE_CONNECTION_KEY = 'mongodb_dashboard_active_connection';
+const ACTIVE_CONNECTION_ID_KEY = 'mongodb_dashboard_active_connection_id';
 const THEME_KEY = 'mongodb_dashboard_theme';
 const READONLY_KEY = 'mongodb_dashboard_readonly';
 
@@ -1154,25 +1155,76 @@ function getConnections() {
   }
 }
 
-function saveConnection(connectionString, name, color) {
-  const connections = getConnections().filter(c => c.uri !== connectionString);
-  connections.unshift({ uri: connectionString, name: name || '', color: color || '' });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(connections.slice(0, 10)));
+function setConnections(connections) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(connections.slice(0, 50)));
 }
 
-function updateConnectionMeta(connectionString, name, color) {
-  const connections = getConnections();
-  const conn = connections.find(c => c.uri === connectionString);
-  if (conn) {
-    if (name !== undefined) conn.name = name;
-    if (color !== undefined) conn.color = color;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
+async function fetchVaultConnections() {
+  const res = await fetch('/api/connections');
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load connection vault');
+  return (data.connections || []).map((c) => ({ ...c, uri: '' }));
+}
+
+async function createVaultConnection(connectionString, name, color) {
+  const res = await fetch('/api/connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connectionString, name, color }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to save connection');
+  return data.connection;
+}
+
+async function patchVaultConnection(id, name, color) {
+  const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, color }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to update connection');
+  return data.connection;
+}
+
+async function deleteVaultConnection(id) {
+  const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to delete connection');
+}
+
+async function syncConnectionsFromVault() {
+  try {
+    const connections = await fetchVaultConnections();
+    setConnections(connections);
+    return connections;
+  } catch {
+    return getConnections();
   }
 }
 
-function removeConnection(connectionString) {
-  const connections = getConnections().filter(c => c.uri !== connectionString);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
+function saveConnection(connectionString, name, color, id) {
+  const connections = getConnections().filter(c => c.uri !== connectionString && (!id || c.id !== id));
+  connections.unshift({ id: id || null, uri: connectionString, name: name || '', color: color || '' });
+  setConnections(connections);
+}
+
+function updateConnectionMeta(connectionIdentity, name, color) {
+  const connections = getConnections();
+  const conn = connections.find(c => c.uri === connectionIdentity || c.id === connectionIdentity);
+  if (conn) {
+    if (name !== undefined) conn.name = name;
+    if (color !== undefined) conn.color = color;
+    setConnections(connections);
+  }
+}
+
+function removeConnection(connectionIdentity) {
+  const connections = getConnections().filter(c => c.uri !== connectionIdentity && c.id !== connectionIdentity);
+  setConnections(connections);
 }
 
 function getActiveConnection() {
@@ -1183,12 +1235,25 @@ function getActiveConnection() {
   }
 }
 
-function setActiveConnection(connectionString) {
+function getActiveConnectionId() {
+  try {
+    return localStorage.getItem(ACTIVE_CONNECTION_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setActiveConnection(connectionString, id) {
   try {
     if (connectionString) {
       localStorage.setItem(ACTIVE_CONNECTION_KEY, connectionString);
     } else {
       localStorage.removeItem(ACTIVE_CONNECTION_KEY);
+    }
+    if (id) {
+      localStorage.setItem(ACTIVE_CONNECTION_ID_KEY, id);
+    } else if (!connectionString) {
+      localStorage.removeItem(ACTIVE_CONNECTION_ID_KEY);
     }
   } catch {
     // Ignore storage errors
@@ -1198,10 +1263,11 @@ function setActiveConnection(connectionString) {
 // Apply connection-aware header color and page title
 function applyConnectionBranding() {
   const activeUri = getActiveConnection();
-  if (!activeUri) return;
+  const activeId = getActiveConnectionId();
+  if (!activeUri && !activeId) return;
 
   const conns = getConnections();
-  const conn = conns.find(c => c.uri === activeUri);
+  const conn = conns.find(c => c.uri === activeUri || c.id === activeId);
 
   // Apply color to header
   if (conn?.color) {
@@ -1234,7 +1300,8 @@ async function checkConnectionStatus() {
 
 async function autoReconnect() {
   const activeConnection = getActiveConnection();
-  if (!activeConnection) {
+  const activeConnectionId = getActiveConnectionId();
+  if (!activeConnection && !activeConnectionId) {
     return false;
   }
 
@@ -1251,7 +1318,10 @@ async function autoReconnect() {
     const res = await fetch('/api/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ connectionString: activeConnection })
+      body: JSON.stringify({
+        connectionString: activeConnection,
+        connectionId: activeConnectionId || undefined,
+      })
     });
 
     const data = await res.json();
@@ -2491,13 +2561,47 @@ function initShellPanel(dbName) {
   const runBtn = document.getElementById('shellRunBtn');
   const output = document.getElementById('shellOutput');
   const dbLabel = document.getElementById('shellDbLabel');
+  const tabSelect = document.getElementById('shellTabSelect');
+  const newTabBtn = document.getElementById('shellNewTabBtn');
+  const snippetsBtn = document.getElementById('shellSnippetsBtn');
   if (!panel || !input) return;
 
-  let shellDb = dbName;
-  let history = [];
+  const tabsKey = `mongodb_shell_tabs_${dbName}`;
+  const loadTabs = () => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(tabsKey) || '[]');
+      if (Array.isArray(raw) && raw.length) return raw;
+    } catch {}
+    return [{ id: 'default', name: 'default', db: dbName, history: [] }];
+  };
+  let shellTabs = loadTabs();
+  let activeTabId = shellTabs[0].id;
   let historyIdx = -1;
+  const snippets = [
+    'show collections',
+    'db.runCommand({ ping: 1 })',
+    'db.collection.find({}).limit(10)',
+    'db.collection.countDocuments({})',
+    'db.collection.aggregate([{ $match: {} }, { $limit: 10 }])',
+  ];
+
+  function activeTab() {
+    return shellTabs.find((t) => t.id === activeTabId) || shellTabs[0];
+  }
+  function persistTabs() {
+    try { localStorage.setItem(tabsKey, JSON.stringify(shellTabs.slice(0, 8))); } catch {}
+  }
+  function renderTabs() {
+    if (!tabSelect) return;
+    tabSelect.innerHTML = shellTabs.map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+    tabSelect.value = activeTabId;
+  }
+
+  let shellDb = activeTab().db || dbName;
+  let history = activeTab().history || [];
 
   if (dbLabel) dbLabel.textContent = `[${shellDb}]`;
+  renderTabs();
 
   const open = () => {
     panel.classList.remove('shell-panel-closed');
@@ -2513,6 +2617,35 @@ function initShellPanel(dbName) {
   openBtn?.addEventListener('click', open);
   toggleBtn?.addEventListener('click', close);
   clearBtn?.addEventListener('click', () => { if (output) output.innerHTML = ''; });
+  newTabBtn?.addEventListener('click', async () => {
+    const name = await ui.prompt({ title: 'New shell tab', placeholder: 'analytics', confirmText: 'Create' });
+    if (!name) return;
+    const id = `tab_${Date.now()}`;
+    shellTabs.push({ id, name: name.trim() || id, db: shellDb, history: [] });
+    activeTabId = id;
+    history = [];
+    historyIdx = -1;
+    renderTabs();
+    persistTabs();
+  });
+  tabSelect?.addEventListener('change', () => {
+    activeTabId = tabSelect.value;
+    const tab = activeTab();
+    shellDb = tab.db || dbName;
+    history = Array.isArray(tab.history) ? tab.history : [];
+    historyIdx = -1;
+    if (dbLabel) dbLabel.textContent = `[${shellDb}]`;
+  });
+  snippetsBtn?.addEventListener('click', async () => {
+    const picked = await ui.prompt({
+      title: 'Insert shell snippet',
+      placeholder: snippets.join(' | '),
+      confirmText: 'Insert',
+    });
+    if (!picked) return;
+    input.value = picked;
+    input.focus();
+  });
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { runShellCommand(); return; }
@@ -2563,6 +2696,10 @@ function initShellPanel(dbName) {
     if (!cmd) return;
 
     history.unshift(cmd);
+    const tab = activeTab();
+    tab.history = history.slice(0, 100);
+    tab.db = shellDb;
+    persistTabs();
     historyIdx = -1;
     input.value = '';
 
@@ -2581,6 +2718,9 @@ function initShellPanel(dbName) {
       if (data.switchDb) {
         shellDb = data.switchDb;
         if (dbLabel) dbLabel.textContent = `[${shellDb}]`;
+        const tab = activeTab();
+        tab.db = shellDb;
+        persistTabs();
       }
 
       appendEntry(cmd, data.result, data.type || 'json');
@@ -2676,7 +2816,8 @@ async function initConnectPage() {
   const connImportFile = document.getElementById('connImportFile');
 
   if (connExportBtn) {
-    connExportBtn.addEventListener('click', () => {
+    connExportBtn.addEventListener('click', async () => {
+      await syncConnectionsFromVault();
       const conns = getConnections();
       if (!conns.length) {
         showToast('Nothing to export — save a connection first.', 'warning');
@@ -2746,10 +2887,11 @@ async function initConnectPage() {
         });
         if (!ok) return;
 
+        await syncConnectionsFromVault();
         const existing = getConnections();
         const byUri = new Map(existing.map((c) => [c.uri, c]));
         for (const c of cleaned) byUri.set(c.uri, { ...byUri.get(c.uri), ...c });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify([...byUri.values()]));
+        setConnections([...byUri.values()]);
         renderBookmarks();
         showToast(`Imported ${cleaned.length} connection${cleaned.length === 1 ? '' : 's'}`, 'success');
       } catch (err) {
@@ -2806,22 +2948,23 @@ async function initConnectPage() {
     if (connections.length === 0) { recentEl.style.display = 'none'; return; }
     recentEl.style.display = 'block';
     recentList.innerHTML = connections.map(conn => `
-      <li data-conn="${encodeURIComponent(conn.uri)}">
+      <li data-conn="${encodeURIComponent(conn.uri || '')}" data-conn-id="${encodeURIComponent(conn.id || '')}">
         ${conn.color ? `<span class="conn-color-dot" style="background:${conn.color}"></span>` : ''}
         <div class="conn-info">
           ${conn.name ? `<span class="conn-name">${escapeHtml(conn.name)}</span>` : ''}
-          <span class="recent-host">${maskConnectionString(conn.uri)}</span>
+          <span class="recent-host">${conn.uri ? maskConnectionString(conn.uri) : 'Saved in encrypted vault'}</span>
         </div>
-        <span class="conn-label-btn" data-label="${encodeURIComponent(conn.uri)}" title="Edit label">
+        <span class="conn-label-btn" data-label="${encodeURIComponent(conn.id || conn.uri)}" title="Edit label">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
         </span>
-        <span class="recent-remove" data-remove="${encodeURIComponent(conn.uri)}">×</span>
+        <span class="recent-remove" data-remove="${encodeURIComponent(conn.id || conn.uri)}">×</span>
       </li>
     `).join('');
   }
+  await syncConnectionsFromVault();
   renderBookmarks();
 
   recentList.addEventListener('click', (e) => {
@@ -2829,17 +2972,27 @@ async function initConnectPage() {
     if (removeBtn) {
       e.stopPropagation();
       const conn = decodeURIComponent(removeBtn.dataset.remove);
-      removeConnection(conn);
-      renderBookmarks();
+      const isVaultId = /^[0-9a-f-]{20,}$/i.test(conn);
+      if (isVaultId) {
+        deleteVaultConnection(conn)
+          .then(() => {
+            removeConnection(conn);
+            renderBookmarks();
+          })
+          .catch((err) => showToast('Delete failed: ' + err.message, 'error'));
+      } else {
+        removeConnection(conn);
+        renderBookmarks();
+      }
       return;
     }
 
     const labelBtn = e.target.closest('.conn-label-btn');
     if (labelBtn) {
       e.stopPropagation();
-      const uri = decodeURIComponent(labelBtn.dataset.label);
+      const identity = decodeURIComponent(labelBtn.dataset.label);
       const conns = getConnections();
-      const existing = conns.find(c => c.uri === uri);
+      const existing = conns.find(c => c.uri === identity || c.id === identity);
       ui.prompt({
         title: 'Edit connection',
         confirmText: 'Save',
@@ -2863,15 +3016,27 @@ async function initConnectPage() {
         ],
       }).then((result) => {
         if (!result) return;
-        updateConnectionMeta(uri, result.name || '', result.color || '');
-        renderBookmarks();
+        if (existing?.id) {
+          patchVaultConnection(existing.id, result.name || '', result.color || '')
+            .then((updated) => {
+              updateConnectionMeta(existing.id, updated.name || '', updated.color || '');
+              renderBookmarks();
+            })
+            .catch((err) => showToast('Update failed: ' + err.message, 'error'));
+        } else {
+          updateConnectionMeta(identity, result.name || '', result.color || '');
+          renderBookmarks();
+        }
       });
       return;
     }
 
     const li = e.target.closest('li');
     if (li) {
-      input.value = decodeURIComponent(li.dataset.conn);
+      input.value = decodeURIComponent(li.dataset.conn || '');
+      const selectedId = decodeURIComponent(li.dataset.connId || '');
+      if (selectedId) form.dataset.connectionId = selectedId;
+      else delete form.dataset.connectionId;
       form.dispatchEvent(new Event('submit'));
     }
   });
@@ -2891,7 +3056,8 @@ async function initConnectPage() {
     }
     
     const connectionString = input.value.trim();
-    if (!connectionString) return;
+    const selectedConnectionId = form.dataset.connectionId || '';
+    if (!connectionString && !selectedConnectionId) return;
 
     // Show loading state
     connectBtn.disabled = true;
@@ -2903,7 +3069,10 @@ async function initConnectPage() {
       const res = await fetch('/api/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionString })
+        body: JSON.stringify({
+          connectionString: connectionString || undefined,
+          connectionId: selectedConnectionId || undefined,
+        })
       });
 
       const data = await res.json();
@@ -2912,11 +3081,14 @@ async function initConnectPage() {
         throw new Error(data.error || 'Connection failed');
       }
 
-      // Save to recent connections
-      saveConnection(connectionString);
-      
-      // Save as active connection
-      setActiveConnection(connectionString);
+      if (connectionString) {
+        const saved = await createVaultConnection(connectionString);
+        saveConnection(connectionString, saved.name || '', saved.color || '', saved.id);
+        setActiveConnection(connectionString, saved.id);
+      } else if (selectedConnectionId) {
+        const existing = getConnections().find((c) => c.id === selectedConnectionId);
+        setActiveConnection(existing?.uri || '', selectedConnectionId);
+      }
 
       // Check for saved return URL, otherwise redirect to databases
       const returnUrl = sessionStorage.getItem('mongodb_dashboard_return_url');
@@ -3539,6 +3711,8 @@ async function initBrowser(dbName, collectionName) {
   initChangeStreamPanel(dbName, collectionName);
   initSqlPanel(dbName, collectionName);
   initViewModeToggle(dbName, collectionName);
+  initResultCharts();
+  initGridFSManager(dbName, collectionName);
   initShellPanel(dbName);
 
   // Delegated click handler for expandable cells and copyable IDs
@@ -3561,6 +3735,183 @@ async function initBrowser(dbName, collectionName) {
     const isVisible = pre.style.display !== 'none';
     pre.style.display = isVisible ? 'none' : 'block';
     expandable.classList.toggle('cell-expanded', !isVisible);
+  });
+}
+
+function initResultCharts() {
+  const openBtn = document.getElementById('chartBtn');
+  const modal = document.getElementById('chartModal');
+  const close1 = document.getElementById('chartModalClose');
+  const close2 = document.getElementById('chartModalClose2');
+  const fieldSel = document.getElementById('chartField');
+  const typeSel = document.getElementById('chartType');
+  const renderBtn = document.getElementById('chartRenderBtn');
+  const canvasWrap = document.getElementById('chartCanvasWrap');
+  if (!openBtn || !modal || !fieldSel || !typeSel || !renderBtn || !canvasWrap) return;
+
+  const close = () => { modal.style.display = 'none'; };
+  close1?.addEventListener('click', close);
+  close2?.addEventListener('click', close);
+  modal.querySelector('.modal-backdrop')?.addEventListener('click', close);
+
+  function chartableFields() {
+    const set = new Set();
+    (allDocuments || []).slice(0, 200).forEach((d) => {
+      Object.entries(d || {}).forEach(([k, v]) => {
+        if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') set.add(k);
+      });
+    });
+    return [...set];
+  }
+
+  function computeCounts(field) {
+    const m = new Map();
+    (allDocuments || []).forEach((d) => {
+      const raw = d ? d[field] : undefined;
+      if (raw === undefined) return;
+      const key = String(raw);
+      m.set(key, (m.get(key) || 0) + 1);
+    });
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  }
+
+  function renderBar(data) {
+    const max = Math.max(...data.map((d) => d[1]), 1);
+    return data.map(([label, count]) => `
+      <div style="display:grid;grid-template-columns:160px 1fr 48px;gap:8px;align-items:center;margin:6px 0">
+        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+        <div style="background:var(--bg-tertiary);height:16px;border-radius:4px;overflow:hidden"><div style="height:100%;width:${(count / max) * 100}%;background:var(--accent)"></div></div>
+        <div style="text-align:right">${count}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderPie(data) {
+    const total = data.reduce((a, b) => a + b[1], 0) || 1;
+    let acc = 0;
+    const colors = ['#3fb950', '#58a6ff', '#d29922', '#f85149', '#bc8cff', '#79c0ff', '#8b949e', '#ff7b72', '#56d364', '#a371f7'];
+    const slices = data.map((d, i) => {
+      const start = acc / total * 360;
+      acc += d[1];
+      const end = acc / total * 360;
+      return `${colors[i % colors.length]} ${start}deg ${end}deg`;
+    }).join(', ');
+    return `
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+        <div style="width:220px;height:220px;border-radius:50%;background:conic-gradient(${slices});border:1px solid var(--border-color)"></div>
+        <div style="min-width:220px">${data.map((d, i) => `<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${colors[i % colors.length]}"></span><span>${escapeHtml(String(d[0]))}</span><span style="margin-left:auto">${d[1]}</span></div>`).join('')}</div>
+      </div>
+    `;
+  }
+
+  openBtn.addEventListener('click', () => {
+    const fields = chartableFields();
+    if (!fields.length) {
+      showToast('No chartable fields in current results.', 'warning');
+      return;
+    }
+    fieldSel.innerHTML = fields.map((f) => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+    canvasWrap.innerHTML = '';
+    modal.style.display = 'flex';
+  });
+
+  renderBtn.addEventListener('click', () => {
+    const field = fieldSel.value;
+    const data = computeCounts(field);
+    if (!data.length) {
+      canvasWrap.innerHTML = '<div class="agg-result-placeholder">No data for selected field.</div>';
+      return;
+    }
+    canvasWrap.innerHTML = typeSel.value === 'pie' ? renderPie(data) : renderBar(data);
+  });
+}
+
+function initGridFSManager(dbName, collectionName) {
+  const openBtn = document.getElementById('gridfsBtn');
+  const modal = document.getElementById('gridfsModal');
+  const close1 = document.getElementById('gridfsModalClose');
+  const close2 = document.getElementById('gridfsModalClose2');
+  const rows = document.getElementById('gridfsRows');
+  const bucketInput = document.getElementById('gridfsBucketInput');
+  const fileInput = document.getElementById('gridfsUploadInput');
+  const uploadBtn = document.getElementById('gridfsUploadBtn');
+  const refreshBtn = document.getElementById('gridfsRefreshBtn');
+  if (!openBtn || !modal || !rows || !bucketInput) return;
+
+  const defaultBucket = collectionName.endsWith('.files') ? collectionName.replace(/\.files$/, '') : 'fs';
+  bucketInput.value = defaultBucket;
+  const close = () => { modal.style.display = 'none'; };
+  close1?.addEventListener('click', close);
+  close2?.addEventListener('click', close);
+  modal.querySelector('.modal-backdrop')?.addEventListener('click', close);
+
+  async function loadFiles() {
+    const bucket = (bucketInput.value || defaultBucket).trim();
+    rows.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px"><div class="loading-spinner"></div></td></tr>';
+    try {
+      const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(bucket)}/gridfs`);
+      const files = data.files || [];
+      if (!files.length) {
+        rows.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">No files</td></tr>';
+        return;
+      }
+      rows.innerHTML = files.map((f) => {
+        const id = f._id?.$oid || f._id;
+        return `<tr>
+          <td>${escapeHtml(f.filename || '')}</td>
+          <td>${formatBytes(f.length || 0)}</td>
+          <td>${escapeHtml(f.contentType || '—')}</td>
+          <td>${escapeHtml(f.uploadDate ? new Date(f.uploadDate).toLocaleString() : '—')}</td>
+          <td>
+            <a class="btn btn-ghost btn-sm" href="/api/${encodeURIComponent(dbName)}/${encodeURIComponent(bucket)}/gridfs/${encodeURIComponent(id)}" target="_blank" rel="noopener">Download</a>
+            <button class="btn btn-ghost btn-sm" data-gridfs-del="${escapeHtml(String(id))}">Delete</button>
+          </td>
+        </tr>`;
+      }).join('');
+      rows.querySelectorAll('[data-gridfs-del]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-gridfs-del');
+          const ok = await ui.confirm({ title: 'Delete GridFS file?', confirmText: 'Delete', danger: true });
+          if (!ok) return;
+          await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(bucket)}/gridfs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          loadFiles();
+        });
+      });
+    } catch (err) {
+      rows.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger);padding:20px">${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  uploadBtn?.addEventListener('click', async () => {
+    const bucket = (bucketInput.value || defaultBucket).trim();
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      showToast('Choose a file first.', 'warning');
+      return;
+    }
+    const b64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(bucket)}/gridfs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: file.type || 'application/octet-stream',
+        contentBase64: b64,
+      }),
+    });
+    if (fileInput) fileInput.value = '';
+    loadFiles();
+  });
+
+  refreshBtn?.addEventListener('click', loadFiles);
+  openBtn.addEventListener('click', () => {
+    modal.style.display = 'flex';
+    loadFiles();
   });
 }
 
@@ -7502,6 +7853,7 @@ function initPerformancePage() {
   let maxDelta = 1;
 
   const OPS = ['insert', 'query', 'update', 'delete', 'getmore', 'command'];
+  const profileDb = 'admin';
 
   async function fetchStats() {
     try {
@@ -7586,6 +7938,47 @@ function initPerformancePage() {
     }
   }
 
+  async function fetchProfiler() {
+    try {
+      const res = await fetch(`/api/server/profiler?db=${encodeURIComponent(profileDb)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const levelEl = document.getElementById('profilerLevel');
+      const slowmsEl = document.getElementById('profilerSlowms');
+      if (levelEl) levelEl.value = String(data.level ?? 1);
+      if (slowmsEl) slowmsEl.value = String(data.slowms ?? 100);
+    } catch (err) {
+      console.error('Profiler status error:', err);
+    }
+  }
+
+  async function fetchSlowOps() {
+    const tbody = document.getElementById('slowOpsBody');
+    if (!tbody) return;
+    try {
+      const res = await fetch(`/api/server/slow-ops?db=${encodeURIComponent(profileDb)}&limit=50`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const ops = Array.isArray(data.operations) ? data.operations : [];
+      if (!ops.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">No slow operations recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = ops.map((op) => `
+        <tr>
+          <td>${escapeHtml(new Date(op.ts).toLocaleTimeString())}</td>
+          <td>${escapeHtml(op.op || '—')}</td>
+          <td><code>${escapeHtml(op.ns || '—')}</code></td>
+          <td>${op.millis ?? '—'}</td>
+          <td>${escapeHtml(op.planSummary || '—')}</td>
+          <td>${op.nreturned ?? '—'}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:var(--danger);padding:24px;text-align:center">Error: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
   function startPolling(ms) {
     if (intervalId) clearInterval(intervalId);
     if (ms === 0) {
@@ -7604,9 +7997,29 @@ function initPerformancePage() {
   });
 
   document.getElementById('refreshOps')?.addEventListener('click', fetchCurrentOps);
+  document.getElementById('refreshSlowOpsBtn')?.addEventListener('click', fetchSlowOps);
+  document.getElementById('applyProfilerBtn')?.addEventListener('click', async () => {
+    const level = parseInt(document.getElementById('profilerLevel')?.value || '1', 10);
+    const slowms = parseInt(document.getElementById('profilerSlowms')?.value || '100', 10);
+    try {
+      const res = await fetch('/api/server/profiler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ db: profileDb, level, slowms }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast(`Profiler set to level ${data.level} (slowms ${data.slowms})`, 'success');
+      fetchSlowOps();
+    } catch (err) {
+      showToast(`Profiler update failed: ${err.message}`, 'error');
+    }
+  });
 
   startPolling(2000);
   fetchCurrentOps();
+  fetchProfiler();
+  fetchSlowOps();
 }
 
 window.killOp = async function(opid) {
@@ -8127,6 +8540,42 @@ async function loadIndexes(dbName, collectionName) {
 
 function initIndexesPanel(dbName, collectionName) {
   document.getElementById('refreshIndexesBtn')?.addEventListener('click', () => loadIndexes(dbName, collectionName));
+  document.getElementById('indexAdvisorBtn')?.addEventListener('click', async () => {
+    const box = document.getElementById('indexAdvisorBox');
+    const body = document.getElementById('indexAdvisorBody');
+    if (!box || !body) return;
+    let filter = {};
+    let sort = {};
+    try {
+      const qf = document.getElementById('queryFilter')?.value?.trim();
+      if (qf) filter = JSON.parse(qf);
+    } catch {}
+    try {
+      const qs = document.getElementById('querySort')?.value?.trim();
+      if (qs) sort = JSON.parse(qs);
+    } catch {}
+    body.innerHTML = '<div style="display:flex;justify-content:center;padding:10px"><div class="loading-spinner"></div></div>';
+    box.style.display = 'block';
+    try {
+      const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/indexes/advisor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filter, sort }),
+      });
+      const recs = data.recommendations || [];
+      const warns = data.warnings || [];
+      if (!recs.length && !warns.length) {
+        body.innerHTML = '<div style="color:var(--success)">No obvious index issues detected for current filter/sort.</div>';
+        return;
+      }
+      body.innerHTML = [
+        ...recs.map((r) => `<div style="margin-bottom:8px"><strong>${escapeHtml(r.message)}</strong><pre style="margin:4px 0">${escapeHtml(JSON.stringify(r.key, null, 2))}</pre></div>`),
+        ...warns.map((w) => `<div style="margin-bottom:8px;color:var(--warning)"><strong>${escapeHtml(w.message)}</strong> (${escapeHtml(w.names.join(', '))})</div>`),
+      ].join('');
+    } catch (err) {
+      body.innerHTML = `<div style="color:var(--danger)">Advisor failed: ${escapeHtml(err.message)}</div>`;
+    }
+  });
 
   // Create index modal
   const createModal = document.getElementById('createIndexModal');
@@ -8266,6 +8715,12 @@ const AGG_STAGE_TEMPLATES = {
 };
 
 const STAGE_TYPES = Object.keys(AGG_STAGE_TEMPLATES);
+const AGG_STAGE_GROUPS = {
+  Filtering: ["$match", "$project", "$addFields", "$unwind"],
+  Grouping: ["$group", "$count", "$bucket", "$facet"],
+  Joins: ["$lookup"],
+  Output: ["$sort", "$skip", "$limit", "$out", "$merge"],
+};
 
 let aggStages = []; // [{ id, type, body, enabled }]
 let aggIdCounter = 0;
@@ -8287,9 +8742,38 @@ function initAggregationPanel(dbName, collectionName) {
   document.getElementById('aggAddStage')?.addEventListener('click', () => {
     addAggStage(dbName, collectionName);
   });
+  const addStageBtn = document.getElementById('aggAddStage');
+  if (addStageBtn && !document.getElementById('aggStageQuickMenu')) {
+    const menu = document.createElement('div');
+    menu.id = 'aggStageQuickMenu';
+    menu.className = 'saved-queries-dropdown';
+    menu.style.display = 'none';
+    menu.style.minWidth = '220px';
+    menu.innerHTML = Object.entries(AGG_STAGE_GROUPS).map(([group, stages]) => `
+      <div class="saved-queries-toolbar" style="display:block;padding:6px 8px;font-size:11px;font-weight:600">${escapeHtml(group)}</div>
+      ${stages.map((s) => `<div class="saved-query-item" data-stage-type="${s}">${s}</div>`).join('')}
+    `).join('');
+    addStageBtn.parentElement.appendChild(menu);
+    addStageBtn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    });
+    menu.querySelectorAll('[data-stage-type]').forEach((item) => {
+      item.addEventListener('click', () => {
+        addAggStage(dbName, collectionName, item.dataset.stageType || '$match');
+        menu.style.display = 'none';
+      });
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && e.target !== addStageBtn) menu.style.display = 'none';
+    });
+  }
 
   document.getElementById('aggRun')?.addEventListener('click', () => {
     runAggregation(dbName, collectionName);
+  });
+  document.getElementById('aggExplain')?.addEventListener('click', () => {
+    explainAggregation(dbName, collectionName);
   });
 
   // Copy-as-code for the current pipeline (uses the polished modal that
@@ -8582,6 +9066,38 @@ async function runAggregation(dbName, collectionName) {
   }
 }
 
+async function explainAggregation(dbName, collectionName) {
+  const box = document.getElementById('aggExplainBox');
+  const body = document.getElementById('aggExplainBody');
+  if (!box || !body) return;
+
+  const pipeline = [];
+  for (const stage of aggStages) {
+    if (!stage.enabled) continue;
+    try {
+      const stageBody = JSON.parse(stage.body);
+      pipeline.push({ [stage.type]: stageBody });
+    } catch (e) {
+      box.style.display = 'block';
+      body.innerHTML = `<div class="agg-result-placeholder">Invalid JSON: ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+  }
+
+  body.innerHTML = '<div style="display:flex;justify-content:center;padding:20px"><div class="loading-spinner"></div></div>';
+  box.style.display = 'block';
+  try {
+    const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/aggregate/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline, verbosity: 'executionStats' }),
+    });
+    body.innerHTML = renderJsonTree(data.plan || {});
+  } catch (err) {
+    body.innerHTML = `<div class="agg-result-placeholder">Explain failed: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
 async function previewStage(stageId, dbName, collectionName) {
   const previewEl = document.getElementById(`stage-preview-${stageId}`);
   const countEl = document.getElementById(`stage-count-${stageId}`);
@@ -8740,7 +9256,31 @@ function initImportExport(dbName, collectionName) {
   const exportModal = document.getElementById('exportModal');
   if (exportBtn && exportModal) {
     const closeExport = () => { exportModal.style.display = 'none'; };
-    exportBtn.addEventListener('click', () => { exportModal.style.display = 'flex'; });
+    const loadBackupHistory = async () => {
+      const box = document.getElementById('backupHistoryBox');
+      if (!box) return;
+      box.textContent = 'Loading…';
+      try {
+        const data = await apiFetchJson('/api/backups/history');
+        const runs = (data.runs || []).slice(0, 30);
+        if (!runs.length) {
+          box.textContent = 'No backup/restore runs yet.';
+          return;
+        }
+        box.innerHTML = runs.map((r) => {
+          const when = r.ts ? new Date(r.ts).toLocaleString() : '';
+          const kind = r.event === 'restore' ? 'restore' : 'backup';
+          const n = r.restored ?? r.count ?? 0;
+          return `<div style="padding:3px 0"><strong>${escapeHtml(kind)}</strong> · ${escapeHtml(r.db || '')}.${escapeHtml(r.collection || '')} · ${n} docs · ${escapeHtml(when)}</div>`;
+        }).join('');
+      } catch {
+        box.textContent = 'Failed to load history.';
+      }
+    };
+    exportBtn.addEventListener('click', () => {
+      exportModal.style.display = 'flex';
+      loadBackupHistory();
+    });
     document.getElementById('exportModalClose')?.addEventListener('click', closeExport);
     document.getElementById('exportCancel')?.addEventListener('click', closeExport);
     exportModal.querySelector('.modal-backdrop')?.addEventListener('click', closeExport);
@@ -8764,6 +9304,31 @@ function initImportExport(dbName, collectionName) {
       showToast('Backup streaming — your browser will download as soon as data flows in.', 'info', 3500);
       window.location.href = url;
       closeExport();
+    });
+
+    document.getElementById('restoreConfirmBtn')?.addEventListener('click', async () => {
+      const file = document.getElementById('restoreFileInput')?.files?.[0];
+      const mode = document.getElementById('restoreMode')?.value || 'insert';
+      if (!file) {
+        showToast('Select a backup file first.', 'warning');
+        return;
+      }
+      const content = await file.text();
+      try {
+        const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, mode }),
+        });
+        showToast(`Restore complete: ${data.restored}/${data.total}`, 'success');
+        currentCursor = null;
+        currentNextSkip = null;
+        allDocuments = [];
+        loadDocuments(dbName, collectionName);
+        loadBackupHistory();
+      } catch (err) {
+        showToast('Restore failed: ' + err.message, 'error');
+      }
     });
   }
 
@@ -9136,6 +9701,55 @@ document.getElementById('disconnectBtn')?.addEventListener('click', async () => 
   }
 });
 
+async function initHeaderConnectionSwitcher() {
+  if (window.location.pathname === '/' || window.location.pathname === '/connect') return;
+  const actions = document.querySelector('.header-actions');
+  if (!actions || document.getElementById('connectionSwitcher')) return;
+
+  const connections = await syncConnectionsFromVault();
+  if (!connections.length) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'header-connection-switcher';
+  const select = document.createElement('select');
+  select.id = 'connectionSwitcher';
+  select.className = 'query-input';
+  select.title = 'Switch connection';
+
+  const activeId = getActiveConnectionId();
+  const activeUri = getActiveConnection();
+  select.innerHTML = connections
+    .map((c) => {
+      const selected = (activeId && c.id === activeId) || (!activeId && activeUri && c.uri === activeUri);
+      const label = c.name ? c.name : `Connection ${String(c.id || '').slice(0, 8)}`;
+      return `<option value="${escapeHtml(c.id || '')}" ${selected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    })
+    .join('');
+
+  select.addEventListener('change', async () => {
+    const id = select.value;
+    if (!id) return;
+    select.disabled = true;
+    try {
+      const res = await fetch('/api/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Connection switch failed');
+      setActiveConnection(getActiveConnection(), id);
+      window.location.reload();
+    } catch (err) {
+      showToast(err.message, 'error');
+      select.disabled = false;
+    }
+  });
+
+  wrap.appendChild(select);
+  actions.insertBefore(wrap, actions.firstChild);
+}
+
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   // Escape to close modals
@@ -9320,7 +9934,11 @@ if (document.readyState === 'loading') {
 
 // Run global connection check when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initGlobalConnectionCheck);
+  document.addEventListener('DOMContentLoaded', () => {
+    initHeaderConnectionSwitcher();
+    initGlobalConnectionCheck();
+  });
 } else {
+  initHeaderConnectionSwitcher();
   initGlobalConnectionCheck();
 }

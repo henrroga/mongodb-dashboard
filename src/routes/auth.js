@@ -1,8 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const config = require("../config");
+const audit = require("../utils/audit");
 const {
-  verifyPassword,
+  verifyCredentials,
   recordFailure,
   clearFailures,
   isLocked,
@@ -36,20 +37,32 @@ router.post(
       });
     }
 
+    const username = (req.body && req.body.username) || "";
     const password = (req.body && req.body.password) || "";
     const nextUrl = typeof req.body.next === "string" ? req.body.next : "/";
 
-    const ok = await verifyPassword(password);
-    if (!ok) {
+    const user = await verifyCredentials(username, password);
+    if (!user) {
       recordFailure(ip);
+      audit.log({
+        event: "login_failed",
+        ip,
+        username: username || null,
+      });
       return res.status(401).render("login", {
         title: "Sign in",
-        error: "Incorrect password.",
+        error: "Incorrect credentials.",
         next: nextUrl,
       });
     }
 
     clearFailures(ip);
+    audit.log({
+      event: "login_success",
+      ip,
+      username: user.username,
+      role: user.role,
+    });
     req.session.regenerate((err) => {
       if (err) {
         return res.status(500).render("login", {
@@ -61,6 +74,9 @@ router.post(
       req.session.authenticated = true;
       req.session.loginAt = Date.now();
       req.session.lastSeenAt = req.session.loginAt;
+      req.session.username = user.username;
+      req.session.role = user.role;
+      req.session.permissions = user.permissions;
       const safeNext =
         nextUrl.startsWith("/") && !nextUrl.startsWith("//") ? nextUrl : "/";
       res.redirect(safeNext);
@@ -70,6 +86,12 @@ router.post(
 
 const logoutRouter = express.Router();
 logoutRouter.post("/", (req, res) => {
+  audit.log({
+    event: "logout",
+    ip: req.ip,
+    username: req.session?.username || null,
+    role: req.session?.role || null,
+  });
   if (req.session) {
     req.session.destroy(() => {
       res.clearCookie("mdb.sid", {

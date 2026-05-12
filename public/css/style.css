@@ -4625,6 +4625,16 @@ textarea.inline-edit-input {
   gap: 4px;
 }
 
+.header-connection-switcher {
+  min-width: 190px;
+}
+
+.header-connection-switcher select.query-input {
+  height: 32px;
+  min-width: 190px;
+  padding: 6px 10px;
+}
+
 /* ─── Saved-queries toolbar (export/import) ───────────────────────────────── */
 
 .saved-queries-toolbar {

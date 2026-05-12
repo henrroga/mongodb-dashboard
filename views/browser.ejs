@@ -49,6 +49,10 @@
         <% } %>
         <span class="nav-sep">|</span>
         <a href="/performance" class="nav-link">Performance</a>
+        <span class="nav-sep">|</span>
+        <a href="/audit" class="nav-link">Audit</a>
+        <span class="nav-sep">|</span>
+        <a href="/plugins" class="nav-link">Plugins</a>
       </nav>
       <div class="header-actions">
         <span id="serverVersionBadge" class="server-version-badge" style="display:none"></span>
@@ -381,6 +385,10 @@
                 </svg>
                 Export
               </button>
+              <button id="gridfsBtn" class="btn btn-ghost" title="GridFS manager">GridFS</button>
+              <button id="chartBtn" class="btn btn-ghost" title="Chart results" aria-label="Chart results">
+                Chart
+              </button>
               <button
                 id="columnsBtn"
                 class="btn btn-ghost"
@@ -606,6 +614,7 @@
                   </svg>
                   Create Index
                 </button>
+                <button id="indexAdvisorBtn" class="btn btn-ghost btn-sm">Advisor</button>
               </div>
             </div>
             <div class="table-container">
@@ -623,6 +632,10 @@
                   <tr class="loading-row"><td colspan="5"><div class="loading-spinner"></div></td></tr>
                 </tbody>
               </table>
+            </div>
+            <div id="indexAdvisorBox" style="display:none;padding:12px;border-top:1px solid var(--border-color);max-height:180px;overflow:auto">
+              <h4 style="margin:0 0 8px 0;font-size:12px;color:var(--text-secondary)">Index Advisor</h4>
+              <div id="indexAdvisorBody"></div>
             </div>
           </div>
 
@@ -665,7 +678,7 @@
             <!-- Left: stage list -->
             <div class="agg-stages-col">
               <div class="agg-toolbar">
-                <button id="aggAddStage" class="btn btn-primary btn-sm">
+                <button id="aggAddStage" class="btn btn-primary btn-sm" title="Click to add default $match, right-click for stage menu">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 5v14M5 12h14"/>
                   </svg>
@@ -677,6 +690,7 @@
                   </svg>
                   Run
                 </button>
+                <button id="aggExplain" class="btn btn-ghost btn-sm" title="Explain pipeline execution plan">Explain</button>
                 <div style="position:relative">
                   <button id="aggSavedBtn" class="btn btn-ghost btn-sm">Saved ▾</button>
                   <div id="aggSavedDropdown" class="saved-queries-dropdown" style="display:none"></div>
@@ -719,6 +733,10 @@
               </div>
               <div id="aggResultBody" class="agg-result-body">
                 <div class="agg-result-placeholder">Run the pipeline to see results</div>
+              </div>
+              <div id="aggExplainBox" style="display:none;border-top:1px solid var(--border-color);padding:10px;max-height:220px;overflow:auto">
+                <h4 style="margin:0 0 8px 0;font-size:12px;color:var(--text-secondary)">Explain</h4>
+                <div id="aggExplainBody" class="json-viewer"></div>
               </div>
             </div>
           </div>
@@ -1127,10 +1145,77 @@
                 Download full backup (.jsonl)
               </button>
             </div>
+            <hr style="margin:14px 0;border:none;border-top:1px solid var(--border-color)">
+            <div class="form-field">
+              <label style="font-size:12px">Restore from backup (.jsonl)</label>
+              <input id="restoreFileInput" type="file" accept=".jsonl,.json" style="padding:6px;color:var(--text-primary);background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius);width:100%;cursor:pointer"/>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <select id="restoreMode" class="query-input" style="width:180px">
+                  <option value="insert">Upsert by _id</option>
+                  <option value="replace">Replace collection first</option>
+                </select>
+                <button id="restoreConfirmBtn" class="btn btn-ghost btn-sm">Restore</button>
+              </div>
+            </div>
+            <div class="form-field" style="margin-top:10px">
+              <label style="font-size:12px">Backup history</label>
+              <div id="backupHistoryBox" style="max-height:120px;overflow:auto;font-size:12px;color:var(--text-secondary);border:1px solid var(--border-color);border-radius:6px;padding:8px">Loading…</div>
+            </div>
           </div>
           <div class="modal-footer">
             <button id="exportCancel" class="btn btn-ghost">Cancel</button>
             <button id="exportConfirm" class="btn btn-primary">Download</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="chartModal" class="modal" style="display:none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3>Result Charts</h3>
+            <button class="modal-close" id="chartModalClose">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+              <select id="chartType" class="query-input" style="width:140px">
+                <option value="bar">Bar</option>
+                <option value="pie">Pie</option>
+              </select>
+              <select id="chartField" class="query-input" style="flex:1"></select>
+              <button id="chartRenderBtn" class="btn btn-primary btn-sm">Render</button>
+            </div>
+            <div id="chartCanvasWrap" style="min-height:320px;border:1px solid var(--border-color);border-radius:8px;padding:10px;overflow:auto"></div>
+          </div>
+          <div class="modal-footer">
+            <button id="chartModalClose2" class="btn btn-ghost">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="gridfsModal" class="modal" style="display:none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3>GridFS Manager</h3>
+            <button class="modal-close" id="gridfsModalClose">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+              <input id="gridfsBucketInput" class="query-input" placeholder="bucket (e.g. fs)" style="width:140px" />
+              <input id="gridfsUploadInput" type="file" />
+              <button id="gridfsUploadBtn" class="btn btn-primary btn-sm">Upload</button>
+              <button id="gridfsRefreshBtn" class="btn btn-ghost btn-sm">Refresh</button>
+            </div>
+            <div class="table-container" style="max-height:320px">
+              <table class="data-table">
+                <thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Date</th><th>Actions</th></tr></thead>
+                <tbody id="gridfsRows"><tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">No files</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button id="gridfsModalClose2" class="btn btn-ghost">Close</button>
           </div>
         </div>
       </div>
@@ -1143,6 +1228,9 @@
               <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
             </svg>
             <span style="font-size:12px;font-weight:600;font-family:monospace">mongosh</span>
+            <select id="shellTabSelect" class="query-input" style="height:24px;padding:2px 6px;font-size:11px;min-width:96px"></select>
+            <button id="shellNewTabBtn" class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:11px" title="New shell tab">+</button>
+            <button id="shellSnippetsBtn" class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:11px" title="Insert snippet">Snippets</button>
             <span id="shellDbLabel" style="font-size:11px;color:var(--text-muted);font-family:monospace"></span>
           </div>
           <div style="display:flex;gap:6px">

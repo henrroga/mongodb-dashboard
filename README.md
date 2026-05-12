@@ -102,8 +102,10 @@ All options are env-driven (`.env.example` is the source of truth).
 | --- | --- | --- |
 | `AUTH_ENABLED` | auto | Enables auth (auto-true if password/hash exists) |
 | `AUTH_PASSWORD_HASH` | — | bcrypt hash used for login |
+| `AUTH_USERS_FILE` | `data/users.json` | JSON user store for multi-user auth (`username`, `passwordHash`, `role`) |
 | `AUTH_PASSWORD` | — | dev convenience plaintext password |
 | `SESSION_SECRET` | random in non-prod | session signing secret (required in production auth setups) |
+| `CONNECTION_VAULT_SECRET` | falls back to `SESSION_SECRET` | encryption key for saved server-side connection vault entries |
 | `SESSION_MAX_AGE_MS` | 7d | cookie/session max age |
 | `SESSION_IDLE_TIMEOUT_MS` | 8h | idle session invalidation threshold |
 | `SESSION_ABSOLUTE_TIMEOUT_MS` | 24h | max lifetime from login time |
@@ -116,6 +118,31 @@ All options are env-driven (`.env.example` is the source of truth).
 | `RATE_LIMIT_MAX` | 300 | default requests/window per IP |
 | `RATE_LIMIT_LOGIN_MAX` | 10 | tighter login route limit |
 | `AUDIT_LOG_DIR` | `./logs` | JSONL audit log directory |
+
+### RBAC roles
+
+- `viewer`: read-only app access
+- `editor`: read + write CRUD access
+- `admin`: full access including shell, index admin, and audit viewer
+
+### User management CLI
+
+- Create/update users in the JSON auth store:
+  - `npm run create-user -- alice strong-password editor`
+  - `npm run create-user -- admin another-password admin`
+- The script writes to `AUTH_USERS_FILE` (default `data/users.json`) and updates the user if the username already exists.
+
+### Local test runner fallback
+
+- If your system Node is broken/mismatched, run:
+  - `npm run test:local`
+- This uses bundled runtime Node when available (`$BUNDLED_NODE_BIN` override supported), then falls back to system `node`.
+
+### Plugin SDK (preview)
+
+- Place plugin folders in `plugins/` with a `plugin.json` manifest.
+- View discovered plugins at `/plugins` or via `GET /api/plugins`.
+- Current release includes manifest discovery and hook metadata exposure.
 
 ## API surface (high level)
 

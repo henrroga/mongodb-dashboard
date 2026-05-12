@@ -7,7 +7,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "hash-password": "node scripts/hash-password.js",
+    "create-user": "node scripts/create-user.js",
     "test": "node --test tests/*.test.js",
+    "test:local": "bash scripts/test-local.sh",
     "lint:css": "node scripts/lint-css-tokens.js"
   },
   "keywords": [

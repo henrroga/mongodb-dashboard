@@ -63,4 +63,24 @@ router.post("/:db/:collection/aggregate", async (req, res) => {
   }
 });
 
+router.post("/:db/:collection/aggregate/explain", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const { pipeline = [], verbosity = "executionStats" } = req.body;
+    if (!Array.isArray(pipeline)) {
+      return res.status(400).json({ error: "Pipeline must be an array" });
+    }
+    const safeVerbosity = ALLOWED_EXPLAIN_VERBOSITY.has(verbosity)
+      ? verbosity
+      : "executionStats";
+    const col = client.db(req.params.db).collection(req.params.collection);
+    const plan = await col.aggregate(pipeline, { allowDiskUse: true }).explain(safeVerbosity);
+    res.json({ plan });
+  } catch (err) {
+    logger.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

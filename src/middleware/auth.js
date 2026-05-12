@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const config = require("../config");
+const usersService = require("../services/users");
 
 const failedAttempts = new Map();
 
@@ -47,6 +48,20 @@ async function verifyPassword(plain) {
   return bcrypt.compare(plain, config.auth.passwordHash);
 }
 
+async function verifyCredentials(username, password) {
+  if (username) {
+    const user = await usersService.verifyUser(username, password);
+    if (user) return user;
+  }
+  const ok = await verifyPassword(password);
+  if (!ok) return null;
+  return {
+    username: "admin",
+    role: "admin",
+    permissions: usersService.resolvePermissions("admin"),
+  };
+}
+
 function requireAuth(req, res, next) {
   if (!config.auth.enabled) return next();
   if (req.session && req.session.authenticated) {
@@ -82,12 +97,22 @@ function requireWritable(req, res, next) {
   next();
 }
 
+function requirePermission(permission) {
+  return (req, res, next) => {
+    if (!config.auth.enabled) return next();
+    if (usersService.hasPermission(req.session, permission)) return next();
+    return res.status(403).json({ error: `Missing permission: ${permission}` });
+  };
+}
+
 module.exports = {
+  verifyCredentials,
   verifyPassword,
   recordFailure,
   clearFailures,
   isLocked,
   requireAuth,
   requireWritable,
+  requirePermission,
   shouldInvalidateSession,
 };
