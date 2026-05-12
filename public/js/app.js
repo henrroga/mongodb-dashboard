@@ -3430,6 +3430,9 @@ async function initBrowser(dbName, collectionName) {
   const querySortEl = document.getElementById('querySort');
   const queryLimitEl = document.getElementById('queryLimit');
   const querySkipEl = document.getElementById('querySkip');
+  const queryDraftKey = `mongodb_query_draft_${dbName}.${collectionName}`;
+  const queryLimitKey = `mongodb_query_limit_${dbName}.${collectionName}`;
+  const queryOptionsKey = `mongodb_query_options_open_${dbName}.${collectionName}`;
 
   if (queryFilterEl && currentFilter) queryFilterEl.value = currentFilter;
 
@@ -3441,6 +3444,21 @@ async function initBrowser(dbName, collectionName) {
   }
   if (queryProjectionEl && currentProjection) queryProjectionEl.value = currentProjection;
   if (querySortEl && currentSort) querySortEl.value = currentSort;
+  if (!currentFilter && !currentProjection && !currentSort) {
+    try {
+      const draft = JSON.parse(localStorage.getItem(queryDraftKey) || '{}');
+      if (queryFilterEl && draft.filter) queryFilterEl.value = String(draft.filter);
+      if (queryProjectionEl && draft.projection) queryProjectionEl.value = String(draft.projection);
+      if (querySortEl && draft.sort) querySortEl.value = String(draft.sort);
+    } catch (_) {}
+  }
+  try {
+    const savedLimit = parseInt(localStorage.getItem(queryLimitKey) || '', 10);
+    if (queryLimitEl && Number.isFinite(savedLimit) && savedLimit >= 1 && savedLimit <= 1000) {
+      queryLimitEl.value = String(savedLimit);
+      currentLimit = savedLimit;
+    }
+  } catch (_) {}
 
   // Wire up query bar buttons
   const queryRunBtn = document.getElementById('queryRunBtn');
@@ -3470,10 +3488,14 @@ async function initBrowser(dbName, collectionName) {
   }
 
   if (queryOptionsToggle && queryBarOptions) {
+    queryOptionsOpen = localStorage.getItem(queryOptionsKey) === 'true';
+    queryBarOptions.style.display = queryOptionsOpen ? 'flex' : 'none';
+    queryOptionsToggle.classList.toggle('open', queryOptionsOpen);
     queryOptionsToggle.addEventListener('click', () => {
       queryOptionsOpen = !queryOptionsOpen;
       queryBarOptions.style.display = queryOptionsOpen ? 'flex' : 'none';
       queryOptionsToggle.classList.toggle('open', queryOptionsOpen);
+      localStorage.setItem(queryOptionsKey, String(queryOptionsOpen));
     });
   }
 
@@ -3495,6 +3517,21 @@ async function initBrowser(dbName, collectionName) {
       }
     });
   });
+  const persistDraft = () => {
+    localStorage.setItem(queryDraftKey, JSON.stringify({
+      filter: queryFilterEl?.value || '',
+      projection: queryProjectionEl?.value || '',
+      sort: querySortEl?.value || '',
+    }));
+  };
+  queryFilterEl?.addEventListener('input', persistDraft);
+  queryProjectionEl?.addEventListener('input', persistDraft);
+  querySortEl?.addEventListener('input', persistDraft);
+  queryLimitEl?.addEventListener('change', () => {
+    const v = Math.min(Math.max(parseInt(queryLimitEl.value) || 50, 1), 1000);
+    queryLimitEl.value = String(v);
+    localStorage.setItem(queryLimitKey, String(v));
+  });
 
   if (queryResetBtn) {
     queryResetBtn.addEventListener('click', () => {
@@ -3508,6 +3545,8 @@ async function initBrowser(dbName, collectionName) {
       if (querySortEl) querySortEl.value = '';
       if (queryLimitEl) queryLimitEl.value = '50';
       if (querySkipEl) querySkipEl.value = '0';
+      localStorage.removeItem(queryDraftKey);
+      localStorage.setItem(queryLimitKey, '50');
       updateUrlParams();
       currentCursor = null;
       currentNextSkip = null;
@@ -3805,6 +3844,16 @@ async function initBrowser(dbName, collectionName) {
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
     e.preventDefault();
     queryFilterEl?.focus();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!collectionName) return;
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'r') {
+      e.preventDefault();
+      document.getElementById('refreshBtn')?.click();
+    } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'n') {
+      e.preventDefault();
+      document.getElementById('addDocBtn')?.click();
+    }
   });
 }
 
