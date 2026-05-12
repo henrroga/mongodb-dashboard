@@ -3135,6 +3135,7 @@ let currentCollectionName = '';
 let arrayFilters = {}; // Store filters for array columns: { fieldName: { type: 'empty' | 'gte', value: number } }
 let currentViewMode = localStorage.getItem('mongodb_dashboard_view_mode') || 'table';
 let selectedDocIds = new Set();
+let lastDocCountLabel = '';
 
 // MQL Query Bar state
 let currentFilter = '';
@@ -3179,6 +3180,17 @@ function updateUrlParams() {
   }
   
   window.history.replaceState({}, '', url);
+}
+
+function updateDocCountWithSelection() {
+  const el = document.getElementById('docCount');
+  if (!el) return;
+  const base = lastDocCountLabel || el.textContent || '';
+  if (selectedDocIds.size > 0) {
+    el.textContent = `${base} · ${selectedDocIds.size} selected`;
+  } else {
+    el.textContent = base;
+  }
 }
 
 function initSidebarResize() {
@@ -3452,10 +3464,18 @@ async function initBrowser(dbName, collectionName) {
     queryRunBtn.addEventListener('click', () => runQuery(dbName, collectionName));
   }
 
-  // Run on Enter in any query input
-  [queryFilterEl, queryProjectionEl, querySortEl].forEach(el => {
+  // Run on Enter in query inputs (Cmd/Ctrl+Enter on multiline-capable fields too)
+  [queryFilterEl, queryProjectionEl, querySortEl, queryLimitEl, querySkipEl].forEach(el => {
     el?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') runQuery(dbName, collectionName);
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || el === queryLimitEl || el === querySkipEl)) {
+        e.preventDefault();
+        runQuery(dbName, collectionName);
+      } else if (e.key === 'Enter' && !(e.metaKey || e.ctrlKey) && (el === queryLimitEl || el === querySkipEl)) {
+        e.preventDefault();
+        runQuery(dbName, collectionName);
+      } else if (e.key === 'Enter' && (el === queryFilterEl || el === queryProjectionEl || el === querySortEl)) {
+        runQuery(dbName, collectionName);
+      }
     });
   });
 
@@ -3617,6 +3637,16 @@ async function initBrowser(dbName, collectionName) {
         currentNextSkip = null;
         allDocuments = [];
         loadDocuments(dbName, collectionName);
+      } else if (e.key === 'Escape' && searchInput.value) {
+        e.preventDefault();
+        searchInput.value = '';
+        currentSearchTerm = '';
+        clearSearchBtn.style.display = 'none';
+        updateUrlParams();
+        currentCursor = null;
+        currentNextSkip = null;
+        allDocuments = [];
+        loadDocuments(dbName, collectionName);
       }
     });
   }
@@ -3749,6 +3779,15 @@ async function initBrowser(dbName, collectionName) {
     const isVisible = pre.style.display !== 'none';
     pre.style.display = isVisible ? 'none' : 'block';
     expandable.classList.toggle('cell-expanded', !isVisible);
+  });
+
+  // Quick focus shortcut: "/" jumps to filter input when not typing in another field.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== '/') return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
+    e.preventDefault();
+    queryFilterEl?.focus();
   });
 }
 
@@ -4033,12 +4072,13 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
     // Update count
     const hasActiveQuery = currentSearchTerm || currentFilter;
     if (hasActiveQuery) {
-      docCount.textContent = `${formatCount(allDocuments.length)}${hasMore ? '+' : ''} of ${formatCount(totalCount)} documents`;
+      lastDocCountLabel = `${formatCount(allDocuments.length)}${hasMore ? '+' : ''} of ${formatCount(totalCount)} documents`;
     } else {
-      docCount.textContent = `${formatCount(totalCount)} documents`;
+      lastDocCountLabel = `${formatCount(totalCount)} documents`;
       // Record only the unfiltered total so the sparkline reflects real growth.
       recordCollectionCount(dbName, collectionName, totalCount);
     }
+    updateDocCountWithSelection();
 
     // Determine table fields from documents
     if (documents.length > 0) {
@@ -4159,7 +4199,13 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
       icon: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
       title: 'Could not load documents',
       message: err.message,
+      actions: [
+        { id: 'retryLoad', label: 'Retry', primary: true },
+      ],
     })}</td></tr>`;
+    tableBody.querySelector('[data-empty-action="retryLoad"]')?.addEventListener('click', () => {
+      loadDocuments(dbName, collectionName, cursor, nextSkip);
+    });
   }
 }
 
@@ -4706,6 +4752,7 @@ function updateBulkBar() {
   let bar = document.getElementById('bulkBar');
   if (selectedDocIds.size === 0) {
     if (bar) bar.style.display = 'none';
+    updateDocCountWithSelection();
     return;
   }
 
@@ -4775,6 +4822,7 @@ function updateBulkBar() {
     if (selectAll) selectAll.checked = false;
     updateBulkBar();
   });
+  updateDocCountWithSelection();
 }
 
 async function bulkDelete() {
