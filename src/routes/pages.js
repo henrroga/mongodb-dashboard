@@ -176,6 +176,10 @@ router.get("/audit", async (req, res) => {
   }
 });
 
+router.get("/plugins", async (_req, res) => {
+  res.render("plugins", { title: "Plugins" });
+});
+
 // Document detail page
 router.get("/browse/:db/:collection/:id", async (req, res) => {
   try {

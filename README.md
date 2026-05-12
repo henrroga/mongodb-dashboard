@@ -125,6 +125,12 @@ All options are env-driven (`.env.example` is the source of truth).
 - `editor`: read + write CRUD access
 - `admin`: full access including shell, index admin, and audit viewer
 
+### Plugin SDK (preview)
+
+- Place plugin folders in `plugins/` with a `plugin.json` manifest.
+- View discovered plugins at `/plugins` or via `GET /api/plugins`.
+- Current release includes manifest discovery and hook metadata exposure.
+
 ## API surface (high level)
 
 The API is mounted under `/api` and split by concern:

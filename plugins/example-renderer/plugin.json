@@ -1,0 +1,8 @@
+{
+  "id": "example-renderer",
+  "name": "Example Renderer",
+  "version": "0.1.0",
+  "description": "Sample plugin manifest to help contributors start quickly.",
+  "entry": "index.js",
+  "hooks": ["result.renderer"]
+}

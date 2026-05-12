@@ -12,6 +12,7 @@ router.use(validateMongoPathParams);
 // resolves them first.
 router.use("/", require("./api/connection"));
 router.use("/", require("./api/audit"));
+router.use("/", require("./api/plugins"));
 router.use("/", require("./api/databases"));
 router.use("/", require("./api/indexes"));
 router.use("/", require("./api/shell"));
