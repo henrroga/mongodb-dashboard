@@ -5642,10 +5642,9 @@ async function initDocumentPage(dbName, collectionName, docId) {
   const treeEl = document.getElementById('documentTree');
 
   try {
-    const res = await fetch(`/api/${dbName}/${collectionName}/${docId}`);
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error);
+    const data = await apiFetchJson(
+      `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}`
+    );
 
     recordRecentDocument(dbName, collectionName, docId, data.document);
 
@@ -5883,14 +5882,11 @@ function setupEditModalHandlers(dbName, collectionName, docId) {
     errorEl.style.display = 'none';
 
     try {
-      const res = await fetch(`/api/${dbName}/${collectionName}/${docId}`, {
+      await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(doc)
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
 
       // Refresh the page
       window.location.reload();
@@ -5915,12 +5911,10 @@ async function openDeleteModalForPage(dbName, collectionName, docId) {
   if (!ok) return;
 
   try {
-    const res = await fetch(`/api/${dbName}/${collectionName}/${docId}`, {
+    await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}`, {
       method: 'DELETE',
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    window.location.href = `/browse/${dbName}/${collectionName}`;
+    window.location.href = `/browse/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}`;
     return;
   } catch (err) {
     showToast('Delete failed: ' + err.message, 'error');
