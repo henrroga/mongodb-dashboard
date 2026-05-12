@@ -9256,7 +9256,31 @@ function initImportExport(dbName, collectionName) {
   const exportModal = document.getElementById('exportModal');
   if (exportBtn && exportModal) {
     const closeExport = () => { exportModal.style.display = 'none'; };
-    exportBtn.addEventListener('click', () => { exportModal.style.display = 'flex'; });
+    const loadBackupHistory = async () => {
+      const box = document.getElementById('backupHistoryBox');
+      if (!box) return;
+      box.textContent = 'Loading…';
+      try {
+        const data = await apiFetchJson('/api/backups/history');
+        const runs = (data.runs || []).slice(0, 30);
+        if (!runs.length) {
+          box.textContent = 'No backup/restore runs yet.';
+          return;
+        }
+        box.innerHTML = runs.map((r) => {
+          const when = r.ts ? new Date(r.ts).toLocaleString() : '';
+          const kind = r.event === 'restore' ? 'restore' : 'backup';
+          const n = r.restored ?? r.count ?? 0;
+          return `<div style="padding:3px 0"><strong>${escapeHtml(kind)}</strong> · ${escapeHtml(r.db || '')}.${escapeHtml(r.collection || '')} · ${n} docs · ${escapeHtml(when)}</div>`;
+        }).join('');
+      } catch {
+        box.textContent = 'Failed to load history.';
+      }
+    };
+    exportBtn.addEventListener('click', () => {
+      exportModal.style.display = 'flex';
+      loadBackupHistory();
+    });
     document.getElementById('exportModalClose')?.addEventListener('click', closeExport);
     document.getElementById('exportCancel')?.addEventListener('click', closeExport);
     exportModal.querySelector('.modal-backdrop')?.addEventListener('click', closeExport);
@@ -9280,6 +9304,31 @@ function initImportExport(dbName, collectionName) {
       showToast('Backup streaming — your browser will download as soon as data flows in.', 'info', 3500);
       window.location.href = url;
       closeExport();
+    });
+
+    document.getElementById('restoreConfirmBtn')?.addEventListener('click', async () => {
+      const file = document.getElementById('restoreFileInput')?.files?.[0];
+      const mode = document.getElementById('restoreMode')?.value || 'insert';
+      if (!file) {
+        showToast('Select a backup file first.', 'warning');
+        return;
+      }
+      const content = await file.text();
+      try {
+        const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, mode }),
+        });
+        showToast(`Restore complete: ${data.restored}/${data.total}`, 'success');
+        currentCursor = null;
+        currentNextSkip = null;
+        allDocuments = [];
+        loadDocuments(dbName, collectionName);
+        loadBackupHistory();
+      } catch (err) {
+        showToast('Restore failed: ' + err.message, 'error');
+      }
     });
   }
 

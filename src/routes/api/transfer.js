@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const fs = require("fs/promises");
+const path = require("path");
 const mongoService = require("../../services/mongodb");
 const { serializeDocument, parseDocument } = require("../../utils/bson");
 const { parseCsv, toCsvRow } = require("../../utils/csv");
@@ -15,6 +17,20 @@ const SUPPORTED_IMPORT_FORMATS = new Set(["json", "jsonl", "csv"]);
 const SUPPORTED_EXPORT_FORMATS = new Set(["json", "jsonl", "csv"]);
 
 const MAX_IMPORT_DOCS = 50000;
+const BACKUP_RUNS_PATH = path.resolve(process.cwd(), "data", "backup-runs.json");
+
+async function appendBackupRun(run) {
+  try {
+    await fs.mkdir(path.dirname(BACKUP_RUNS_PATH), { recursive: true });
+    let existing = [];
+    try {
+      existing = JSON.parse(await fs.readFile(BACKUP_RUNS_PATH, "utf8"));
+      if (!Array.isArray(existing)) existing = [];
+    } catch {}
+    existing.unshift(run);
+    await fs.writeFile(BACKUP_RUNS_PATH, JSON.stringify(existing.slice(0, 200), null, 2), "utf8");
+  } catch (_) {}
+}
 
 // Import documents (JSON array, NDJSON, or CSV)
 router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (req, res) => {
@@ -233,6 +249,14 @@ router.get("/:db/:collection/backup", async (req, res) => {
       count,
       ip: req.ip,
     });
+    appendBackupRun({
+      ts: new Date().toISOString(),
+      db: dbName,
+      collection: colName,
+      count,
+      ip: req.ip,
+      filename,
+    });
     res.end();
   } catch (err) {
     logger.error(err);
@@ -240,6 +264,61 @@ router.get("/:db/:collection/backup", async (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     res.end();
+  }
+});
+
+router.get("/backups/history", async (_req, res) => {
+  try {
+    const raw = await fs.readFile(BACKUP_RUNS_PATH, "utf8");
+    const runs = JSON.parse(raw);
+    res.json({ runs: Array.isArray(runs) ? runs : [] });
+  } catch {
+    res.json({ runs: [] });
+  }
+});
+
+router.post("/:db/:collection/restore", express.json({ limit: "100mb" }), async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const { db: dbName, collection: colName } = req.params;
+    const { content = "", mode = "insert" } = req.body || {};
+    const lines = String(content).split(/\r?\n/).filter((l) => l.trim());
+    if (!lines.length) return res.status(400).json({ error: "Empty backup content" });
+    const docs = [];
+    for (const line of lines) {
+      const parsed = JSON.parse(line);
+      if (parsed && parsed._meta) continue;
+      docs.push(parseDocument(parsed));
+    }
+    if (!docs.length) return res.status(400).json({ error: "No documents found in backup payload" });
+    const col = client.db(dbName).collection(colName);
+    let restored = 0;
+    if (mode === "replace") {
+      await col.deleteMany({});
+    }
+    for (const d of docs) {
+      try {
+        if (d && d._id) {
+          await col.replaceOne({ _id: d._id }, d, { upsert: true });
+        } else {
+          await col.insertOne(d);
+        }
+        restored += 1;
+      } catch (_) {}
+    }
+    appendBackupRun({
+      ts: new Date().toISOString(),
+      db: dbName,
+      collection: colName,
+      restored,
+      mode,
+      event: "restore",
+    });
+    res.json({ success: true, restored, total: docs.length });
+  } catch (err) {
+    logger.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 

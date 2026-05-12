@@ -1143,6 +1143,22 @@
                 Download full backup (.jsonl)
               </button>
             </div>
+            <hr style="margin:14px 0;border:none;border-top:1px solid var(--border-color)">
+            <div class="form-field">
+              <label style="font-size:12px">Restore from backup (.jsonl)</label>
+              <input id="restoreFileInput" type="file" accept=".jsonl,.json" style="padding:6px;color:var(--text-primary);background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius);width:100%;cursor:pointer"/>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <select id="restoreMode" class="query-input" style="width:180px">
+                  <option value="insert">Upsert by _id</option>
+                  <option value="replace">Replace collection first</option>
+                </select>
+                <button id="restoreConfirmBtn" class="btn btn-ghost btn-sm">Restore</button>
+              </div>
+            </div>
+            <div class="form-field" style="margin-top:10px">
+              <label style="font-size:12px">Backup history</label>
+              <div id="backupHistoryBox" style="max-height:120px;overflow:auto;font-size:12px;color:var(--text-secondary);border:1px solid var(--border-color);border-radius:6px;padding:8px">Loading…</div>
+            </div>
           </div>
           <div class="modal-footer">
             <button id="exportCancel" class="btn btn-ghost">Cancel</button>
