@@ -5,6 +5,11 @@ const path = require("path");
 const mongoService = require("../../services/mongodb");
 const config = require("../../config");
 const usersService = require("../../services/users");
+const {
+  bad,
+  requireStringField,
+  isPlainObject,
+} = require("../../middleware/validate-body");
 const { serializeDocument, parseDocument } = require("../../utils/bson");
 const { parseCsv, toCsvRow } = require("../../utils/csv");
 const audit = require("../../utils/audit");
@@ -293,7 +298,11 @@ router.post("/:db/:collection/restore", express.json({ limit: "100mb" }), async 
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
     const { db: dbName, collection: colName } = req.params;
-    const { content = "", mode = "insert" } = req.body || {};
+    const contentField = requireStringField(req.body, "content", { min: 2, max: 100000000 });
+    if (!contentField.ok) return bad(res, contentField.error);
+    const mode = String(req.body?.mode || "insert");
+    if (!["insert", "replace"].includes(mode)) return bad(res, "mode must be insert or replace");
+    const content = contentField.value;
     const lines = String(content).split(/\r?\n/).filter((l) => l.trim());
     if (!lines.length) return res.status(400).json({ error: "Empty backup content" });
     const docs = [];
@@ -397,15 +406,19 @@ router.post("/:db/:bucket/gridfs", express.json({ limit: "50mb" }), async (req, 
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
     const { db: dbName, bucket } = req.params;
-    const { filename, contentBase64, contentType, metadata = {} } = req.body || {};
-    if (!filename || !contentBase64) {
-      return res.status(400).json({ error: "filename and contentBase64 are required" });
-    }
+    const filenameField = requireStringField(req.body, "filename", { min: 1, max: 512 });
+    if (!filenameField.ok) return bad(res, filenameField.error);
+    const b64Field = requireStringField(req.body, "contentBase64", { min: 4, max: 70000000 });
+    if (!b64Field.ok) return bad(res, b64Field.error);
+    const contentType = typeof req.body?.contentType === "string"
+      ? req.body.contentType.slice(0, 200)
+      : undefined;
+    const metadata = isPlainObject(req.body?.metadata) ? req.body.metadata : {};
     const db = client.db(dbName);
     const bucketName = bucket.replace(".files", "");
     const gfs = new GridFSBucket(db, { bucketName });
-    const bytes = Buffer.from(String(contentBase64), "base64");
-    const uploadStream = gfs.openUploadStream(filename, { contentType, metadata });
+    const bytes = Buffer.from(String(b64Field.value), "base64");
+    const uploadStream = gfs.openUploadStream(filenameField.value, { contentType, metadata });
     uploadStream.end(bytes);
     await new Promise((resolve, reject) => {
       uploadStream.on("finish", resolve);

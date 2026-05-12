@@ -16,6 +16,7 @@ const config = require("../../config");
 const { redactConnectionString } = require("./_shared");
 const connectionVault = require("../../services/connectionVault");
 const usersService = require("../../services/users");
+const { bad, requireStringField } = require("../../middleware/validate-body");
 
 // Test connection and return database list. Refused when MONGODB_URI is set
 // at the env level — in that mode the dashboard is locked to one cluster.
@@ -216,6 +217,10 @@ router.post("/server/profiler", async (req, res) => {
     const dbName = String(req.body?.db || "admin");
     const level = Number(req.body?.level ?? 1);
     const slowms = Number(req.body?.slowms ?? 100);
+    if (![0, 1, 2].includes(level)) return bad(res, "level must be 0, 1, or 2");
+    if (!Number.isFinite(slowms) || slowms < 1 || slowms > 600000) {
+      return bad(res, "slowms must be between 1 and 600000");
+    }
     const db = client.db(dbName);
     await db.command({ profile: level, slowms });
     const status = await db.command({ profile: -1 });
@@ -264,12 +269,14 @@ router.get("/connections", async (_req, res) => {
 
 router.post("/connections", async (req, res) => {
   try {
-    const { connectionString, name, color } = req.body;
-    if (!connectionString) {
-      return res.status(400).json({ error: "Connection string is required" });
-    }
+    const parsed = requireStringField(req.body, "connectionString", {
+      min: 3,
+      max: 4096,
+    });
+    if (!parsed.ok) return bad(res, parsed.error);
+    const { name, color } = req.body;
     const connection = await connectionVault.upsertConnection({
-      connectionString,
+      connectionString: parsed.value,
       name,
       color,
     });

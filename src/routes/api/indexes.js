@@ -11,6 +11,7 @@ const router = express.Router();
 const mongoService = require("../../services/mongodb");
 const config = require("../../config");
 const usersService = require("../../services/users");
+const { bad, isPlainObject } = require("../../middleware/validate-body");
 
 router.get("/:db/:collection/indexes", async (req, res) => {
   try {
@@ -113,7 +114,11 @@ router.post("/:db/:collection/indexes/advisor", async (req, res) => {
     const db = client.db(req.params.db);
     const col = db.collection(req.params.collection);
     const indexes = await col.indexes();
-    const { filter = {}, sort = {} } = req.body || {};
+    const filter = req.body?.filter ?? {};
+    const sort = req.body?.sort ?? {};
+    if (!isPlainObject(filter) || !isPlainObject(sort)) {
+      return bad(res, "filter and sort must be objects");
+    }
 
     const recommendations = [];
     const warnings = [];
