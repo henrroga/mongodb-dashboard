@@ -125,6 +125,13 @@ All options are env-driven (`.env.example` is the source of truth).
 - `editor`: read + write CRUD access
 - `admin`: full access including shell, index admin, and audit viewer
 
+### User management CLI
+
+- Create/update users in the JSON auth store:
+  - `npm run create-user -- alice strong-password editor`
+  - `npm run create-user -- admin another-password admin`
+- The script writes to `AUTH_USERS_FILE` (default `data/users.json`) and updates the user if the username already exists.
+
 ### Plugin SDK (preview)
 
 - Place plugin folders in `plugins/` with a `plugin.json` manifest.
