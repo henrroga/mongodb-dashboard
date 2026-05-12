@@ -7674,6 +7674,7 @@ function initPerformancePage() {
   let maxDelta = 1;
 
   const OPS = ['insert', 'query', 'update', 'delete', 'getmore', 'command'];
+  const profileDb = 'admin';
 
   async function fetchStats() {
     try {
@@ -7758,6 +7759,47 @@ function initPerformancePage() {
     }
   }
 
+  async function fetchProfiler() {
+    try {
+      const res = await fetch(`/api/server/profiler?db=${encodeURIComponent(profileDb)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const levelEl = document.getElementById('profilerLevel');
+      const slowmsEl = document.getElementById('profilerSlowms');
+      if (levelEl) levelEl.value = String(data.level ?? 1);
+      if (slowmsEl) slowmsEl.value = String(data.slowms ?? 100);
+    } catch (err) {
+      console.error('Profiler status error:', err);
+    }
+  }
+
+  async function fetchSlowOps() {
+    const tbody = document.getElementById('slowOpsBody');
+    if (!tbody) return;
+    try {
+      const res = await fetch(`/api/server/slow-ops?db=${encodeURIComponent(profileDb)}&limit=50`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const ops = Array.isArray(data.operations) ? data.operations : [];
+      if (!ops.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">No slow operations recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = ops.map((op) => `
+        <tr>
+          <td>${escapeHtml(new Date(op.ts).toLocaleTimeString())}</td>
+          <td>${escapeHtml(op.op || '—')}</td>
+          <td><code>${escapeHtml(op.ns || '—')}</code></td>
+          <td>${op.millis ?? '—'}</td>
+          <td>${escapeHtml(op.planSummary || '—')}</td>
+          <td>${op.nreturned ?? '—'}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color:var(--danger);padding:24px;text-align:center">Error: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
   function startPolling(ms) {
     if (intervalId) clearInterval(intervalId);
     if (ms === 0) {
@@ -7776,9 +7818,29 @@ function initPerformancePage() {
   });
 
   document.getElementById('refreshOps')?.addEventListener('click', fetchCurrentOps);
+  document.getElementById('refreshSlowOpsBtn')?.addEventListener('click', fetchSlowOps);
+  document.getElementById('applyProfilerBtn')?.addEventListener('click', async () => {
+    const level = parseInt(document.getElementById('profilerLevel')?.value || '1', 10);
+    const slowms = parseInt(document.getElementById('profilerSlowms')?.value || '100', 10);
+    try {
+      const res = await fetch('/api/server/profiler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ db: profileDb, level, slowms }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast(`Profiler set to level ${data.level} (slowms ${data.slowms})`, 'success');
+      fetchSlowOps();
+    } catch (err) {
+      showToast(`Profiler update failed: ${err.message}`, 'error');
+    }
+  });
 
   startPolling(2000);
   fetchCurrentOps();
+  fetchProfiler();
+  fetchSlowOps();
 }
 
 window.killOp = async function(opid) {

@@ -184,6 +184,68 @@ router.delete("/server/currentop/:opid", async (req, res) => {
   }
 });
 
+router.get("/server/profiler", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const dbName = String(req.query.db || "admin");
+    const db = client.db(dbName);
+    const status = await db.command({ profile: -1 });
+    res.json({
+      db: dbName,
+      level: status.was,
+      slowms: status.slowms,
+      sampleRate: status.sampleRate,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/server/profiler", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const dbName = String(req.body?.db || "admin");
+    const level = Number(req.body?.level ?? 1);
+    const slowms = Number(req.body?.slowms ?? 100);
+    const db = client.db(dbName);
+    await db.command({ profile: level, slowms });
+    const status = await db.command({ profile: -1 });
+    res.json({ db: dbName, level: status.was, slowms: status.slowms });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/server/slow-ops", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
+    const dbName = String(req.query.db || "admin");
+    const db = client.db(dbName);
+    const col = db.collection("system.profile");
+    const docs = await col
+      .find({ millis: { $gte: 1 } })
+      .sort({ ts: -1 })
+      .limit(limit)
+      .project({
+        ts: 1,
+        op: 1,
+        ns: 1,
+        millis: 1,
+        planSummary: 1,
+        command: 1,
+        nreturned: 1,
+      })
+      .toArray();
+    res.json({ operations: docs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/connections", async (_req, res) => {
   try {
     const connections = await connectionVault.listConnections();

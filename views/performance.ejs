@@ -115,6 +115,34 @@
           </table>
         </div>
       </div>
+
+      <div class="perf-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">
+          <h2 class="perf-section-title" style="margin:0">Profiler & Slow Ops</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:12px;color:var(--text-secondary)">Level</label>
+            <select id="profilerLevel" class="query-input" style="width:90px">
+              <option value="0">Off</option>
+              <option value="1" selected>Slow Ops</option>
+              <option value="2">All Ops</option>
+            </select>
+            <label style="font-size:12px;color:var(--text-secondary)">slowms</label>
+            <input id="profilerSlowms" type="number" class="query-input" style="width:90px" value="100" min="1"/>
+            <button id="applyProfilerBtn" class="btn btn-ghost btn-sm">Apply</button>
+            <button id="refreshSlowOpsBtn" class="btn btn-ghost btn-sm">Refresh</button>
+          </div>
+        </div>
+        <div class="table-container" style="max-height:280px">
+          <table class="data-table">
+            <thead>
+              <tr><th>Time</th><th>Op</th><th>Namespace</th><th>ms</th><th>Plan</th><th>Returned</th></tr>
+            </thead>
+            <tbody id="slowOpsBody">
+              <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </main>
 
