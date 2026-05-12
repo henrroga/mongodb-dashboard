@@ -49,6 +49,7 @@ const config = {
     process.env.NODE_ENV === "production"
   ),
   presetMongoUri: process.env.MONGODB_URI || "",
+  connectionVaultSecret: process.env.CONNECTION_VAULT_SECRET || "",
   auth: {
     enabled: authEnabled,
     passwordHash: resolvedHash,

@@ -104,6 +104,7 @@ All options are env-driven (`.env.example` is the source of truth).
 | `AUTH_PASSWORD_HASH` | — | bcrypt hash used for login |
 | `AUTH_PASSWORD` | — | dev convenience plaintext password |
 | `SESSION_SECRET` | random in non-prod | session signing secret (required in production auth setups) |
+| `CONNECTION_VAULT_SECRET` | falls back to `SESSION_SECRET` | encryption key for saved server-side connection vault entries |
 | `SESSION_MAX_AGE_MS` | 7d | cookie/session max age |
 | `SESSION_IDLE_TIMEOUT_MS` | 8h | idle session invalidation threshold |
 | `SESSION_ABSOLUTE_TIMEOUT_MS` | 24h | max lifetime from login time |

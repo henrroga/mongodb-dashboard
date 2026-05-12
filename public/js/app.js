@@ -1043,6 +1043,7 @@ ui.alert = function ({ title = 'Notice', message = '', confirmText = 'OK' } = {}
 // Storage keys
 const STORAGE_KEY = 'mongodb_dashboard_connections';
 const ACTIVE_CONNECTION_KEY = 'mongodb_dashboard_active_connection';
+const ACTIVE_CONNECTION_ID_KEY = 'mongodb_dashboard_active_connection_id';
 const THEME_KEY = 'mongodb_dashboard_theme';
 const READONLY_KEY = 'mongodb_dashboard_readonly';
 
@@ -1154,25 +1155,76 @@ function getConnections() {
   }
 }
 
-function saveConnection(connectionString, name, color) {
-  const connections = getConnections().filter(c => c.uri !== connectionString);
-  connections.unshift({ uri: connectionString, name: name || '', color: color || '' });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(connections.slice(0, 10)));
+function setConnections(connections) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(connections.slice(0, 50)));
 }
 
-function updateConnectionMeta(connectionString, name, color) {
-  const connections = getConnections();
-  const conn = connections.find(c => c.uri === connectionString);
-  if (conn) {
-    if (name !== undefined) conn.name = name;
-    if (color !== undefined) conn.color = color;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
+async function fetchVaultConnections() {
+  const res = await fetch('/api/connections');
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load connection vault');
+  return (data.connections || []).map((c) => ({ ...c, uri: '' }));
+}
+
+async function createVaultConnection(connectionString, name, color) {
+  const res = await fetch('/api/connections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connectionString, name, color }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to save connection');
+  return data.connection;
+}
+
+async function patchVaultConnection(id, name, color) {
+  const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, color }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to update connection');
+  return data.connection;
+}
+
+async function deleteVaultConnection(id) {
+  const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to delete connection');
+}
+
+async function syncConnectionsFromVault() {
+  try {
+    const connections = await fetchVaultConnections();
+    setConnections(connections);
+    return connections;
+  } catch {
+    return getConnections();
   }
 }
 
-function removeConnection(connectionString) {
-  const connections = getConnections().filter(c => c.uri !== connectionString);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(connections));
+function saveConnection(connectionString, name, color, id) {
+  const connections = getConnections().filter(c => c.uri !== connectionString && (!id || c.id !== id));
+  connections.unshift({ id: id || null, uri: connectionString, name: name || '', color: color || '' });
+  setConnections(connections);
+}
+
+function updateConnectionMeta(connectionIdentity, name, color) {
+  const connections = getConnections();
+  const conn = connections.find(c => c.uri === connectionIdentity || c.id === connectionIdentity);
+  if (conn) {
+    if (name !== undefined) conn.name = name;
+    if (color !== undefined) conn.color = color;
+    setConnections(connections);
+  }
+}
+
+function removeConnection(connectionIdentity) {
+  const connections = getConnections().filter(c => c.uri !== connectionIdentity && c.id !== connectionIdentity);
+  setConnections(connections);
 }
 
 function getActiveConnection() {
@@ -1183,12 +1235,25 @@ function getActiveConnection() {
   }
 }
 
-function setActiveConnection(connectionString) {
+function getActiveConnectionId() {
+  try {
+    return localStorage.getItem(ACTIVE_CONNECTION_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setActiveConnection(connectionString, id) {
   try {
     if (connectionString) {
       localStorage.setItem(ACTIVE_CONNECTION_KEY, connectionString);
     } else {
       localStorage.removeItem(ACTIVE_CONNECTION_KEY);
+    }
+    if (id) {
+      localStorage.setItem(ACTIVE_CONNECTION_ID_KEY, id);
+    } else if (!connectionString) {
+      localStorage.removeItem(ACTIVE_CONNECTION_ID_KEY);
     }
   } catch {
     // Ignore storage errors
@@ -1198,10 +1263,11 @@ function setActiveConnection(connectionString) {
 // Apply connection-aware header color and page title
 function applyConnectionBranding() {
   const activeUri = getActiveConnection();
-  if (!activeUri) return;
+  const activeId = getActiveConnectionId();
+  if (!activeUri && !activeId) return;
 
   const conns = getConnections();
-  const conn = conns.find(c => c.uri === activeUri);
+  const conn = conns.find(c => c.uri === activeUri || c.id === activeId);
 
   // Apply color to header
   if (conn?.color) {
@@ -1234,7 +1300,8 @@ async function checkConnectionStatus() {
 
 async function autoReconnect() {
   const activeConnection = getActiveConnection();
-  if (!activeConnection) {
+  const activeConnectionId = getActiveConnectionId();
+  if (!activeConnection && !activeConnectionId) {
     return false;
   }
 
@@ -1251,7 +1318,10 @@ async function autoReconnect() {
     const res = await fetch('/api/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ connectionString: activeConnection })
+      body: JSON.stringify({
+        connectionString: activeConnection,
+        connectionId: activeConnectionId || undefined,
+      })
     });
 
     const data = await res.json();
@@ -2676,7 +2746,8 @@ async function initConnectPage() {
   const connImportFile = document.getElementById('connImportFile');
 
   if (connExportBtn) {
-    connExportBtn.addEventListener('click', () => {
+    connExportBtn.addEventListener('click', async () => {
+      await syncConnectionsFromVault();
       const conns = getConnections();
       if (!conns.length) {
         showToast('Nothing to export — save a connection first.', 'warning');
@@ -2746,10 +2817,11 @@ async function initConnectPage() {
         });
         if (!ok) return;
 
+        await syncConnectionsFromVault();
         const existing = getConnections();
         const byUri = new Map(existing.map((c) => [c.uri, c]));
         for (const c of cleaned) byUri.set(c.uri, { ...byUri.get(c.uri), ...c });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify([...byUri.values()]));
+        setConnections([...byUri.values()]);
         renderBookmarks();
         showToast(`Imported ${cleaned.length} connection${cleaned.length === 1 ? '' : 's'}`, 'success');
       } catch (err) {
@@ -2806,22 +2878,23 @@ async function initConnectPage() {
     if (connections.length === 0) { recentEl.style.display = 'none'; return; }
     recentEl.style.display = 'block';
     recentList.innerHTML = connections.map(conn => `
-      <li data-conn="${encodeURIComponent(conn.uri)}">
+      <li data-conn="${encodeURIComponent(conn.uri || '')}" data-conn-id="${encodeURIComponent(conn.id || '')}">
         ${conn.color ? `<span class="conn-color-dot" style="background:${conn.color}"></span>` : ''}
         <div class="conn-info">
           ${conn.name ? `<span class="conn-name">${escapeHtml(conn.name)}</span>` : ''}
-          <span class="recent-host">${maskConnectionString(conn.uri)}</span>
+          <span class="recent-host">${conn.uri ? maskConnectionString(conn.uri) : 'Saved in encrypted vault'}</span>
         </div>
-        <span class="conn-label-btn" data-label="${encodeURIComponent(conn.uri)}" title="Edit label">
+        <span class="conn-label-btn" data-label="${encodeURIComponent(conn.id || conn.uri)}" title="Edit label">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
         </span>
-        <span class="recent-remove" data-remove="${encodeURIComponent(conn.uri)}">×</span>
+        <span class="recent-remove" data-remove="${encodeURIComponent(conn.id || conn.uri)}">×</span>
       </li>
     `).join('');
   }
+  await syncConnectionsFromVault();
   renderBookmarks();
 
   recentList.addEventListener('click', (e) => {
@@ -2829,17 +2902,27 @@ async function initConnectPage() {
     if (removeBtn) {
       e.stopPropagation();
       const conn = decodeURIComponent(removeBtn.dataset.remove);
-      removeConnection(conn);
-      renderBookmarks();
+      const isVaultId = /^[0-9a-f-]{20,}$/i.test(conn);
+      if (isVaultId) {
+        deleteVaultConnection(conn)
+          .then(() => {
+            removeConnection(conn);
+            renderBookmarks();
+          })
+          .catch((err) => showToast('Delete failed: ' + err.message, 'error'));
+      } else {
+        removeConnection(conn);
+        renderBookmarks();
+      }
       return;
     }
 
     const labelBtn = e.target.closest('.conn-label-btn');
     if (labelBtn) {
       e.stopPropagation();
-      const uri = decodeURIComponent(labelBtn.dataset.label);
+      const identity = decodeURIComponent(labelBtn.dataset.label);
       const conns = getConnections();
-      const existing = conns.find(c => c.uri === uri);
+      const existing = conns.find(c => c.uri === identity || c.id === identity);
       ui.prompt({
         title: 'Edit connection',
         confirmText: 'Save',
@@ -2863,15 +2946,27 @@ async function initConnectPage() {
         ],
       }).then((result) => {
         if (!result) return;
-        updateConnectionMeta(uri, result.name || '', result.color || '');
-        renderBookmarks();
+        if (existing?.id) {
+          patchVaultConnection(existing.id, result.name || '', result.color || '')
+            .then((updated) => {
+              updateConnectionMeta(existing.id, updated.name || '', updated.color || '');
+              renderBookmarks();
+            })
+            .catch((err) => showToast('Update failed: ' + err.message, 'error'));
+        } else {
+          updateConnectionMeta(identity, result.name || '', result.color || '');
+          renderBookmarks();
+        }
       });
       return;
     }
 
     const li = e.target.closest('li');
     if (li) {
-      input.value = decodeURIComponent(li.dataset.conn);
+      input.value = decodeURIComponent(li.dataset.conn || '');
+      const selectedId = decodeURIComponent(li.dataset.connId || '');
+      if (selectedId) form.dataset.connectionId = selectedId;
+      else delete form.dataset.connectionId;
       form.dispatchEvent(new Event('submit'));
     }
   });
@@ -2891,7 +2986,8 @@ async function initConnectPage() {
     }
     
     const connectionString = input.value.trim();
-    if (!connectionString) return;
+    const selectedConnectionId = form.dataset.connectionId || '';
+    if (!connectionString && !selectedConnectionId) return;
 
     // Show loading state
     connectBtn.disabled = true;
@@ -2903,7 +2999,10 @@ async function initConnectPage() {
       const res = await fetch('/api/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionString })
+        body: JSON.stringify({
+          connectionString: connectionString || undefined,
+          connectionId: selectedConnectionId || undefined,
+        })
       });
 
       const data = await res.json();
@@ -2912,11 +3011,14 @@ async function initConnectPage() {
         throw new Error(data.error || 'Connection failed');
       }
 
-      // Save to recent connections
-      saveConnection(connectionString);
-      
-      // Save as active connection
-      setActiveConnection(connectionString);
+      if (connectionString) {
+        const saved = await createVaultConnection(connectionString);
+        saveConnection(connectionString, saved.name || '', saved.color || '', saved.id);
+        setActiveConnection(connectionString, saved.id);
+      } else if (selectedConnectionId) {
+        const existing = getConnections().find((c) => c.id === selectedConnectionId);
+        setActiveConnection(existing?.uri || '', selectedConnectionId);
+      }
 
       // Check for saved return URL, otherwise redirect to databases
       const returnUrl = sessionStorage.getItem('mongodb_dashboard_return_url');
@@ -9136,6 +9238,55 @@ document.getElementById('disconnectBtn')?.addEventListener('click', async () => 
   }
 });
 
+async function initHeaderConnectionSwitcher() {
+  if (window.location.pathname === '/' || window.location.pathname === '/connect') return;
+  const actions = document.querySelector('.header-actions');
+  if (!actions || document.getElementById('connectionSwitcher')) return;
+
+  const connections = await syncConnectionsFromVault();
+  if (!connections.length) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'header-connection-switcher';
+  const select = document.createElement('select');
+  select.id = 'connectionSwitcher';
+  select.className = 'query-input';
+  select.title = 'Switch connection';
+
+  const activeId = getActiveConnectionId();
+  const activeUri = getActiveConnection();
+  select.innerHTML = connections
+    .map((c) => {
+      const selected = (activeId && c.id === activeId) || (!activeId && activeUri && c.uri === activeUri);
+      const label = c.name ? c.name : `Connection ${String(c.id || '').slice(0, 8)}`;
+      return `<option value="${escapeHtml(c.id || '')}" ${selected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    })
+    .join('');
+
+  select.addEventListener('change', async () => {
+    const id = select.value;
+    if (!id) return;
+    select.disabled = true;
+    try {
+      const res = await fetch('/api/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Connection switch failed');
+      setActiveConnection(getActiveConnection(), id);
+      window.location.reload();
+    } catch (err) {
+      showToast(err.message, 'error');
+      select.disabled = false;
+    }
+  });
+
+  wrap.appendChild(select);
+  actions.insertBefore(wrap, actions.firstChild);
+}
+
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   // Escape to close modals
@@ -9320,7 +9471,11 @@ if (document.readyState === 'loading') {
 
 // Run global connection check when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initGlobalConnectionCheck);
+  document.addEventListener('DOMContentLoaded', () => {
+    initHeaderConnectionSwitcher();
+    initGlobalConnectionCheck();
+  });
 } else {
+  initHeaderConnectionSwitcher();
   initGlobalConnectionCheck();
 }

@@ -14,6 +14,7 @@ const router = express.Router();
 const mongoService = require("../../services/mongodb");
 const config = require("../../config");
 const { redactConnectionString } = require("./_shared");
+const connectionVault = require("../../services/connectionVault");
 
 // Test connection and return database list. Refused when MONGODB_URI is set
 // at the env level — in that mode the dashboard is locked to one cluster.
@@ -25,12 +26,18 @@ router.post("/connect", async (req, res) => {
           "This dashboard is locked to its server-side MONGODB_URI. The user-supplied connection form is disabled.",
       });
     }
-    const { connectionString } = req.body;
-    if (!connectionString) {
+    const { connectionString, connectionId } = req.body;
+    let resolvedConnectionString = connectionString;
+    if (!resolvedConnectionString && connectionId) {
+      resolvedConnectionString = await connectionVault.getConnectionUri(
+        connectionId
+      );
+    }
+    if (!resolvedConnectionString) {
       return res.status(400).json({ error: "Connection string is required" });
     }
 
-    const client = await mongoService.connect(connectionString);
+    const client = await mongoService.connect(resolvedConnectionString);
     const adminDb = client.db().admin();
     const { databases } = await adminDb.listDatabases();
 
@@ -174,6 +181,55 @@ router.delete("/server/currentop/:opid", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/connections", async (_req, res) => {
+  try {
+    const connections = await connectionVault.listConnections();
+    res.json({ connections });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/connections", async (req, res) => {
+  try {
+    const { connectionString, name, color } = req.body;
+    if (!connectionString) {
+      return res.status(400).json({ error: "Connection string is required" });
+    }
+    const connection = await connectionVault.upsertConnection({
+      connectionString,
+      name,
+      color,
+    });
+    res.status(201).json({ connection });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.patch("/connections/:id", async (req, res) => {
+  try {
+    const connection = await connectionVault.updateConnectionMeta(req.params.id, {
+      name: req.body?.name,
+      color: req.body?.color,
+    });
+    if (!connection) return res.status(404).json({ error: "Not found" });
+    res.json({ connection });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/connections/:id", async (req, res) => {
+  try {
+    const removed = await connectionVault.removeConnection(req.params.id);
+    if (!removed) return res.status(404).json({ error: "Not found" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
