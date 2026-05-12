@@ -127,10 +127,10 @@
               <label>Database Name</label>
               <input type="text" id="newDbName" class="query-input" placeholder="my_database" autocomplete="off" />
             </div>
-            <div class="form-field" style="margin-top:12px">
+            <div class="form-field">
               <label>Initial Collection</label>
               <input type="text" id="newDbCollection" class="query-input" placeholder="my_collection" autocomplete="off" />
-              <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">MongoDB requires at least one collection to create a database.</span>
+              <span class="form-hint">MongoDB requires at least one collection to create a database.</span>
             </div>
             <p id="createDbError" class="error-message" style="display:none"></p>
           </div>
@@ -151,7 +151,7 @@
           </div>
           <div class="modal-body">
             <p>Are you sure you want to drop <strong id="dropDbName"></strong>? This will permanently delete all collections and documents.</p>
-            <div class="form-field" style="margin-top:12px">
+            <div class="form-field">
               <label>Type the database name to confirm:</label>
               <input type="text" id="dropDbConfirmInput" class="query-input" placeholder="database name" autocomplete="off" spellcheck="false"/>
             </div>

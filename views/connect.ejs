@@ -105,14 +105,14 @@
               <label>Port</label>
               <input type="number" id="cbPort" class="conn-field" placeholder="27017" value="27017" min="1" max="65535"/>
             </div>
-            <div class="form-group" style="grid-column:span 2">
+            <div class="form-group form-group--full">
               <label>Authentication</label>
               <select id="cbAuthType" class="conn-field">
                 <option value="none">None</option>
                 <option value="password">Username / Password</option>
               </select>
             </div>
-            <div id="cbAuthFields" style="display:none;grid-column:span 2;display:none">
+            <div id="cbAuthFields" class="form-group--full" hidden>
               <div class="conn-builder-grid">
                 <div class="form-group">
                   <label>Username</label>
@@ -122,39 +122,39 @@
                   <label>Password</label>
                   <input type="password" id="cbPassword" class="conn-field" placeholder="••••••••" autocomplete="off"/>
                 </div>
-                <div class="form-group" style="grid-column:span 2">
+                <div class="form-group form-group--full">
                   <label>Auth Database</label>
                   <input type="text" id="cbAuthDb" class="conn-field" placeholder="admin" value="admin"/>
                 </div>
               </div>
             </div>
-            <div class="form-group" style="grid-column:span 2">
-              <label>Replica Set Name <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+            <div class="form-group form-group--full">
+              <label>Replica Set Name <span class="label-optional">(optional)</span></label>
               <input type="text" id="cbReplicaSet" class="conn-field" placeholder="rs0"/>
             </div>
-            <div class="form-group" style="grid-column:span 2;display:flex;align-items:center;gap:10px">
+            <div class="form-group form-group--inline">
               <input type="checkbox" id="cbTLS"/>
-              <label for="cbTLS" style="margin:0">TLS / SSL</label>
+              <label for="cbTLS">TLS / SSL</label>
             </div>
-            <div class="form-group" style="grid-column:span 2">
+            <div class="form-group form-group--full">
               <label>Generated URI</label>
-              <input type="text" id="cbGeneratedUri" class="conn-field mono" readonly style="background:var(--bg-tertiary)"/>
+              <input type="text" id="cbGeneratedUri" class="conn-field mono field-readonly" readonly/>
             </div>
           </div>
         </div>
 
         <button type="submit" class="btn btn-primary btn-lg" id="connectBtn">
           <span class="btn-text">Connect</span>
-          <span class="btn-loading" style="display: none;">
+          <span class="btn-loading" hidden>
             <svg class="spinner" width="20" height="20" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="32" stroke-linecap="round"/>
             </svg>
           </span>
         </button>
-        <p id="connectError" class="error-message" style="display: none;"></p>
+        <p id="connectError" class="error-message" hidden></p>
       </form>
 
-      <div id="recentConnections" class="recent-connections" style="display: none;">
+      <div id="recentConnections" class="recent-connections" hidden>
         <div class="saved-connections-header">
           <h3>Saved Connections</h3>
           <div class="saved-connections-actions">
