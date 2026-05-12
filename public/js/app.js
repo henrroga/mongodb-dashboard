@@ -8368,6 +8368,12 @@ const AGG_STAGE_TEMPLATES = {
 };
 
 const STAGE_TYPES = Object.keys(AGG_STAGE_TEMPLATES);
+const AGG_STAGE_GROUPS = {
+  Filtering: ["$match", "$project", "$addFields", "$unwind"],
+  Grouping: ["$group", "$count", "$bucket", "$facet"],
+  Joins: ["$lookup"],
+  Output: ["$sort", "$skip", "$limit", "$out", "$merge"],
+};
 
 let aggStages = []; // [{ id, type, body, enabled }]
 let aggIdCounter = 0;
@@ -8389,9 +8395,38 @@ function initAggregationPanel(dbName, collectionName) {
   document.getElementById('aggAddStage')?.addEventListener('click', () => {
     addAggStage(dbName, collectionName);
   });
+  const addStageBtn = document.getElementById('aggAddStage');
+  if (addStageBtn && !document.getElementById('aggStageQuickMenu')) {
+    const menu = document.createElement('div');
+    menu.id = 'aggStageQuickMenu';
+    menu.className = 'saved-queries-dropdown';
+    menu.style.display = 'none';
+    menu.style.minWidth = '220px';
+    menu.innerHTML = Object.entries(AGG_STAGE_GROUPS).map(([group, stages]) => `
+      <div class="saved-queries-toolbar" style="display:block;padding:6px 8px;font-size:11px;font-weight:600">${escapeHtml(group)}</div>
+      ${stages.map((s) => `<div class="saved-query-item" data-stage-type="${s}">${s}</div>`).join('')}
+    `).join('');
+    addStageBtn.parentElement.appendChild(menu);
+    addStageBtn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    });
+    menu.querySelectorAll('[data-stage-type]').forEach((item) => {
+      item.addEventListener('click', () => {
+        addAggStage(dbName, collectionName, item.dataset.stageType || '$match');
+        menu.style.display = 'none';
+      });
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && e.target !== addStageBtn) menu.style.display = 'none';
+    });
+  }
 
   document.getElementById('aggRun')?.addEventListener('click', () => {
     runAggregation(dbName, collectionName);
+  });
+  document.getElementById('aggExplain')?.addEventListener('click', () => {
+    explainAggregation(dbName, collectionName);
   });
 
   // Copy-as-code for the current pipeline (uses the polished modal that
@@ -8681,6 +8716,38 @@ async function runAggregation(dbName, collectionName) {
   } catch (err) {
     resultBody.innerHTML = `<div style="color:var(--danger);padding:24px">Error: ${err.message}</div>`;
     if (countEl) countEl.textContent = 'Error';
+  }
+}
+
+async function explainAggregation(dbName, collectionName) {
+  const box = document.getElementById('aggExplainBox');
+  const body = document.getElementById('aggExplainBody');
+  if (!box || !body) return;
+
+  const pipeline = [];
+  for (const stage of aggStages) {
+    if (!stage.enabled) continue;
+    try {
+      const stageBody = JSON.parse(stage.body);
+      pipeline.push({ [stage.type]: stageBody });
+    } catch (e) {
+      box.style.display = 'block';
+      body.innerHTML = `<div class="agg-result-placeholder">Invalid JSON: ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+  }
+
+  body.innerHTML = '<div style="display:flex;justify-content:center;padding:20px"><div class="loading-spinner"></div></div>';
+  box.style.display = 'block';
+  try {
+    const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/aggregate/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline, verbosity: 'executionStats' }),
+    });
+    body.innerHTML = renderJsonTree(data.plan || {});
+  } catch (err) {
+    body.innerHTML = `<div class="agg-result-placeholder">Explain failed: ${escapeHtml(err.message)}</div>`;
   }
 }
 

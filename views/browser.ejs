@@ -667,7 +667,7 @@
             <!-- Left: stage list -->
             <div class="agg-stages-col">
               <div class="agg-toolbar">
-                <button id="aggAddStage" class="btn btn-primary btn-sm">
+                <button id="aggAddStage" class="btn btn-primary btn-sm" title="Click to add default $match, right-click for stage menu">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 5v14M5 12h14"/>
                   </svg>
@@ -679,6 +679,7 @@
                   </svg>
                   Run
                 </button>
+                <button id="aggExplain" class="btn btn-ghost btn-sm" title="Explain pipeline execution plan">Explain</button>
                 <div style="position:relative">
                   <button id="aggSavedBtn" class="btn btn-ghost btn-sm">Saved ▾</button>
                   <div id="aggSavedDropdown" class="saved-queries-dropdown" style="display:none"></div>
@@ -721,6 +722,10 @@
               </div>
               <div id="aggResultBody" class="agg-result-body">
                 <div class="agg-result-placeholder">Run the pipeline to see results</div>
+              </div>
+              <div id="aggExplainBox" style="display:none;border-top:1px solid var(--border-color);padding:10px;max-height:220px;overflow:auto">
+                <h4 style="margin:0 0 8px 0;font-size:12px;color:var(--text-secondary)">Explain</h4>
+                <div id="aggExplainBody" class="json-viewer"></div>
               </div>
             </div>
           </div>
