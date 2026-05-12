@@ -342,24 +342,36 @@ select:focus-visible,
 .nav {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex: 1;
 }
 
-.nav-link {
+.nav-link,
+.nav-current {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-secondary);
+  transition: background var(--transition), color var(--transition);
 }
 
 .nav-link:hover {
   color: var(--text-primary);
-}
-
-.nav-sep {
-  color: var(--text-muted);
+  background: var(--bg-tertiary);
 }
 
 .nav-current {
   color: var(--text-primary);
+  background: var(--accent-soft);
+}
+
+/* Legacy "|" separators in templates — hide visually now that nav items
+   have their own padding/background to distinguish them. */
+.nav-sep {
+  display: none;
 }
 
 .header-actions {
@@ -743,8 +755,12 @@ select:focus-visible,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: var(--space-4);
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 2;
 }
 
 .sidebar-header h2 {
@@ -774,12 +790,11 @@ select:focus-visible,
   border-radius: var(--radius);
 }
 
-.collection-item-wrapper:hover .collection-actions {
-  opacity: 1;
-}
-
+.collection-item-wrapper:hover .collection-actions,
+.collection-item-wrapper:focus-within .collection-actions,
 .collection-item-wrapper.active .collection-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .collection-item-wrapper .collection-item {
@@ -791,8 +806,14 @@ select:focus-visible,
   gap: 2px;
   padding-right: 4px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--transition);
   flex-shrink: 0;
+}
+/* Keyboard users tabbing through actions force them visible. */
+.collection-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .col-action-btn {
