@@ -278,4 +278,67 @@ router.get("/:db/:bucket/gridfs/:id", async (req, res) => {
   }
 });
 
+router.get("/:db/:bucket/gridfs", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const { db: dbName, bucket } = req.params;
+    const db = client.db(dbName);
+    const bucketName = bucket.replace(".files", "");
+    const docs = await db
+      .collection(`${bucketName}.files`)
+      .find({})
+      .sort({ uploadDate: -1 })
+      .limit(200)
+      .project({ filename: 1, length: 1, contentType: 1, uploadDate: 1, metadata: 1 })
+      .toArray();
+    res.json({ files: docs.map(serializeDocument), bucket: bucketName });
+  } catch (err) {
+    logger.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/:db/:bucket/gridfs", express.json({ limit: "50mb" }), async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const { db: dbName, bucket } = req.params;
+    const { filename, contentBase64, contentType, metadata = {} } = req.body || {};
+    if (!filename || !contentBase64) {
+      return res.status(400).json({ error: "filename and contentBase64 are required" });
+    }
+    const db = client.db(dbName);
+    const bucketName = bucket.replace(".files", "");
+    const gfs = new GridFSBucket(db, { bucketName });
+    const bytes = Buffer.from(String(contentBase64), "base64");
+    const uploadStream = gfs.openUploadStream(filename, { contentType, metadata });
+    uploadStream.end(bytes);
+    await new Promise((resolve, reject) => {
+      uploadStream.on("finish", resolve);
+      uploadStream.on("error", reject);
+    });
+    res.json({ success: true, id: uploadStream.id });
+  } catch (err) {
+    logger.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/:db/:bucket/gridfs/:id", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+    const { db: dbName, bucket, id } = req.params;
+    const db = client.db(dbName);
+    const bucketName = bucket.replace(".files", "");
+    const gfs = new GridFSBucket(db, { bucketName });
+    await gfs.delete(new ObjectId(id));
+    res.json({ success: true });
+  } catch (err) {
+    logger.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

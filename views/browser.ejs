@@ -383,6 +383,7 @@
                 </svg>
                 Export
               </button>
+              <button id="gridfsBtn" class="btn btn-ghost" title="GridFS manager">GridFS</button>
               <button id="chartBtn" class="btn btn-ghost" title="Chart results" aria-label="Chart results">
                 Chart
               </button>
@@ -1170,6 +1171,33 @@
           </div>
           <div class="modal-footer">
             <button id="chartModalClose2" class="btn btn-ghost">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="gridfsModal" class="modal" style="display:none">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3>GridFS Manager</h3>
+            <button class="modal-close" id="gridfsModalClose">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+              <input id="gridfsBucketInput" class="query-input" placeholder="bucket (e.g. fs)" style="width:140px" />
+              <input id="gridfsUploadInput" type="file" />
+              <button id="gridfsUploadBtn" class="btn btn-primary btn-sm">Upload</button>
+              <button id="gridfsRefreshBtn" class="btn btn-ghost btn-sm">Refresh</button>
+            </div>
+            <div class="table-container" style="max-height:320px">
+              <table class="data-table">
+                <thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Date</th><th>Actions</th></tr></thead>
+                <tbody id="gridfsRows"><tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">No files</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button id="gridfsModalClose2" class="btn btn-ghost">Close</button>
           </div>
         </div>
       </div>

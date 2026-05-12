@@ -3712,6 +3712,7 @@ async function initBrowser(dbName, collectionName) {
   initSqlPanel(dbName, collectionName);
   initViewModeToggle(dbName, collectionName);
   initResultCharts();
+  initGridFSManager(dbName, collectionName);
   initShellPanel(dbName);
 
   // Delegated click handler for expandable cells and copyable IDs
@@ -3822,6 +3823,95 @@ function initResultCharts() {
       return;
     }
     canvasWrap.innerHTML = typeSel.value === 'pie' ? renderPie(data) : renderBar(data);
+  });
+}
+
+function initGridFSManager(dbName, collectionName) {
+  const openBtn = document.getElementById('gridfsBtn');
+  const modal = document.getElementById('gridfsModal');
+  const close1 = document.getElementById('gridfsModalClose');
+  const close2 = document.getElementById('gridfsModalClose2');
+  const rows = document.getElementById('gridfsRows');
+  const bucketInput = document.getElementById('gridfsBucketInput');
+  const fileInput = document.getElementById('gridfsUploadInput');
+  const uploadBtn = document.getElementById('gridfsUploadBtn');
+  const refreshBtn = document.getElementById('gridfsRefreshBtn');
+  if (!openBtn || !modal || !rows || !bucketInput) return;
+
+  const defaultBucket = collectionName.endsWith('.files') ? collectionName.replace(/\.files$/, '') : 'fs';
+  bucketInput.value = defaultBucket;
+  const close = () => { modal.style.display = 'none'; };
+  close1?.addEventListener('click', close);
+  close2?.addEventListener('click', close);
+  modal.querySelector('.modal-backdrop')?.addEventListener('click', close);
+
+  async function loadFiles() {
+    const bucket = (bucketInput.value || defaultBucket).trim();
+    rows.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px"><div class="loading-spinner"></div></td></tr>';
+    try {
+      const data = await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(bucket)}/gridfs`);
+      const files = data.files || [];
+      if (!files.length) {
+        rows.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">No files</td></tr>';
+        return;
+      }
+      rows.innerHTML = files.map((f) => {
+        const id = f._id?.$oid || f._id;
+        return `<tr>
+          <td>${escapeHtml(f.filename || '')}</td>
+          <td>${formatBytes(f.length || 0)}</td>
+          <td>${escapeHtml(f.contentType || '—')}</td>
+          <td>${escapeHtml(f.uploadDate ? new Date(f.uploadDate).toLocaleString() : '—')}</td>
+          <td>
+            <a class="btn btn-ghost btn-sm" href="/api/${encodeURIComponent(dbName)}/${encodeURIComponent(bucket)}/gridfs/${encodeURIComponent(id)}" target="_blank" rel="noopener">Download</a>
+            <button class="btn btn-ghost btn-sm" data-gridfs-del="${escapeHtml(String(id))}">Delete</button>
+          </td>
+        </tr>`;
+      }).join('');
+      rows.querySelectorAll('[data-gridfs-del]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-gridfs-del');
+          const ok = await ui.confirm({ title: 'Delete GridFS file?', confirmText: 'Delete', danger: true });
+          if (!ok) return;
+          await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(bucket)}/gridfs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          loadFiles();
+        });
+      });
+    } catch (err) {
+      rows.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger);padding:20px">${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  uploadBtn?.addEventListener('click', async () => {
+    const bucket = (bucketInput.value || defaultBucket).trim();
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      showToast('Choose a file first.', 'warning');
+      return;
+    }
+    const b64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(bucket)}/gridfs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: file.type || 'application/octet-stream',
+        contentBase64: b64,
+      }),
+    });
+    if (fileInput) fileInput.value = '';
+    loadFiles();
+  });
+
+  refreshBtn?.addEventListener('click', loadFiles);
+  openBtn.addEventListener('click', () => {
+    modal.style.display = 'flex';
+    loadFiles();
   });
 }
 
