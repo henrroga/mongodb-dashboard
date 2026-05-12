@@ -769,17 +769,41 @@ select:focus-visible,
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   color: var(--text-primary);
-  transition: all var(--transition);
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    transform var(--transition),
+    box-shadow var(--transition);
 }
 
 .database-card:hover {
   border-color: var(--accent);
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
+  transform: translateY(-1px);
+  box-shadow:
+    0 1px 0 var(--accent-soft),
+    0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.database-card:hover .database-arrow {
+  color: var(--accent);
+  transform: translateX(2px);
 }
 
 .database-icon {
   flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
   color: var(--accent);
+  border-radius: 10px;
+  transition: background var(--transition);
+}
+.database-card:hover .database-icon {
+  background: var(--accent-soft-strong);
 }
 
 .database-info {
@@ -804,6 +828,7 @@ select:focus-visible,
 .database-arrow {
   flex-shrink: 0;
   color: var(--text-muted);
+  transition: color var(--transition), transform var(--transition);
 }
 
 /* Browser Layout */
@@ -952,19 +977,24 @@ select:focus-visible,
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background var(--transition), color var(--transition),
+              border-color var(--transition), opacity var(--transition);
   flex-shrink: 0;
   opacity: 0;
+  pointer-events: none;
 }
 
-.database-card-wrapper:hover .db-drop-btn {
+.database-card-wrapper:hover .db-drop-btn,
+.database-card-wrapper:focus-within .db-drop-btn,
+.db-drop-btn:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .db-drop-btn:hover {
-  background: var(--danger);
+  background: var(--danger-soft);
   border-color: var(--danger);
-  color: #fff;
+  color: var(--danger);
 }
 
 .collection-item {
