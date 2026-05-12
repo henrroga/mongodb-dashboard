@@ -2930,7 +2930,7 @@ select:focus-visible,
   .sidebar {
     width: 200px;
   }
-  
+
   .database-grid {
     grid-template-columns: 1fr;
   }
@@ -2957,6 +2957,78 @@ select:focus-visible,
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+}
+
+/* ─── Phone-class screens ─────────────────────────────────────────────────
+   Below 600px we collapse non-essential header chrome, let the sidebar
+   tuck under the main content, take modals full-width, and stack the
+   databases grid. Tap targets stay ≥40px tall. */
+@media (max-width: 600px) {
+  .header {
+    height: auto;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .logo span,
+  .logo {
+    font-size: 14px;
+  }
+  .nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-link,
+  .nav-current { white-space: nowrap; }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
+  /* Sidebar drops to a horizontal scroll strip above content so the
+     collection list stays reachable without a hamburger toggle. */
+  .browser-layout {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    max-height: 180px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-header { padding: 10px 12px; }
+  .collection-list { padding: 6px; }
+
+  /* Full-bleed modals on small screens. */
+  .modal-content,
+  .ui-modal-dialog {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 32px);
+    border-radius: 12px;
+  }
+  .modal-body { padding: 16px; }
+
+  /* Tighter database cards. */
+  .databases-page { padding: 16px 12px; }
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .page-header .btn { width: 100%; justify-content: center; }
+
+  /* Theme dropdown was pinned right and could clip on narrow screens. */
+  .theme-dropdown {
+    right: auto;
+    left: 0;
   }
 }
 
