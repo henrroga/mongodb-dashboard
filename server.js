@@ -139,11 +139,15 @@ app.get("/healthz", async (req, res) => {
 });
 
 app.get("/readyz", async (_req, res) => {
+  const auditLogDir = path.resolve(
+    process.env.AUDIT_LOG_DIR || path.join(process.cwd(), "logs")
+  );
   const readiness = {
     ok: true,
     checks: {
       mongodb: { ok: true, required: !!config.presetMongoUri },
       dataDir: { ok: true, path: process.env.DATA_DIR || path.join(__dirname, "data") },
+      auditLogDir: { ok: true, path: auditLogDir },
     },
   };
 
@@ -154,6 +158,15 @@ app.get("/readyz", async (_req, res) => {
     readiness.ok = false;
     readiness.checks.dataDir.ok = false;
     readiness.checks.dataDir.error = err.message;
+  }
+
+  try {
+    await fsPromises.mkdir(readiness.checks.auditLogDir.path, { recursive: true });
+    await fsPromises.access(readiness.checks.auditLogDir.path, fs.constants.W_OK);
+  } catch (err) {
+    readiness.ok = false;
+    readiness.checks.auditLogDir.ok = false;
+    readiness.checks.auditLogDir.error = err.message;
   }
 
   if (config.presetMongoUri) {
