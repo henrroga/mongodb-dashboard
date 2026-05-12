@@ -11,7 +11,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --chown=app:app . .
 
-RUN mkdir -p /app/logs && chown -R app:app /app/logs
+RUN mkdir -p /app/logs /app/data && chown -R app:app /app/logs /app/data
 
 USER app
 ENV NODE_ENV=production \

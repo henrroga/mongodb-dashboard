@@ -15,6 +15,7 @@ services:
       PORT: 3000
     volumes:
       - dashboard-logs:/app/logs
+      - dashboard-data:/app/data
     read_only: true
     tmpfs:
       - /tmp
@@ -40,4 +41,5 @@ services:
 
 volumes:
   dashboard-logs:
+  dashboard-data:
   # mongo-data:
