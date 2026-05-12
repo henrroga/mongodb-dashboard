@@ -71,6 +71,24 @@
   --syntax-null: var(--text-muted);
   --syntax-bracket: var(--text-muted);
 
+  /* Font stacks. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto,
+    Oxygen, Ubuntu, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code',
+    Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — 12px / 13px (body) / 14px / 16px / 18px / 22px / 28px. */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 18px;
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
+
   /* Spacing scale — 4px base.  Use these instead of ad-hoc pixel values
      so layouts stay rhythmically aligned across the app. */
   --space-1: 4px;
@@ -235,12 +253,27 @@ html, body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  font-size: 14px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
 }
+
+h1, h2, h3, h4 {
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: -0.011em;
+  line-height: 1.25;
+}
+h1 { font-size: var(--fs-3xl); letter-spacing: -0.02em; }
+h2 { font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); }
+h4 { font-size: var(--fs-md); }
 
 a {
   color: var(--accent);
@@ -617,7 +650,7 @@ select:focus-visible,
   width: 100%;
   padding: 10px 12px;
   font-size: 14px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--text-primary);
   background: var(--bg-primary);
   border: 1px solid var(--border);
@@ -679,7 +712,7 @@ select:focus-visible,
 }
 
 .recent-host {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-muted);
   overflow: hidden;
@@ -743,15 +776,20 @@ select:focus-visible,
 
 .page-header {
   margin-bottom: 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .page-header h1 {
-  font-size: 24px;
   margin-bottom: 4px;
 }
 
 .page-subtitle {
   color: var(--text-secondary);
+  font-size: var(--fs-md);
 }
 
 .database-grid {
@@ -1202,7 +1240,7 @@ select:focus-visible,
 }
 
 .open-tab-col {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1275,7 +1313,7 @@ select:focus-visible,
   flex: 1;
   overflow-y: auto;
   padding: 8px 16px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
   min-height: 0;
@@ -1326,7 +1364,7 @@ select:focus-visible,
 
 .shell-prompt {
   color: var(--success);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -1336,7 +1374,7 @@ select:focus-visible,
   background: transparent;
   border: none;
   outline: none;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-primary);
   caret-color: var(--success);
@@ -1489,7 +1527,7 @@ select:focus-visible,
 .perf-card-value {
   font-size: 22px;
   font-weight: 700;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--text-primary);
 }
 
@@ -1524,7 +1562,7 @@ select:focus-visible,
 
 .perf-op-label {
   font-size: 12px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   min-width: 60px;
 }
@@ -1547,7 +1585,7 @@ select:focus-visible,
 
 .perf-op-val {
   font-size: 12px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   min-width: 40px;
   text-align: right;
@@ -1586,7 +1624,7 @@ select:focus-visible,
 .explain-stat-value {
   font-size: 18px;
   font-weight: 700;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--text-primary);
   margin-bottom: 2px;
 }
@@ -1612,12 +1650,12 @@ select:focus-visible,
 
 .explain-stage-name {
   font-weight: 700;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 .explain-stage-detail {
   color: var(--text-muted);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -1699,7 +1737,7 @@ select:focus-visible,
   flex: 1;
   padding: 4px 8px;
   font-size: 13px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--text-primary);
   background: var(--bg-primary);
   border: 1px solid var(--border);
@@ -1745,7 +1783,7 @@ select:focus-visible,
   min-height: 80px;
   max-height: 200px;
   padding: 10px 12px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-primary);
@@ -1840,7 +1878,7 @@ select:focus-visible,
 .agg-result-doc {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre;
@@ -1875,7 +1913,7 @@ select:focus-visible,
 .schema-field-name {
   font-size: 13px;
   font-weight: 600;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--text-primary);
 }
 
@@ -1952,7 +1990,7 @@ select:focus-visible,
 
 .value-bar-label {
   font-size: 11px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   width: 100px;
   flex-shrink: 0;
@@ -2030,7 +2068,7 @@ select:focus-visible,
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--border);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 .index-badge-warn {
@@ -2040,7 +2078,7 @@ select:focus-visible,
 }
 
 .mono {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 /* Collection Tabs */
@@ -2126,7 +2164,7 @@ select:focus-visible,
 }
 
 .query-input.mono {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 .query-input:focus {
@@ -2211,7 +2249,7 @@ select:focus-visible,
 .saved-query-preview {
   font-size: 11px;
   color: var(--text-muted);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2334,7 +2372,7 @@ select:focus-visible,
 }
 
 .data-table .cell-id {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--accent);
 }
@@ -2349,7 +2387,7 @@ select:focus-visible,
 }
 
 .data-table .cell-value {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -2379,7 +2417,7 @@ select:focus-visible,
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 .data-table .cell-actions {
@@ -2502,7 +2540,7 @@ select:focus-visible,
 
 .document-tree {
   padding: 16px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.6;
   overflow-x: auto;
@@ -2513,7 +2551,7 @@ select:focus-visible,
   padding: 0;
   background: transparent;
   color: var(--text-primary);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.8;
   white-space: pre;
@@ -2675,7 +2713,7 @@ select:focus-visible,
   width: 100%;
   min-height: 300px;
   padding: 12px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-primary);
@@ -2886,7 +2924,7 @@ select:focus-visible,
 .column-item .column-type {
   font-size: 12px;
   color: var(--text-muted);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 /* Table Header Filter */
@@ -3176,7 +3214,7 @@ select:focus-visible,
   font-size: 24px;
   font-weight: 600;
   color: var(--text-primary);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
 }
 
 .stats-card-label {
@@ -3198,7 +3236,7 @@ select:focus-visible,
 }
 
 .stats-index-name {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-primary);
   min-width: 180px;
@@ -3221,7 +3259,7 @@ select:focus-visible,
 }
 
 .stats-index-size {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-muted);
   min-width: 70px;
@@ -3400,7 +3438,7 @@ select:focus-visible,
 kbd {
   display: inline-block;
   padding: 2px 6px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-primary);
   background: var(--bg-primary);
@@ -3531,7 +3569,7 @@ kbd {
   width: 100%;
   min-width: 80px;
   padding: 4px 6px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-primary);
   background: var(--bg-primary);
@@ -3636,7 +3674,7 @@ textarea.inline-edit-input {
 }
 
 .list-view-card-id {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   color: var(--accent);
   font-size: 12px;
 }
@@ -3676,7 +3714,7 @@ textarea.inline-edit-input {
 
 .list-view-field-key {
   color: var(--text-secondary);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   min-width: 160px;
   flex-shrink: 0;
@@ -3684,7 +3722,7 @@ textarea.inline-edit-input {
 }
 
 .list-view-field-value {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-primary);
   word-break: break-all;
@@ -3724,7 +3762,7 @@ textarea.inline-edit-input {
 }
 
 .json-view-pre {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.6;
   padding: 16px;
@@ -3871,7 +3909,7 @@ textarea.inline-edit-input {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   z-index: 10100;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
