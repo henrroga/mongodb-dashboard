@@ -30,6 +30,24 @@ const {
   validateProjectionObject,
 } = require("../../utils/queryGuard");
 
+function parseIdQuery(id) {
+  try {
+    return { _id: new ObjectId(id) };
+  } catch (_) {
+    return { _id: id };
+  }
+}
+
+function isPlainObject(v) {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function toClientError(err) {
+  if (!err) return "Operation failed";
+  if (err.code === 11000) return "Duplicate key error";
+  return err.message || "Operation failed";
+}
+
 // List documents (paginated, with filter / search / sort / projection /
 // array-filters and either cursor- or offset-based pagination).
 router.get("/:db/:collection", async (req, res) => {
@@ -264,11 +282,17 @@ router.post("/:db/:collection", async (req, res) => {
     const { db: dbName, collection: colName } = req.params;
     const collection = client.db(dbName).collection(colName);
 
+    if (!isPlainObject(req.body)) {
+      return res.status(400).json({ error: "Document body must be a JSON object" });
+    }
     const doc = parseDocument(req.body);
+    if (!isPlainObject(doc)) {
+      return res.status(400).json({ error: "Document body must be a JSON object" });
+    }
     const result = await collection.insertOne(doc);
     res.json({ success: true, insertedId: result.insertedId.toString() });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: toClientError(err) });
   }
 });
 
@@ -280,11 +304,15 @@ router.put("/:db/:collection/:id", async (req, res) => {
     const { db: dbName, collection: colName, id } = req.params;
     const collection = client.db(dbName).collection(colName);
 
-    let query;
-    try { query = { _id: new ObjectId(id) }; }
-    catch (_) { query = { _id: id }; }
+    const query = parseIdQuery(id);
 
+    if (!isPlainObject(req.body)) {
+      return res.status(400).json({ error: "Document body must be a JSON object" });
+    }
     const updates = parseDocument(req.body);
+    if (!isPlainObject(updates)) {
+      return res.status(400).json({ error: "Document body must be a JSON object" });
+    }
     delete updates._id;
 
     const result = await collection.replaceOne(query, updates);
@@ -293,7 +321,37 @@ router.put("/:db/:collection/:id", async (req, res) => {
     }
     res.json({ success: true, modifiedCount: result.modifiedCount });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: toClientError(err) });
+  }
+});
+
+router.patch("/:db/:collection/:id", async (req, res) => {
+  try {
+    const client = mongoService.getClient();
+    if (!client) return res.status(400).json({ error: "Not connected" });
+
+    const { db: dbName, collection: colName, id } = req.params;
+    const collection = client.db(dbName).collection(colName);
+    const query = parseIdQuery(id);
+
+    const { $set, $unset } = req.body || {};
+    const hasSet = isPlainObject($set) && Object.keys($set).length > 0;
+    const hasUnset = isPlainObject($unset) && Object.keys($unset).length > 0;
+    if (!hasSet && !hasUnset) {
+      return res.status(400).json({ error: "Provide $set and/or $unset object" });
+    }
+
+    const updateDoc = {};
+    if (hasSet) updateDoc.$set = parseDocument($set);
+    if (hasUnset) updateDoc.$unset = $unset;
+
+    const result = await collection.updateOne(query, updateDoc);
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Document not found" });
+    }
+    res.json({ success: true, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount });
+  } catch (err) {
+    res.status(500).json({ error: toClientError(err) });
   }
 });
 
@@ -305,9 +363,7 @@ router.delete("/:db/:collection/:id", async (req, res) => {
     const { db: dbName, collection: colName, id } = req.params;
     const collection = client.db(dbName).collection(colName);
 
-    let query;
-    try { query = { _id: new ObjectId(id) }; }
-    catch (_) { query = { _id: id }; }
+    const query = parseIdQuery(id);
 
     const result = await collection.deleteOne(query);
     if (result.deletedCount === 0) {
@@ -315,7 +371,7 @@ router.delete("/:db/:collection/:id", async (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: toClientError(err) });
   }
 });
 

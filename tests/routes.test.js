@@ -63,6 +63,7 @@ const EXPECTED = [
   "GET /api/:db/:collection/:id",
   "POST /api/:db/:collection",
   "PUT /api/:db/:collection/:id",
+  "PATCH /api/:db/:collection/:id",
   "DELETE /api/:db/:collection/:id",
   "POST /api/:db/:collection/bulk-update",
   "POST /api/databases",

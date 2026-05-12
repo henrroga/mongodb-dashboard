@@ -4668,14 +4668,11 @@ async function duplicateDocument(doc, dbName, collectionName) {
     const clone = JSON.parse(JSON.stringify(doc));
     delete clone._id;
 
-    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}`, {
+    await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(clone),
     });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
 
     showToast('Document duplicated successfully', 'success', 2500);
 
@@ -4774,18 +4771,14 @@ async function bulkDelete() {
   showToast(`Deleting ${ids.length} documents...`, 'info', 2000);
 
   try {
-    const res = await fetch(
-      `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(
-        collectionName
-      )}`,
+    const data = await apiFetchJson(
+      `/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}`,
       {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),
       }
     );
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
 
     selectedDocIds.clear();
     const selectAll = document.getElementById('selectAllDocs');
@@ -5122,19 +5115,13 @@ async function saveInlineEdit(td, doc, field, newValue, dbName, collectionName, 
   td.innerHTML = '<span class="inline-edit-saving">Saving...</span>';
 
   try {
-    // Build updated document (clone and modify field)
-    const updatedDoc = JSON.parse(JSON.stringify(doc));
-    delete updatedDoc._id;
-    updatedDoc[field] = newValue;
-
-    const res = await fetch(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}`, {
-      method: 'PUT',
+    await apiFetchJson(`/api/${encodeURIComponent(dbName)}/${encodeURIComponent(collectionName)}/${encodeURIComponent(docId)}`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedDoc),
+      body: JSON.stringify({
+        $set: { [field]: newValue },
+      }),
     });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
 
     // Update local document reference
     doc[field] = newValue;
@@ -5147,6 +5134,7 @@ async function saveInlineEdit(td, doc, field, newValue, dbName, collectionName, 
     td.innerHTML = originalHtml;
     td.classList.add('inline-edit-error');
     setTimeout(() => td.classList.remove('inline-edit-error'), 800);
+    showToast('Inline update failed: ' + err.message, 'error');
   }
 }
 
@@ -5489,17 +5477,14 @@ async function saveDocument() {
     const docId = currentModalDoc?._id?.$oid || currentModalDoc?._id;
     
     const url = isNew 
-      ? `/api/${currentModalDb}/${currentModalCol}`
-      : `/api/${currentModalDb}/${currentModalCol}/${docId}`;
-    
-    const res = await fetch(url, {
+      ? `/api/${encodeURIComponent(currentModalDb)}/${encodeURIComponent(currentModalCol)}`
+      : `/api/${encodeURIComponent(currentModalDb)}/${encodeURIComponent(currentModalCol)}/${encodeURIComponent(docId)}`;
+
+    await apiFetchJson(url, {
       method: isNew ? 'POST' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(doc)
     });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
 
     // Close modal and refresh
     document.getElementById('docModal').style.display = 'none';
@@ -5540,12 +5525,9 @@ async function openDeleteModal(dbName, collectionName, docId) {
 
 async function confirmDelete() {
   try {
-    const res = await fetch(`/api/${deleteDbName}/${deleteColName}/${deleteDocId}`, {
+    await apiFetchJson(`/api/${encodeURIComponent(deleteDbName)}/${encodeURIComponent(deleteColName)}/${encodeURIComponent(deleteDocId)}`, {
       method: 'DELETE',
     });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
 
     // If on document page, go back to collection
     if (window.location.pathname.includes(`/${deleteDocId}`)) {
