@@ -3,6 +3,8 @@ const router = express.Router();
 const fs = require("fs/promises");
 const path = require("path");
 const mongoService = require("../../services/mongodb");
+const config = require("../../config");
+const usersService = require("../../services/users");
 const { serializeDocument, parseDocument } = require("../../utils/bson");
 const { parseCsv, toCsvRow } = require("../../utils/csv");
 const audit = require("../../utils/audit");
@@ -35,6 +37,9 @@ async function appendBackupRun(run) {
 // Import documents (JSON array, NDJSON, or CSV)
 router.post("/:db/:collection/import", express.json({ limit: "50mb" }), async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "write")) {
+      return res.status(403).json({ error: "Import denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
 
@@ -269,6 +274,9 @@ router.get("/:db/:collection/backup", async (req, res) => {
 
 router.get("/backups/history", async (_req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(_req.session, "audit")) {
+      return res.status(403).json({ error: "Backup history denied by RBAC" });
+    }
     const raw = await fs.readFile(BACKUP_RUNS_PATH, "utf8");
     const runs = JSON.parse(raw);
     res.json({ runs: Array.isArray(runs) ? runs : [] });
@@ -279,6 +287,9 @@ router.get("/backups/history", async (_req, res) => {
 
 router.post("/:db/:collection/restore", express.json({ limit: "100mb" }), async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "write")) {
+      return res.status(403).json({ error: "Restore denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
     const { db: dbName, collection: colName } = req.params;
@@ -380,6 +391,9 @@ router.get("/:db/:bucket/gridfs", async (req, res) => {
 
 router.post("/:db/:bucket/gridfs", express.json({ limit: "50mb" }), async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "write")) {
+      return res.status(403).json({ error: "GridFS upload denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
     const { db: dbName, bucket } = req.params;
@@ -406,6 +420,9 @@ router.post("/:db/:bucket/gridfs", express.json({ limit: "50mb" }), async (req, 
 
 router.delete("/:db/:bucket/gridfs/:id", async (req, res) => {
   try {
+    if (config.auth.enabled && !usersService.hasPermission(req.session, "write")) {
+      return res.status(403).json({ error: "GridFS delete denied by RBAC" });
+    }
     const client = mongoService.getClient();
     if (!client) return res.status(400).json({ error: "Not connected" });
     const { db: dbName, bucket, id } = req.params;
