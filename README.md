@@ -132,6 +132,12 @@ All options are env-driven (`.env.example` is the source of truth).
   - `npm run create-user -- admin another-password admin`
 - The script writes to `AUTH_USERS_FILE` (default `data/users.json`) and updates the user if the username already exists.
 
+### Local test runner fallback
+
+- If your system Node is broken/mismatched, run:
+  - `npm run test:local`
+- This uses bundled runtime Node when available (`$BUNDLED_NODE_BIN` override supported), then falls back to system `node`.
+
 ### Plugin SDK (preview)
 
 - Place plugin folders in `plugins/` with a `plugin.json` manifest.
