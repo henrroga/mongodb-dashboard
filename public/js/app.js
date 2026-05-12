@@ -5283,6 +5283,33 @@ let currentModalCol = null;
 let currentSchema = null;
 let useFormMode = true;
 
+function summarizeTopLevelChanges(beforeDoc, afterDoc) {
+  const before = beforeDoc && typeof beforeDoc === 'object' ? beforeDoc : {};
+  const after = afterDoc && typeof afterDoc === 'object' ? afterDoc : {};
+  const beforeKeys = Object.keys(before).filter((k) => k !== '_id');
+  const afterKeys = Object.keys(after).filter((k) => k !== '_id');
+  const keySet = new Set([...beforeKeys, ...afterKeys]);
+  const added = [];
+  const removed = [];
+  const changed = [];
+  for (const key of keySet) {
+    const hasBefore = Object.prototype.hasOwnProperty.call(before, key);
+    const hasAfter = Object.prototype.hasOwnProperty.call(after, key);
+    if (!hasBefore && hasAfter) {
+      added.push(key);
+      continue;
+    }
+    if (hasBefore && !hasAfter) {
+      removed.push(key);
+      continue;
+    }
+    const a = JSON.stringify(before[key]);
+    const b = JSON.stringify(after[key]);
+    if (a !== b) changed.push(key);
+  }
+  return { added, removed, changed };
+}
+
 function setupModalHandlers() {
   const modal = document.getElementById('docModal');
   if (!modal) return;
@@ -5489,6 +5516,31 @@ async function saveDocument() {
   try {
     const isNew = !currentModalDoc;
     const docId = currentModalDoc?._id?.$oid || currentModalDoc?._id;
+
+    if (!isNew) {
+      const summary = summarizeTopLevelChanges(currentModalDoc, doc);
+      const totalChanges = summary.added.length + summary.removed.length + summary.changed.length;
+      if (totalChanges === 0) {
+        showToast('No changes detected', 'info', 1800);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+        return;
+      }
+      const parts = [];
+      if (summary.added.length) parts.push(`Added: ${summary.added.join(', ')}`);
+      if (summary.changed.length) parts.push(`Changed: ${summary.changed.join(', ')}`);
+      if (summary.removed.length) parts.push(`Removed: ${summary.removed.join(', ')}`);
+      const ok = await ui.confirm({
+        title: 'Save document changes?',
+        message: parts.join(' | '),
+        confirmText: 'Save',
+      });
+      if (!ok) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+        return;
+      }
+    }
     
     const url = isNew 
       ? `/api/${encodeURIComponent(currentModalDb)}/${encodeURIComponent(currentModalCol)}`
