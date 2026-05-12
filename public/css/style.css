@@ -62,6 +62,15 @@
   --warning-soft: color-mix(in srgb, var(--warning) 14%, transparent);
   --overlay: rgba(0, 0, 0, 0.55);
 
+  /* JSON / syntax highlight palette — falls back to the theme accent
+     family so the viewer follows light/dark/dracula/nord/etc. */
+  --syntax-key: var(--accent);
+  --syntax-string: var(--success);
+  --syntax-number: var(--warning);
+  --syntax-boolean: #d2a8ff;
+  --syntax-null: var(--text-muted);
+  --syntax-bracket: var(--text-muted);
+
   /* Spacing scale — 4px base.  Use these instead of ad-hoc pixel values
      so layouts stay rhythmically aligned across the app. */
   --space-1: 4px;
@@ -99,6 +108,7 @@
   --warning: #9a6700;
   --danger: #cf222e;
   --shadow: 0 8px 24px rgba(0,0,0,0.12);
+  --syntax-boolean: #8250df;
 }
 
 /* System theme - uses prefers-color-scheme */
@@ -110,14 +120,15 @@
     --bg-hover: #d0d7de;
     --border: #d0d7de;
     --text-primary: #1f2328;
-    --text-secondary: #656d76;
-    --text-muted: #8b949e;
+    --text-secondary: #57606a;
+    --text-muted: #6e7781;
     --accent: #0969da;
     --accent-hover: #0860ca;
     --success: #1a7f37;
     --warning: #9a6700;
     --danger: #cf222e;
     --shadow: 0 8px 24px rgba(0,0,0,0.12);
+    --syntax-boolean: #8250df;
   }
 }
 
@@ -203,13 +214,14 @@
   --border: #d3cbb7;
   --text-primary: #073642;
   --text-secondary: #586e75;
-  --text-muted: #93a1a1;
+  --text-muted: #6c7c7c;
   --accent: #268bd2;
   --accent-hover: #2aa198;
   --success: #859900;
   --warning: #b58900;
   --danger: #dc322f;
   --shadow: 0 8px 24px rgba(0,0,0,0.12);
+  --syntax-boolean: #6c71c4;
 }
 
 * {
@@ -1119,15 +1131,16 @@ select:focus-visible,
 
 .open-tab-close:hover { color: var(--danger); }
 
-/* Shell Panel */
+/* Shell Panel — uses theme tokens so the embedded terminal follows the
+   active palette instead of being hardcoded to the dark scheme. */
 .shell-panel {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 300;
-  background: #0d1117;
-  border-top: 1px solid #30363d;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   transition: transform 0.25s ease;
@@ -1144,15 +1157,15 @@ select:focus-visible,
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  border-bottom: 1px solid #30363d;
-  background: #161b22;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
   flex-shrink: 0;
 }
 
 .shell-toggle-btn {
   background: transparent;
   border: none;
-  color: #8b949e;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -1162,8 +1175,8 @@ select:focus-visible,
 }
 
 .shell-toggle-btn:hover {
-  color: #e6edf3;
-  background: #21262d;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
 }
 
 .shell-output {
@@ -1181,7 +1194,7 @@ select:focus-visible,
 }
 
 .shell-cmd-line {
-  color: #e6edf3;
+  color: var(--text-primary);
   display: flex;
   gap: 8px;
 }
@@ -1197,12 +1210,12 @@ select:focus-visible,
 }
 
 .shell-result-text {
-  color: #8b949e;
+  color: var(--text-secondary);
   white-space: pre-wrap;
 }
 
 .shell-result-json {
-  color: #e6edf3;
+  color: var(--text-primary);
 }
 
 .shell-result-error {
@@ -1214,8 +1227,8 @@ select:focus-visible,
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  border-top: 1px solid #30363d;
-  background: #0d1117;
+  border-top: 1px solid var(--border);
+  background: var(--bg-primary);
   flex-shrink: 0;
 }
 
@@ -1233,12 +1246,12 @@ select:focus-visible,
   outline: none;
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 12px;
-  color: #e6edf3;
+  color: var(--text-primary);
   caret-color: var(--success);
 }
 
 .shell-input::placeholder {
-  color: #484f58;
+  color: var(--text-muted);
 }
 
 .shell-open-btn {
@@ -2418,27 +2431,28 @@ select:focus-visible,
 }
 
 .json-key {
-  color: var(--accent);
+  color: var(--syntax-key);
 }
 
 .json-string {
-  color: var(--success);
+  color: var(--syntax-string);
 }
 
 .json-number {
-  color: var(--warning);
+  color: var(--syntax-number);
 }
 
 .json-boolean {
-  color: #ff7b72;
+  color: var(--syntax-boolean);
 }
 
 .json-null {
-  color: var(--text-muted);
+  color: var(--syntax-null);
+  font-style: italic;
 }
 
 .json-bracket {
-  color: var(--text-muted);
+  color: var(--syntax-bracket);
 }
 
 .json-line {
