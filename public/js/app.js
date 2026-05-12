@@ -3136,6 +3136,7 @@ let arrayFilters = {}; // Store filters for array columns: { fieldName: { type: 
 let currentViewMode = localStorage.getItem('mongodb_dashboard_view_mode') || 'table';
 let selectedDocIds = new Set();
 let lastDocCountLabel = '';
+let lastCheckedDocIndex = null;
 
 // MQL Query Bar state
 let currentFilter = '';
@@ -3191,6 +3192,22 @@ function updateDocCountWithSelection() {
   } else {
     el.textContent = base;
   }
+}
+
+function updateSelectAllCheckboxState() {
+  const selectAll = document.getElementById('selectAllDocs');
+  if (!selectAll) return;
+  const visibleIds = allDocuments
+    .map((d) => String(d?._id?.$oid || d?._id || ''))
+    .filter(Boolean);
+  if (!visibleIds.length) {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+    return;
+  }
+  const selectedVisible = visibleIds.filter((id) => selectedDocIds.has(id)).length;
+  selectAll.checked = selectedVisible === visibleIds.length;
+  selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visibleIds.length;
 }
 
 function initSidebarResize() {
@@ -4194,6 +4211,7 @@ async function loadDocuments(dbName, collectionName, cursor = null, nextSkip = n
         });
       });
     }
+    updateSelectAllCheckboxState();
   } catch (err) {
     tableBody.innerHTML = `<tr><td colspan="100">${renderEmptyState({
       icon: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
@@ -4419,6 +4437,7 @@ function renderTableHeader() {
     }
     document.querySelectorAll('.doc-select-cb').forEach(cb => { cb.checked = checked; });
     updateBulkBar();
+    updateSelectAllCheckboxState();
   });
   
   // Click on a sortable header → toggle asc / desc / none for that field.
@@ -4592,10 +4611,28 @@ function createDocumentRow(doc, dbName, collectionName) {
   cb.type = 'checkbox';
   cb.className = 'doc-select-cb';
   cb.checked = selectedDocIds.has(String(docId));
-  cb.addEventListener('change', () => {
+  cb.addEventListener('change', (e) => {
+    const rowIndex = allDocuments.findIndex((d) => String(d?._id?.$oid || d?._id) === String(docId));
+    if (e.shiftKey && lastCheckedDocIndex !== null && rowIndex !== -1) {
+      const from = Math.min(lastCheckedDocIndex, rowIndex);
+      const to = Math.max(lastCheckedDocIndex, rowIndex);
+      const targetChecked = cb.checked;
+      for (let i = from; i <= to; i += 1) {
+        const id = String(allDocuments[i]?._id?.$oid || allDocuments[i]?._id || '');
+        if (!id) continue;
+        if (targetChecked) selectedDocIds.add(id);
+        else selectedDocIds.delete(id);
+      }
+      document.querySelectorAll('.doc-select-cb').forEach((box) => {
+        const rid = box.closest('tr')?.dataset.docId;
+        if (rid) box.checked = selectedDocIds.has(String(rid));
+      });
+    }
     if (cb.checked) { selectedDocIds.add(String(docId)); }
     else { selectedDocIds.delete(String(docId)); }
+    if (rowIndex !== -1) lastCheckedDocIndex = rowIndex;
     updateBulkBar();
+    updateSelectAllCheckboxState();
   });
   selectTd.appendChild(cb);
   tr.appendChild(selectTd);
@@ -4774,6 +4811,8 @@ function updateBulkBar() {
       </svg>
       Delete Selected
     </button>
+    <button class="btn btn-sm btn-ghost" id="bulkSelectVisibleBtn">Select Visible</button>
+    <button class="btn btn-sm btn-ghost" id="bulkInvertBtn">Invert Visible</button>
     <button class="btn btn-sm btn-ghost" id="bulkClearBtn">Clear Selection</button>
   `;
 
@@ -4821,8 +4860,36 @@ function updateBulkBar() {
     const selectAll = document.getElementById('selectAllDocs');
     if (selectAll) selectAll.checked = false;
     updateBulkBar();
+    updateSelectAllCheckboxState();
+  });
+  document.getElementById('bulkSelectVisibleBtn')?.addEventListener('click', () => {
+    allDocuments.forEach((d) => {
+      const id = String(d?._id?.$oid || d?._id || '');
+      if (id) selectedDocIds.add(id);
+    });
+    document.querySelectorAll('.doc-select-cb').forEach((box) => {
+      const rid = box.closest('tr')?.dataset.docId;
+      if (rid) box.checked = true;
+    });
+    updateBulkBar();
+    updateSelectAllCheckboxState();
+  });
+  document.getElementById('bulkInvertBtn')?.addEventListener('click', () => {
+    allDocuments.forEach((d) => {
+      const id = String(d?._id?.$oid || d?._id || '');
+      if (!id) return;
+      if (selectedDocIds.has(id)) selectedDocIds.delete(id);
+      else selectedDocIds.add(id);
+    });
+    document.querySelectorAll('.doc-select-cb').forEach((box) => {
+      const rid = box.closest('tr')?.dataset.docId;
+      if (rid) box.checked = selectedDocIds.has(String(rid));
+    });
+    updateBulkBar();
+    updateSelectAllCheckboxState();
   });
   updateDocCountWithSelection();
+  updateSelectAllCheckboxState();
 }
 
 async function bulkDelete() {
